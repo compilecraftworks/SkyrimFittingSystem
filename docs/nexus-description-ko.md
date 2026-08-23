@@ -339,7 +339,6 @@ Wet Function Redux는 별도 선택형 패치를 통해 SFS 등록 외형에도 
 
 - **Dynamic Feminine Female Modesty Animations OAR 4.30:** 별도 FOMOD가 선택한 OAR JSON 조건만 SFS 최종 표시 외형 판정으로 바꿉니다. DFFMA의 애니메이션·메시·스크립트·DLL·플러그인은 교체하지 않습니다.
 - **Wet Function Redux Visual Effect Patch v1.2.0:** 시각 효과 스크립트만 제공합니다. Wet Function MCM 스크립트는 절대 덮어쓰지 않으며 RaceMenu 경고는 SFS 장비·세이브 변경이 아니라 Wet Function의 기존 자체 검사입니다.
-- **Grid Inventory Costume v1.4.1 이상:** SFSCore가 공개 Costume 상태 메시지를 직접 받습니다. 플레이어 소유 ARMO가 하나 이상인 Costume만 등록 외형을 교체합니다. Costume 해제·빈 Costume·비장비 구성은 SFS 등록 외형을 건드리지 않으며, 시작·세이브 로드·리버트 뒤 첫 복원 상태도 무시합니다. Grid DLL을 교체하지 않으며 Costume 데이터·렌더링·로드아웃·세이브·실제 장비의 소유권은 Grid Inventory에 남습니다.
 - **Helmet Toggle 2:** HT2를 설치한 경우에만 별도 스크립트 패치를 설치합니다. 각 액터의 HT2 관리 슬롯(30/31/42/44, 플레이어는 55 포함)을 해당 SFS 등록 외형에 전달합니다. 실제 장비는 HT2가 계속 관리하고 SFS는 액터별 연동·저장된 수동 눈 상태·DAVE/DAV/native 표시 경로를 보존합니다.
 - **Dynamic Footprints SKSE BASE v3:** 별도 패치는 Dynamic Footprints 자신의 발자국 분류에서만 표시 중인 SFS 37번 신발 외형을 읽고, 없으면 실제 신발 조회를 사용합니다. 검증한 정확한 v3 DLL 빌드가 아니면 자동으로 비활성화됩니다.
 
