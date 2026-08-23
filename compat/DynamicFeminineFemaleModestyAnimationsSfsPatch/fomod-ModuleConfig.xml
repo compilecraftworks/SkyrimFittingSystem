@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<config xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:noNamespaceSchemaLocation="http://qconsulting.ca/fo3/ModConfig5.0.xsd">
+  <moduleName>Dynamic Feminine Female Modesty Animations - SFS Displayed Outfit Patch</moduleName>
+  <installSteps order="Explicit">
+    <installStep name="Player base animations installed in DFFMA">
+      <optionalFileGroups order="Explicit">
+        <group name="Choose the matching player setup" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="No player configuration patch">
+              <description>Select this when DFFMA player animations are not installed.</description>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple player animations">
+              <description>Matches DFFMA's Install SIMPLE PLAYER animations option.</description>
+              <files><folder source="fomod\f\pc\simple\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Modular player animations">
+              <description>Matches DFFMA's Install MODULAR PLAYER animations option.</description>
+              <files><folder source="fomod\f\pc\modular\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple and modular player animations">
+              <description>Matches DFFMA's Install SIMPLE and MODULAR PLAYER animations option.</description>
+              <files>
+                <folder source="fomod\f\pc\simple\Meshes" destination="Meshes" priority="0" />
+                <folder source="fomod\f\pc\modular\Meshes" destination="Meshes" priority="0" />
+              </files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="NPC base animations installed in DFFMA">
+      <optionalFileGroups order="Explicit">
+        <group name="Choose the matching NPC setup" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="No NPC configuration patch">
+              <description>Select this when DFFMA NPC animations are not installed.</description>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple NPC animations">
+              <description>Matches DFFMA's Install SIMPLE NPC animations option.</description>
+              <files><folder source="fomod\f\npc\simple\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Modular NPC animations">
+              <description>Matches DFFMA's Install MODULAR NPC animations option.</description>
+              <files><folder source="fomod\f\npc\modular\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple and modular NPC animations">
+              <description>Matches DFFMA's Install SIMPLE and MODULAR NPC animations option.</description>
+              <files>
+                <folder source="fomod\f\npc\simple\Meshes" destination="Meshes" priority="0" />
+                <folder source="fomod\f\npc\modular\Meshes" destination="Meshes" priority="0" />
+              </files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Optional player GS Hovering configuration">
+      <optionalFileGroups order="Explicit">
+        <group name="Choose only if that DFFMA extra was installed" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="No player GS Hovering patch">
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple player GS Hovering">
+              <files><folder source="fomod\f\pc\gshover_simp\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Modular player GS Hovering">
+              <files><folder source="fomod\f\pc\gshover\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple and modular player GS Hovering">
+              <files>
+                <folder source="fomod\f\pc\gshover_simp\Meshes" destination="Meshes" priority="0" />
+                <folder source="fomod\f\pc\gshover\Meshes" destination="Meshes" priority="0" />
+              </files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+    <installStep name="Optional NPC GS Hovering configuration">
+      <optionalFileGroups order="Explicit">
+        <group name="Choose only if that DFFMA extra was installed" type="SelectExactlyOne">
+          <plugins order="Explicit">
+            <plugin name="No NPC GS Hovering patch">
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple NPC GS Hovering">
+              <files><folder source="fomod\f\npc\gshover_simp\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Modular NPC GS Hovering">
+              <files><folder source="fomod\f\npc\gshover\Meshes" destination="Meshes" priority="0" /></files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+            <plugin name="Simple and modular NPC GS Hovering">
+              <files>
+                <folder source="fomod\f\npc\gshover_simp\Meshes" destination="Meshes" priority="0" />
+                <folder source="fomod\f\npc\gshover\Meshes" destination="Meshes" priority="0" />
+              </files>
+              <typeDescriptor><type name="Optional" /></typeDescriptor>
+            </plugin>
+          </plugins>
+        </group>
+      </optionalFileGroups>
+    </installStep>
+  </installSteps>
+</config>

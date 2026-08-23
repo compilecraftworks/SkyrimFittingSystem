@@ -1,0 +1,14 @@
+SFS - Dynamic Feminine Female Modesty Animations OAR Displayed Outfit Patch
+FOMOD that changes only the selected DFFMA OAR display-equipment checks to SFS's final shown outfit. It does not change DFFMA animations, OAR rules, saves, or resolve DFFMA's own conflicts.
+
+SFS - Grid Inventory Costume Compatibility Patch
+Exact-revision Grid Inventory replacement DLL that sends a completed Costume layout to the player's SFS base appearances. It does not fix Grid Inventory's own Costume UI, rendering, saves, or conflicts.
+
+SFS - Helmet Toggle 2 Compatibility Patch
+Receives only HT2's existing HT_HiddenHelmet* / HT_HiddenCirclet* transition result and forwards the matching actor-local HT2 slots (30/31/42/44; player 55) to SFS. It does not fix Helmet Toggle 2's own toggle, equipment, MCM, model, or conflict issues.
+
+SFS - Dynamic Footprints Compatibility Patch
+Narrow Dynamic Footprints v3 bridge that reads a visible SFS Feet 37 appearance only for footprint classification. It does not change equipment or fix Dynamic Footprints' own footprint rules, assets, saves, or conflicts.
+
+SFS - Wet Function Redux Visual Effect Patch
+Replaces only WetFunctionEffect.pex for SFS visual exposure. It never replaces Wet Function MCM; RaceMenu/NiOverride warnings come from Wet Function's own legacy check, not SFS.

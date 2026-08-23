@@ -1,0 +1,41 @@
+﻿#pragma once
+
+#pragma warning(push)
+#include <RE/Skyrim.h>
+#include <REL/Relocation.h>
+#include <SKSE/SKSE.h>
+#include <d3d11.h>
+#include <dxgi.h>
+
+#include <algorithm>
+#include <array>
+#include <cctype>
+#include <fstream>
+#include <mutex>
+#include <ranges>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+#ifdef NDEBUG
+#include <spdlog/sinks/basic_file_sink.h>
+#else
+#include <spdlog/sinks/msvc_sink.h>
+#endif
+#pragma warning(pop)
+
+#include "StringUtils.h"
+
+using namespace std::literals;
+using namespace std;
+
+namespace logger = SKSE::log;
+
+namespace util {
+using SKSE::stl::report_and_fail;
+}
+
+#define DLLEXPORT __declspec(dllexport)
+
+#define RELOCATION_OFFSET(SE, AE) REL::VariantOffset(SE, AE, 0).offset()

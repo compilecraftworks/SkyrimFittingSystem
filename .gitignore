@@ -1,0 +1,34 @@
+# dot folders
+.cache/
+.idea/
+.vs/
+.vscode/
+.xmake/
+.appdata/
+.nuget-packages/
+.agents/
+.codex/
+.codex-*/
+.codex-*
+.codex_recovery/
+.papyrus/
+.papyrus-check/
+
+# folders
+build/
+dist/
+vs*/
+Release/
+Sources/
+output/
+diagnostics/
+ghidra_work/
+lib/commonlibsse-ng/
+lib/v110-compare/
+compat/**/backup-original-scripts/
+tools/**/bin/
+tools/**/obj/
+
+# files
+*.zip
+compile_commands.json

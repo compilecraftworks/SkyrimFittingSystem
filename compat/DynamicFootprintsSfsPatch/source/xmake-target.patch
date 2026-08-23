@@ -1,0 +1,20 @@
+--- a/xmake.lua
++++ b/xmake.lua
+@@
++target("SFSDynamicFootprintsPatch")
++    set_default(false)
++    set_version(build_version)
++    set_encodings("utf-8")
++    set_basename("SFS_DynamicFootprintsPatch")
++    set_targetdir("build/v" .. build_version .. "/compat/dynamic-footprints/windows/x64/$(mode)")
++    add_deps("commonlibsse-ng")
++    add_rules("commonlibsse-ng.plugin", {
++        name = "SFS Dynamic Footprints Compatibility Patch",
++        author = "PenguinToast",
++        description = "Dynamic Footprints displayed footwear bridge for Skyrim Fitting System"
++    })
++    add_files("compat/DynamicFootprintsSfsPatch/src/**.cpp")
++    add_headerfiles("compat/DynamicFootprintsSfsPatch/src/**.h")
++    add_includedirs("compat/DynamicFootprintsSfsPatch/src", "src")
++    add_syslinks("bcrypt")
++    set_pcxxheader("src/pch.h")

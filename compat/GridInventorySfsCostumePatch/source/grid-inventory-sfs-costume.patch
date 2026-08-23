@@ -1,0 +1,196 @@
+diff --git a/plugin/CMakeLists.txt b/plugin/CMakeLists.txt
+index cd4f2c4..acf6e29 100644
+--- a/plugin/CMakeLists.txt
++++ b/plugin/CMakeLists.txt
+@@ -45,6 +45,8 @@ set(SOURCES
+     src/game/BagFilter.cpp
+     src/game/Costume.h
+     src/game/Costume.cpp
++    src/compat/SfsCostumeBridge.h
++    src/compat/SfsCostumeBridge.cpp
+     src/game/DualRing.h
+     src/game/DualRing.cpp
+     src/game/DeltaWatch.h
+diff --git a/plugin/src/compat/SfsCostumeBridge.cpp b/plugin/src/compat/SfsCostumeBridge.cpp
+new file mode 100644
+index 0000000..c3ee2f9
+--- /dev/null
++++ b/plugin/src/compat/SfsCostumeBridge.cpp
+@@ -0,0 +1,114 @@
++#include "compat/SfsCostumeBridge.h"
++
++#include <Windows.h>
++
++#include <algorithm>
++#include <cstdint>
++#include <vector>
++
++namespace FUI::SfsCostumeBridge
++{
++    namespace
++    {
++        using GetVersionFn = std::uint32_t (*)();
++        using ApplyCostumeFn = bool (*)(const std::uint32_t*, std::uint32_t);
++        using ClearCostumeFn = bool (*)();
++
++        struct SfsApi
++        {
++            HMODULE         module{ nullptr };
++            GetVersionFn    getVersion{ nullptr };
++            ApplyCostumeFn  applyCostume{ nullptr };
++            ClearCostumeFn  clearCostume{ nullptr };
++
++            [[nodiscard]] bool Available() const
++            {
++                return module != nullptr && getVersion != nullptr &&
++                       applyCostume != nullptr && clearCostume != nullptr;
++            }
++        };
++
++        SfsApi g_api{};
++        bool g_hasPublishedCostume{ false };
++        std::vector<std::uint32_t> g_lastFormIDs;
++
++        [[nodiscard]] bool ResolveApi()
++        {
++            // SFS 1.4.x deliberately uses SFSCore.dll.  Do not LoadLibrary:
++            // this bridge is optional and must never force SFS into a process.
++            const auto module = ::GetModuleHandleW(L"SFSCore.dll");
++            if (module == nullptr) {
++                g_api = {};
++                return false;
++            }
++
++            if (g_api.module == module && g_api.Available()) {
++                return true;
++            }
++
++            SfsApi resolved{};
++            resolved.module = module;
++            resolved.getVersion = reinterpret_cast<GetVersionFn>(
++                ::GetProcAddress(module, "SkyrimFittingSystem_GetGridInventoryCostumeAPIVersion"));
++            resolved.applyCostume = reinterpret_cast<ApplyCostumeFn>(
++                ::GetProcAddress(module, "SkyrimFittingSystem_ApplyGridInventoryCostume"));
++            resolved.clearCostume = reinterpret_cast<ClearCostumeFn>(
++                ::GetProcAddress(module, "SkyrimFittingSystem_ClearGridInventoryCostume"));
++            if (!resolved.Available() || resolved.getVersion() != 1u) {
++                g_api = {};
++                return false;
++            }
++
++            g_api = resolved;
++            return true;
++        }
++
++        [[nodiscard]] std::vector<std::uint32_t> Canonicalize(
++            const std::vector<std::uint32_t>& a_formIDs)
++        {
++            auto result = a_formIDs;
++            result.erase(std::remove(result.begin(), result.end(), 0u), result.end());
++            std::sort(result.begin(), result.end());
++            result.erase(std::unique(result.begin(), result.end()), result.end());
++            return result;
++        }
++    }
++
++    void Invalidate()
++    {
++        g_api = {};
++        g_hasPublishedCostume = false;
++        g_lastFormIDs.clear();
++    }
++
++    void PublishAppliedCostume(const std::vector<std::uint32_t>& a_formIDs)
++    {
++        const auto canonical = Canonicalize(a_formIDs);
++        if (g_hasPublishedCostume && canonical == g_lastFormIDs) {
++            return;
++        }
++        if (!ResolveApi()) {
++            return;
++        }
++        if (!g_api.applyCostume(canonical.data(),
++                                 static_cast<std::uint32_t>(canonical.size()))) {
++            return;
++        }
++
++        g_lastFormIDs = canonical;
++        g_hasPublishedCostume = true;
++    }
++
++    void PublishClearedCostume()
++    {
++        if (!g_hasPublishedCostume) {
++            return;
++        }
++        if (!ResolveApi() || !g_api.clearCostume()) {
++            return;
++        }
++
++        g_lastFormIDs.clear();
++        g_hasPublishedCostume = false;
++    }
++}
+diff --git a/plugin/src/compat/SfsCostumeBridge.h b/plugin/src/compat/SfsCostumeBridge.h
+new file mode 100644
+index 0000000..c028b87
+--- /dev/null
++++ b/plugin/src/compat/SfsCostumeBridge.h
+@@ -0,0 +1,20 @@
++#pragma once
++
++#include <cstdint>
++#include <vector>
++
++// Optional bridge owned by the SFS compatibility build.  The base Grid
++// Inventory feature remains fully independent when SFS is not installed.
++namespace FUI::SfsCostumeBridge
++{
++    // A new save/load can make SFS forget its transient registration state
++    // while the selected Grid Costume itself remains unchanged.
++    void Invalidate();
++
++    // Called only after Grid Inventory has actually rebuilt the selected
++    // Costume.  Non-armour entries are accepted here; SFS discards them.
++    void PublishAppliedCostume(const std::vector<std::uint32_t>& a_formIDs);
++
++    // Called only after Grid Inventory has actually cleared a Costume.
++    void PublishClearedCostume();
++}
+diff --git a/plugin/src/game/Costume.cpp b/plugin/src/game/Costume.cpp
+index 6c52701..a1dff4c 100644
+--- a/plugin/src/game/Costume.cpp
++++ b/plugin/src/game/Costume.cpp
+@@ -1,4 +1,5 @@
+ #include "game/Costume.h"
++#include "compat/SfsCostumeBridge.h"
+ 
+ #include "ui/Loadout.h"
+ 
+@@ -255,6 +256,10 @@ namespace FUI::Costume
+ 
+     void NoteGameLoaded()
+     {
++        // SFS restores independently from Grid Inventory.  Ask the optional
++        // bridge to publish the active Costume again after its scheduled
++        // re-dress pass, without making SFS a dependency of Grid itself.
++        SfsCostumeBridge::Invalidate();
+         g_reapplyLeft = kReapplyTimes;
+         g_reapplyAt = g_frame + kReapplyFirst;
+         SKSE::log::info("[COSTUME] load: {} re-dress passes scheduled", kReapplyTimes);
+@@ -821,6 +826,15 @@ namespace FUI::Costume
+         g_lastRebuild = g_frame;
+         g_appliedTab = wanted ? g_tab : -1;
+ 
++        // Publish only the final selected Costume state.  Calling this while
++        // anchors are still settling would transiently clear/replace SFS rows
++        // and turn a normal Grid Inventory rebuild into an SFS state change.
++        if (wanted) {
++            SfsCostumeBridge::PublishAppliedCostume(Loadout::FormsOf(g_tab));
++        } else {
++            SfsCostumeBridge::PublishClearedCostume();
++        }
++
+         // ★Sample AFTER the rebuild -- what is in the slot now is the thing a
+         // later rebuild would replace. Sampling before would record the body we
+         // just discarded and the watch would fire on our own work, forever.

@@ -1,0 +1,162 @@
+-- set minimum xmake version
+set_xmakever("3.0.0")
+
+set_config("skse_xbyak", true)
+set_config("skyrim_vr", false)
+
+-- The v1.4.6 corresponding-source archive carries the exact audited
+-- CommonLibSSE-NG source used for this build under third_party/.
+includes("third_party/CommonLibSSE-NG")
+
+-- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
+-- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.4.6"
+local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
+local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
+if not major then
+    error("SFS_BUILD_VERSION must be in major.minor.patch format, got " .. build_version)
+end
+
+set_project("SkyrimFittingSystem")
+set_version(build_version)
+set_license("GPL-3.0")
+
+set_languages("c++23")
+set_warnings("allextra")
+
+set_policy("package.requires_lock", true)
+
+add_rules("mode.release", "mode.debug", "mode.releasedbg")
+add_rules("plugin.vsxmake.autoupdate")
+
+add_requires("nlohmann_json v3.12.0")
+add_requires("rapidcsv v8.92")
+
+target("SkyrimFittingSystem")
+    set_version(build_version)
+    set_encodings("utf-8")
+    set_basename("SFSCore")
+
+    -- Always put the deployable DLL/PDB on the canonical release path even if
+    -- a developer previously configured a separate PoC object directory.
+    set_targetdir("build/v" .. build_version .. "/windows/x64/$(mode)")
+
+    add_deps("commonlibsse-ng")
+    add_packages("nlohmann_json")
+
+    add_rules("commonlibsse-ng.plugin", {
+        name = "Skyrim Fitting System",
+        author = "PenguinToast",
+        description = "SKSE64 plugin using CommonLibSSE-NG and Dear ImGui"
+    })
+
+    add_defines("SFS_VERSION_MAJOR=" .. major)
+    add_defines("SFS_VERSION_MINOR=" .. minor)
+    add_defines("SFS_VERSION_PATCH=" .. patch)
+    add_defines('SFS_VERSION_STRING="' .. build_version_string .. '"')
+    add_defines("SFS_VIRTUAL_TOKEN_POC=1")
+
+    add_files("src/**.cpp")
+    add_files(
+        "lib/imgui/imgui.cpp",
+        "lib/imgui/imgui_draw.cpp",
+        "lib/imgui/imgui_tables.cpp",
+        "lib/imgui/imgui_widgets.cpp",
+        "lib/imgui/backends/imgui_impl_dx11.cpp",
+        "lib/imgui/backends/imgui_impl_win32.cpp"
+    )
+    add_headerfiles("src/**.h")
+    add_includedirs("src", "lib/imgui", "lib/imgui/backends")
+    add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")
+    set_pcxxheader("src/pch.h")
+
+target("KitGeneratorLogicTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_deps("commonlibsse-ng")
+    add_packages("nlohmann_json")
+    add_defines("SFS_INTEGRATED_KIT_GENERATOR_TEST=1")
+    add_files(
+        "tests/KitGeneratorLogicTests.cpp",
+        "src/kit_generator/Localization.cpp",
+        "src/ui/Localization.cpp"
+    )
+    add_includedirs("src", "lib/imgui", "lib/imgui/backends")
+    set_pcxxheader("src/pch.h")
+
+-- The private personal-completion experiment is intentionally not part of the
+-- public GPL source archive.  Keep its optional local targets available for
+-- the maintainer without emitting broken-file warnings for public builders.
+if os.isfile("private/personal_kit_completion/PersonalKitCompletion.cpp") then
+target("SkyrimFittingSystemPersonal")
+    set_default(false)
+    set_version(build_version)
+    set_encodings("utf-8")
+    set_basename("SFSCore")
+    set_targetdir("build/v" .. build_version .. "-personal/windows/x64/$(mode)")
+
+    add_deps("commonlibsse-ng")
+    add_packages("nlohmann_json")
+
+    add_rules("commonlibsse-ng.plugin", {
+        name = "Skyrim Fitting System - Personal Kit Completion",
+        author = "PenguinToast",
+        description = "Private SFS build with personal kit candidate completion"
+    })
+
+    add_defines("SFS_VERSION_MAJOR=" .. major)
+    add_defines("SFS_VERSION_MINOR=" .. minor)
+    add_defines("SFS_VERSION_PATCH=" .. patch)
+    add_defines('SFS_VERSION_STRING="' .. build_version_string .. '-personal"')
+    add_defines("SFS_VIRTUAL_TOKEN_POC=1")
+    add_defines("SFS_PERSONAL_KIT_COMPLETION=1")
+
+    add_files("src/**.cpp")
+    add_files("private/personal_kit_completion/PersonalKitCompletion.cpp")
+    add_files(
+        "lib/imgui/imgui.cpp",
+        "lib/imgui/imgui_draw.cpp",
+        "lib/imgui/imgui_tables.cpp",
+        "lib/imgui/imgui_widgets.cpp",
+        "lib/imgui/backends/imgui_impl_dx11.cpp",
+        "lib/imgui/backends/imgui_impl_win32.cpp"
+    )
+    add_headerfiles("src/**.h")
+    add_headerfiles("private/personal_kit_completion/**.h")
+    add_includedirs("src", "private/personal_kit_completion", "lib/imgui", "lib/imgui/backends")
+    add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")
+    set_pcxxheader("src/pch.h")
+
+target("SFSDynamicFootprintsPatch")
+    set_default(false)
+    set_version(build_version)
+    set_encodings("utf-8")
+    set_basename("SFS_DynamicFootprintsPatch")
+    set_targetdir("build/v" .. build_version .. "/compat/dynamic-footprints/windows/x64/$(mode)")
+
+    add_deps("commonlibsse-ng")
+    add_rules("commonlibsse-ng.plugin", {
+        name = "SFS Dynamic Footprints Compatibility Patch",
+        author = "PenguinToast",
+        description = "Dynamic Footprints displayed footwear bridge for Skyrim Fitting System"
+    })
+
+    add_files("compat/DynamicFootprintsSfsPatch/src/**.cpp")
+    add_headerfiles("compat/DynamicFootprintsSfsPatch/src/**.h")
+    add_includedirs("compat/DynamicFootprintsSfsPatch/src", "src")
+    add_syslinks("bcrypt")
+    set_pcxxheader("src/pch.h")
+
+target("PersonalKitCompletionTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "-personal/tests")
+    add_files(
+        "private/personal_kit_completion/PersonalKitCompletion.cpp",
+        "private/personal_kit_completion/PersonalKitCompletionTests.cpp"
+    )
+    add_includedirs("src", "private/personal_kit_completion")
+end

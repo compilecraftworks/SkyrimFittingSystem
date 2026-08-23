@@ -1,0 +1,65 @@
+## Version 1.3.0
+
+## Actual-Equipment Strip Linking
+
+- Replaced the old SexLab, Devious Devices, Private Needs, Soulgem Oven, Bathing in Skyrim, and Body Search-specific strip bridges with one system that follows each actor's final worn state.
+- Added the actor-specific **Strip Link** popup with **No Linking**, **Auto-match Vanilla Slots**, and **Include Mod Slots** modes. Every actor starts independently with No Linking.
+- Added per-appearance-slot choices for Auto-match, Do Not Use, or a fixed actual-equipment slot. Multi-slot cards belonging to one item stay synchronized.
+- Automatic hiding is temporary display state. It does not move, delete, or recreate registered FormIDs, original slot masks, base or conditional rows, row order, actor ownership, or kit JSON.
+- Manual visibility, conditions, and Helmet Toggle 2 state remain independent. Showing an auto-hidden appearance ignores only that suppression until the linked equipment returns; the next normal strip event can hide it again.
+
+## Automatic Matching
+
+- Vanilla Auto-Match uses name, EditorID, keyword, and original-slot rules expanded from 19,132 real outfit-mod records. Applying the current representative priorities to that sample yields Body 11,227 (58.682%), Feet 2,987 (15.613%), and Hands 2,006 (10.485%) as the largest groups, while Hair, Forearms, Calves, and other vanilla slots remain distinct. This is a classification distribution, not an accuracy percentage; actual gameplay can dynamically fall through to lower-priority links according to currently worn equipment.
+- The best currently worn anchor is recalculated after every actual-equipment change. Vanilla Auto-Match candidates are slots 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, and 42, with unresolved ordinary accessories falling back to slot 32.
+- Actual occupancy is calculated from the union of ARMO BOD slots and every attached ARMA slot. This detects the auxiliary partitions of 32+34+38 body armor, 33+34 gloves, and 37+38 boots, then applies the existing normalization that removes 49 from non-genital 32+49 equipment and removes 31 from real 31+42 headgear. The popup preview and runtime automatic suppression use the same control-slot mask.
+- Lower-body slot-49 appearances can follow actual slot 32, while genuine slot-49 decorations, pelvis items, and belts follow their ordinary priority rules.
+- Pure slot-31 wig/hair, slot-34 forearm, and slot-38 calf appearances independently match `31 - Hair`, `34 - Forearms`, and `38 - Calves`. Multi-slot appearances use a representative main-body slot: 32+34+38 body→32, 33+34 gloves→33, and 37+38 boots→37. Real 31+42 headgear is normalized to control slot 42, so a Vanilla Auto-Match slot-31 wig remains visible; explicit user slot-31 connections and Include Mod Slots one-to-one links still follow the real slot-31 state.
+- Diagnostic logs record the original ARMO display mask as `slots=` and the normalized ARMO+ARMA result as `controlSlots=`.
+- Include Mod Slots links the appearance's first eligible original slot one-to-one with the same actual slot number without locking to a particular armor FormID.
+
+## Actor and Save Isolation
+
+- Strip-link mode, fixed slot exceptions, and temporary visibility are actor-local and stored in the SKSE co-save.
+- Nearby actor detection supplies candidates only; it does not create or modify appearances, conditions, visibility, or strip-link settings.
+- Preserved the five official v1.2.2 co-save record prefixes and appended the new `AEVS` record as the sixth and final record.
+- Official `AEVS` v2 stores settings per save and actor. Existing saves without an `AEVS` record, including official v1.2.2 saves, and the discarded development-only `AEVS` v1 do not import global `settings.json`; every actor starts with linking disabled, while existing appearance, condition, and visibility data remain unchanged.
+- Actor runtime maps and temporary node references are cleared at load boundaries to prevent state leaking between save games that reuse a FormID.
+
+## Special-Effect Slots and Shields
+
+- Renamed Hide-Protected Slots to **Protect Special-Effect Slots** and changed the default selection to 50, 51, and 61. Users can customize slots 30–61.
+- Actual gear containing a protected slot always remains visible. New appearance registration is blocked, while existing base and conditional appearance data is preserved and becomes active again if protection is removed.
+- Equipment batch registration, Outfits, Kits, and condition registration skip only protected items and continue with valid items.
+- Added **Use Shields as Appearance Slots**, OFF by default. When off, actual slot-39 shields remain visible and shield appearance registration and display are blocked without deleting saved data.
+- Protected slots and disabled shield slot 39 are excluded from Strip Link cards, connection lines, and dropdown targets.
+
+## RaceMenu BodyMorph and Display Compatibility
+
+- Added universal support through RaceMenu's common `ApplyBodyMorphs` path and its internal deferred `UpdateModelWeight` task, resolved from RTTI instead of a version-specific address, rather than maintaining FHU, SGO, OBody, or other mod-specific event lists.
+- The verified public `ApplyBodyMorphs` behavior is preserved for OBody. RaceMenu's deferred `UpdateModelWeight` task triggers a separate actor-local SFS rebuild for NiOverride Papyrus callers through the active DAVE, DAV, or native display backend, followed by one final public morph application after the new nodes attach. No polling or global actor scan is used.
+- Added actor-local display refresh after actual equipment changes, including DAVE API refresh and DAV/native fallback handling, to remove stale rendered nodes after external strip events.
+- Preserved SOS/TNG covering and revealing evaluation and moved SOS StorageUtil list synchronization into the DLL.
+- Helmet Toggle 2 and Wet Function Redux remain separate optional patches. Helmet-managed appearances can still be replaced or deleted even while their manual eye control is locked.
+
+## Workbench, Kits, and Safety
+
+- Added Ctrl multi-selection and right-click batch registration to the Equipment tab.
+- Expanded the actor dropdown to the complete detected list and separated popup observation from global native revision updates to reduce unrelated actor refreshes and UI flicker.
+- Presented Strip Link as an independent ordinary window rather than a screen-dimming modal and blocked input to the workbench and catalog behind it while open. Added the body silhouette, slot cards, body-region connection lines, full result labels such as `Auto-match -> 32 - Body`, and a wide help area at the top center of the silhouette.
+- Clarified Fitting Kit Generator JSON placement for a real MO2 mod-folder layout.
+- Added safe UTF-8 Korean, Chinese, and other Unicode names and paths. Invalid or unreadable JSON is isolated so one file cannot terminate the F6 UI load.
+- Clarified overlapping condition states as **Condition Met / Another Condition Active** while retaining the concise base-appearance status.
+
+## Package and External Menu API
+
+- Removed the main ESP, SEQ, and the retired SexLab, DD, Private Needs, Soulgem Oven, Bathing in Skyrim, Body Search, and SOS bridge PEX/PSC files.
+- The main package now centers on the DLL, UI resources, and `SkyrimFittingSystemNative.pex/psc` and runs without a main ESP.
+- Added the stable C ABI exports `SkyrimFittingSystem_Open`, `SkyrimFittingSystem_Close`, `SkyrimFittingSystem_IsMenuOpen`, and `SkyrimFittingSystem_SetHotkeyEnabled` for external shortcut and menu-management mods. Menu requests are forwarded to SFS's safe UI processing point. Native shortcut control is runtime-only, preserves the saved binding, leaves the other API calls available, and defaults to enabled after every game launch.
+- Added the consumer header, example, and API documentation under `extras/SkyrimFittingSystemAPI.h`, `tests/MenuApiConsumer.cpp`, and `docs/SkyrimFittingSystem-Menu-API.md`.
+
+## Update Instructions
+
+- When upgrading from v1.2.2, replace the old main mod folder instead of merging over it so retired ESP, SEQ, and bridge scripts do not remain.
+- Preserve or back up `Interface/SkyrimFittingSystem/user`, especially personal Fitting Kits.
+- Install the Helmet Toggle 2 and Wet Function Redux compatibility patches only if you use those mods.

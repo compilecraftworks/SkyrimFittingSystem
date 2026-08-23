@@ -1,0 +1,481 @@
+[center]
+[size=6][b][color=#42ACC8]Skyrim Fitting System[/color][/b][/size]
+[/center]
+
+
+An SKSE appearance system that preserves the armor rating, enchantments, and effects of actual equipped gear while letting you build a separate visible outfit.
+
+Default UI hotkey: [b]F6[/b]. It can be changed in Options.
+
+[line]
+[size=4][b][color=#42ACC8]Introduction[/color][/b][/size]
+
+
+Skyrim Fitting System (SFS) separates actual inventory equipment from registered appearances. Actual gear can be hidden visually without being unequipped, while registered appearances do not replace armor stats or gameplay effects.
+
+Registered appearances, conditions, real-gear visibility, manual display choices, and external-strip state are isolated for the player, each NPC, and each follower. The selected strip-link policy is a shared user setting applied to all actors, while every runtime result remains actor-local.
+
+SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display environments while using the same workbench and save data.
+
+[line]
+[size=4][b][color=#42ACC8]Highlights[/color][/b][/size]
+
+
+[list]
+[*]Separate visible appearances while retaining the stats and effects of actual equipment[/*]
+[*]Actor-local workbench rows, conditions, manual eye controls, and external strip/redress state[/*]
+[*]Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, and per-slot Direct Editing exceptions[/*]
+[*]Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation[/*]
+[*]Final displayed-outfit OAR conditions, built-in Grid Inventory Costume support, and optional DFFMA OAR, Helmet Toggle 2, and Dynamic Footprints bridges[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Version 1.4.6 Update Summary[/color][/b][/size]
+
+
+[list]
+[*]Grid Inventory v1.4.1+ Costume synchronization now changes SFS only for a non-empty, player-owned armor Costume. Clearing Costume, selecting no Costume, or sending a non-armor layout preserves the player's saved registered appearances.[/*]
+[*]The restored Costume state after startup, save load, or revert remains ignored. SFS preserves its saved registered appearances until Grid Inventory sends a later non-empty Costume change.[/*]
+[*]The bridge is now inside [font=Courier New]SFSCore.dll[/font]: it uses Grid Inventory's public SKSE message only, copies its data during the callback, and applies it at SFS's normal safe processing point. It never replaces, loads, hooks, or depends on [font=Courier New]GridInventory.dll[/font].[/*]
+[*]Remove the old v1.4.4 Grid Inventory replacement-DLL patch when updating. Grid Inventory remains the owner of Costume rendering, loadouts, saves, and actual equipment.[/*]
+[*]Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, Direct Editing, external strip/redress handling, and DAVE/DAV/Skyrim-native display paths remain actor-local and unchanged.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Requirements[/color][/b][/size]
+
+
+Required:
+
+[list]
+[*]SKSE64 matching the installed Skyrim SE/AE runtime[/*]
+[*]Address Library for SKSE Plugins[/*]
+[*]The included [font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font] enabled[/*]
+[/list]
+
+
+Optional:
+
+[list]
+[*]RaceMenu for live BodyMorph synchronization on registered appearances[/*]
+[*]DAVE or DAV; SFS automatically uses the installed display environment[/*]
+[*]SOS or TNG for genital conceal/reveal compatibility[/*]
+[*]Wet Function Redux with the separate SFS compatibility patch[/*]
+[*]Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR for the separate DFFMA configuration patch[/*]
+[*]Grid Inventory v1.4.1+ for built-in Costume synchronization; Helmet Toggle 2 or Dynamic Footprints SKSE BASE v3 only when installing their matching separate SFS patch[/*]
+[*]SexLab, Soulgem Oven, Private Needs, Bathing in Skyrim, Devious Devices, Pama Prison Alternative, or other supported external-strip mods[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Installation and Updating[/color][/b][/size]
+
+
+[list=1]
+[*]Back up [font=Courier New]Interface/SkyrimFittingSystem/user[/font] first if it contains personal kits.[/*]
+[*]Completely delete the previous SFS mod folder.[/*]
+[*]Completely delete any older [b]SFS Helmet Toggle 2 Compatibility Patch[/b] and the [b]v1.4.4 SFS Grid Inventory Costume Compatibility Patch[/b]. Do not delete their original mods.[/*]
+[*]If an old standalone test [b]SFS Kit Generator[/b] folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.[/*]
+[*]Install the v1.4.6 distribution ZIP as a new mod.[/*]
+[*]Enable [font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font].[/*]
+[*]Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ needs no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, Helmet Toggle 2, or Dynamic Footprints after their original mod.[/*]
+[/list]
+
+
+File changes in v1.4.0:
+
+[list]
+[*][font=Courier New]SkyrimFittingSystem.dll[/font] → [font=Courier New]SFSCore.dll[/font]: the same single main plugin with a new filename, not an additional DLL. The new name also loads before legacy [font=Courier New]skee64.dll[/font].[/*]
+[*][font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font]: new and required for external-mod strip linking.[/*]
+[*]Main ESP, SEQ, and retired per-mod bridge PEX/PSC files: removed. The old fixed-slot Helmet Toggle 2 patch is replaced by a separate v1.4.4 actor-local compatibility patch.[/*]
+[*]UI resources and [font=Courier New]SkyrimFittingSystemNative.pex/psc[/font]: retained.[/*]
+[/list]
+
+
+A clean reinstall prevents the old and new main DLLs from loading the same hooks twice.
+
+v1.2.x and v1.3.x settings migrate to the v1.4.0 default, [b]Mod-Configured Slot Linking[/b]. After the settings are saved by v1.4.0, the selected policy is preserved. Existing appearances, conditions, and visibility data remain unchanged.
+
+[line]
+[size=4][b][color=#42ACC8]Quick Start[/color][/b][/size]
+
+
+[list=1]
+[*]Open SFS with F6.[/*]
+[*]Select the player or NPC at the top of the workbench.[/*]
+[*]Find an appearance in Equipment, Outfit, or Kits.[/*]
+[*]Register it in the base area or a condition row by double-clicking, dragging, or using the context menu.[/*]
+[*]Use the separate eye controls for actual gear and registered appearances.[/*]
+[*]Attach a built-in or custom condition when an appearance should react to gameplay state.[/*]
+[*]Choose a strip-link policy in Options, or use [b]Direct Slot Editing[/b] for per-slot exceptions.[/*]
+[*]Save reusable multi-slot setups as Fitting Kits.[/*]
+[*]To build a new kit automatically, choose outfit ESPs in [b]Kit Generator[/b], scan them, edit and preview a candidate, then create the kit. Changing candidates preserves the result classification.[/*]
+[*]Under Options, set [b]Character Position While Open[/b] to Disabled, Left, or Right. Right-drag the outer area where the character is shown to rotate the player; closing SFS restores the original facing.[/*]
+[/list]
+
+
+Display changes never move or recreate the registered FormID, original slots, base or conditional row, row order, or actor ownership.
+
+[line]
+[size=4][b][color=#42ACC8]UI and Workbench[/color][/b][/size]
+
+
+[center][img]https://staticdelivery.nexusmods.com/mods/1704/images/187128/187128-1786733591-284613191.png[/img][/center]
+
+[size=3][b][color=#42ACC8]Workbench Base Area[/color][/b][/size]
+
+
+The upper base area represents the selected actor's ordinary state. [b]Actual Gear[/b] on the left shows equipment truly worn from inventory, while [b]Registered Appearance[/b] on the right shows what SFS displays instead. Hiding actual gear with its eye button does not unequip it, so armor rating, enchantments, keywords, and equipment effects remain active. The registered-appearance eye changes only the visual result and does not delete registration.
+
+A registered appearance without a condition is that slot's base appearance. It returns whenever no conditional appearance is applicable or every condition is false. Base actual gear, registered appearances, and individual eye state are stored only for the selected actor.
+
+[size=3][b][color=#42ACC8]Workbench Condition Area[/color][/b][/size]
+
+
+The lower condition area builds situation-dependent display rules as rows. Each row has two independently preserved halves: [b]Condition Setup[/b] on the left and [b]Action Setup[/b] on the right.
+
+[list]
+[*][b]Condition Setup:[/b] decides when the action runs. Drop a built-in or custom condition card here, or double-click a Conditions-tab card to fill the first empty condition card.[/*]
+[*][b]Action Setup:[/b] decides what target changes and how. Drop actual gear, an existing registered appearance, or an appearance to register, then use the target eye to select [b]show when true[/b] or [b]hide when true[/b].[/*]
+[/list]
+
+
+[font=Courier New]+ Create Condition Slot +[/font] adds a row with both halves empty. A condition-only or action-only row is safely preserved and remains inactive until the other half is filled. Deleting one half does not delete the other card. Only a row with both halves empty is cleaned up when the UI closes or at the next load boundary.
+
+A base registered appearance can be dragged into a condition row's action area. Reassigning a gear or appearance card through its context menu reuses an existing empty action row with the same condition instead of creating a duplicate. A true conditional appearance takes priority over the same actor's base appearance. If several conditional appearances are true, workbench row order determines the winner; another true row reports [b]Condition Met / Another Condition Active[/b].
+
+[size=3][b][color=#42ACC8]Equipment Tab[/color][/b][/size]
+
+
+Search installed ARMO records by name, plugin, and slot. Hold Ctrl to select multiple entries, then right-click to register them as a batch.
+
+[size=3][b][color=#42ACC8]Outfit Tab[/color][/b][/size]
+
+
+Register the armor entries of an OTFT outfit together without equipping inventory gear.
+
+[size=3][b][color=#42ACC8]Kit Tab[/color][/b][/size]
+
+
+Save and apply multi-slot appearance and real-gear visibility setups as reusable JSON kits. Existing kit JSON remains compatible. Right-click a user kit and choose [b]Rename[/b] to change only its kit name; its file path, piece composition, and saved layout remain intact. Read-only external kits cannot be changed.
+
+[size=3][b][color=#42ACC8]Kit Generator Tab[/color][/b][/size]
+
+
+Select installed outfit plugins and scan them to construct compatible candidate groups using local name, EditorID, slot, color, numbering, SMP, and exposure rules. Multiple ESPs are processed in parallel within a bounded CPU and memory budget, while a single selected ESP receives the available worker budget. Progress accumulates completed work only, so it never moves backward when parallel tasks finish in a different order.
+
+Click a result row to select and preview that kit. Hold [font=Courier New]Ctrl[/font] and [b]left-click[/b] rows to select multiple results; selected result rows can be renamed, deleted, or merged. Clicking a candidate name changes selection and read-only preview only. The separate [b]Edit[/b] button is the only way to open piece replacement and deletion. Keyboard and gamepad up/down move the current list selection together with its preview, while the active input enters the next stage or applies a kit.
+
+Candidate preview is temporary on the character and in the workbench's [b]Registered Appearances[/b] column. It never changes saved workbench rows, inventory, or actual equipment. Normal Skyrim display-slot conflicts remain active, while the exception that exposes protected-slot and SOS/TNG genital candidates is limited strictly to this temporary generator preview.
+
+The initial SFW/NSFW decision made when scanning creates a result is frozen on that result row. Selecting another candidate, editing pieces, or merging candidates does not reclassify it. Known outfit packs prioritize their supplied set catalogs when grouping pieces; other ESPs use general name, occupied-slot, and actual NIF-model-path rules. Cross-plugin duplicates are retained only when their real model paths and slot coverage sufficiently overlap, keeping the more complete copy. Finished kits are written as JSON under [font=Courier New]Interface/SkyrimFittingSystem/user/kits[/font].
+
+[size=3][b][color=#42ACC8]Conditions Tab[/color][/b][/size]
+
+
+[center][img]https://staticdelivery.nexusmods.com/mods/1704/images/187128/187128-1786734114-890820144.png[/img][/center]
+
+Create and manage built-in and custom conditions. Built-in cards are ready-to-use states such as interior, exterior, city, town, dungeon, home, combat, non-combat, day, night, rain, snow, underwater, sneaking, and weapon state.
+
+A custom condition combines Skyrim condition functions, typed function arguments, comparison operators, and comparison values. Multiple clauses can be connected with AND/OR or reference existing built-in and custom conditions. Examples include [font=Courier New]City AND non-combat[/font], [font=Courier New]Dungeon AND combat[/font], and [font=Courier New]Night AND sneaking[/font]. Consecutive OR clauses are evaluated as Skyrim-style OR groups, and clause order can be changed by dragging.
+
+Custom conditions have a name, description, and shared display color. The editor presents Form, integer, floating-point, string, and boolean inputs according to each function's metadata, and validates required arguments, comparison values, invalid references, and circular references before saving. A condition already referenced by another condition or a workbench row is protected from accidental deletion or movement.
+
+Double-clicking a condition card fills only the first empty condition card in the workbench. It never pulls an appearance or actual gear into the row automatically; the action target is selected separately on the right.
+
+[size=3][b][color=#42ACC8]Options Tab[/color][/b][/size]
+
+
+Configure language, font, UI opacity, hotkey, game pause, nearby-NPC detection, external-mod strip linking, special-effect slot protection, and shield appearance use. [b]Character Position When Opening UI[/b] can be Disabled, Left, or Right and affects third-person only. Right-drag over the visible character area rotates the player, and closing SFS restores the original camera and facing.
+
+[line]
+[size=4][b][color=#42ACC8]External-Mod Strip Linking[/color][/b][/size]
+
+
+External-mod strip linking is not a set of patches limited to a few named mods. It is designed to use the same generic path for any external mod that performs strip, redress, confiscation, or outfit-replacement behavior. SFS does not rely only on a hardcoded name list; it observes real calls and their actor-local results, including [font=Courier New]GetWornForm[/font], [font=Courier New]UnequipItem*[/font], [font=Courier New]EquipItem*[/font], [font=Courier New]RemoveAllItems[/font], [font=Courier New]RemoveItem[/font], and [font=Courier New]SetOutfit[/font]. Mod names in the compatibility table are representative examples of these behavior types.
+
+This system targets equipment control initiated by external mods. Ordinary manual inventory equip and unequip actions are not classified as external events. When the original mod re-equips actual gear, the related automatic suppression can clear. If the original mod does not redress the actor, SFS does not fabricate or equip replacement gear.
+
+The selected policy and direct mapping table are shared by all actors. Transactions, suppression tickets, DD device state, and final display results remain FormID-local, so stripping NPC A cannot alter NPC B or the player.
+
+[size=3][b][color=#42ACC8]Mod-Configured Slot Linking[/color][/b][/size]
+
+
+[center][img]https://staticdelivery.nexusmods.com/mods/1704/images/187128/187128-1786734732-580573963.png[/img][/center]
+
+[b]This is the recommended default.[/b] SexLab and other external mods remain governed by the strip slots, excluded keywords, and redress rules selected independently in their own MCM or settings.
+
+SFS exposes each registered appearance as a fixed-FormID [b]virtual worn token[/b] that an external mod can query like worn armor. When a mod inspects an actor through [font=Courier New]GetWornForm[/font], equipped arrays, or keyword filters, it can see the applicable token alongside actual gear. If that mod's own settings select the token for stripping, SFS hides the linked registered appearance. When redress by the same external flow is confirmed, SFS restores the user's previous display state.
+
+The tokens are never added to inventory or equipped and create no stats, weight, or gameplay effects. SFS does not replace every mod's settings with one shared rule. It also does not split the logic simply by vanilla versus extension slot number; it combines actual worn gear with virtual tokens for empty appearance slots and reflects the result produced by each external mod on the registered appearance.
+
+Use this mode when:
+
+[list]
+[*]The strip slots, excluded keywords, and redress settings selected independently in SexLab and other external mods should remain authoritative[/*]
+[*]Extension-slot appearances from 43–61 should participate in the external mod's configured rules[/*]
+[*]Appearances without matching actual gear must still appear in worn arrays or keyword filters[/*]
+[/list]
+
+
+[size=3][b][color=#42ACC8]Automatic Vanilla-Slot Linking[/color][/b][/size]
+
+
+[center][img]https://staticdelivery.nexusmods.com/mods/1704/images/187128/187128-1786735103-1188508119.png[/img][/center]
+
+The core of this mode is automatic recognition of appearance types such as helmet, body, gloves, boots, and accessories, followed by a natural vanilla equipment-slot binding. SFS analyzes the appearance name, EditorID, keywords, original ARMO/ARMA occupancy, and English, Korean, and Chinese semantic clues. This is deterministic local rule-based classification, not generative AI or online learning.
+
+This mode does not directly follow the MCM strip-slot or keyword settings selected independently in SexLab and other external mods. It follows SFS's vanilla-equipment binding and the resulting actual gear changes, so it operates independently of per-mod settings and can produce a different result from [b]Mod-Configured Slot Linking[/b].
+
+Automatic classification proceeds in this order:
+
+[list=1]
+[*]SFS unions the slots occupied by the appearance ARMO and every attached ARMA. Unambiguous vanilla partitions such as pure Hair 31, Long Hair 41, Forearms 34, and Calves 38 are preserved first.[/*]
+[*]The EditorID and display name are normalized into lowercase word tokens. CamelCase and letter/number boundaries such as [font=Courier New]BattleAngelsTop01[/font] are split before matching.[/*]
+[*]Keyword EditorIDs supplied by the original ESP/KID or other mods are added to the same classification text. SFS-owned temporary SOS/TNG runtime keywords are excluded so they cannot feed back into a second classification pass.[/*]
+[*]Specific categories win before broad ones. For example, [font=Courier New]circlet[/font], [font=Courier New]glasses[/font], and [font=Courier New]mask[/font] prefer 42; [font=Courier New]helmet[/font], [font=Courier New]hood[/font], and [font=Courier New]hat[/font] prefer 30; and [font=Courier New]necklace[/font], [font=Courier New]amulet[/font], and [font=Courier New]choker[/font] prefer 35. Equivalent Korean, Simplified Chinese, and Traditional Chinese terms are included.[/*]
+[*][font=Courier New]glove[/font], [font=Courier New]gauntlet[/font], [font=Courier New]bracer[/font], and bracelet terms prefer Hands 33. [font=Courier New]boot[/font], [font=Courier New]shoe[/font], [font=Courier New]heel[/font], and [font=Courier New]stocking[/font] terms prefer Feet 37. Body-garment terms such as [font=Courier New]body[/font], [font=Courier New]dress[/font], [font=Courier New]top[/font], [font=Courier New]pants[/font], [font=Courier New]skirt[/font], [font=Courier New]belt[/font], and [font=Courier New]cloak[/font], plus generic accessories, follow Body 32.[/*]
+[*]When a category has several candidate slots, SFS prefers one actually worn by the current actor or just stripped by an external mod. An otherwise unknown extension-slot appearance falls back safely to Body 32. User-protected slots are excluded from automatic candidates.[/*]
+[/list]
+
+
+The vocabulary covers English, Korean, Simplified Chinese, and Traditional Chinese. The terms above are representative examples; the full local rule table also covers wigs, hair ornaments, shields, rings, arm and leg accessories, underwear, swimwear, robes, bags, wings, and common spelling variants.
+
+Representative bindings:
+
+[list]
+[*]Helmet/hood: 30, wig/hair: 31, circlet/glasses/mask: 42[/*]
+[*]Body, upper/lower clothing, underwear, skirt, and belt: 32[/*]
+[*]Gloves/arm accessory: 33, forearms: 34[/*]
+[*]Necklace: 35, ring: 36[/*]
+[*]Boots/leg accessory: 37, calves: 38, shield: 39[/*]
+[/list]
+
+
+SFS unions the occupied slots from the ARMO and every attached ARMA, so 32+34+38 body armor, 33+34 gloves, 37+38 boots, and 30+31+42 headgear are tracked naturally. When an external mod removes the linked actual gear, the registered appearance hides. When the gear is re-equipped, it returns to the user's previous display state.
+
+Use this mode when:
+
+[list]
+[*]Clothing should follow ordinary body parts independently of each external mod's MCM setup[/*]
+[*]Extension-slot outfits should be classified into natural vanilla body, glove, boot, or accessory anchors[/*]
+[*]A simple actual-equipment strip/redress relationship is preferred[/*]
+[/list]
+
+
+[size=3][b][color=#42ACC8]Direct Slot Editing[/color][/b][/size]
+
+
+Selecting [b]Direct Slot Editing[/b] in Options opens a popup that shows the registered appearances and their slot relationships together. Direct editing is not a separate engine that requires every slot to be rebuilt manually. It retains one of the following automatic bases and adds exceptions only where needed:
+
+[list]
+[*]Mod-Configured Slot Linking[/*]
+[*]Automatic Vanilla-Slot Linking[/*]
+[/list]
+
+
+There is no separate third fully-direct base. Choose one automatic base and edit only the slots that need exceptions. Editing a card does not change the base selected inside the popup; untouched slots and newly registered appearances continue using that base's automatic rules. After Apply, the Options combo displays [b]Direct Slot Editing[/b] to indicate that user exceptions exist, while the internal Mod-Configured or Vanilla automatic base remains saved.
+
+[list]
+[*][b]Direct exception on the Mod-Configured base:[/b] moves the appearance's virtual token to the selected target from slots 30–61, so SexLab or another external mod applies its settings and keyword filters for that target slot.[/*]
+[*][b]Direct exception on the Vanilla base:[/b] replaces name, EditorID, and keyword classification with a user-selected actual vanilla-equipment anchor. The appearance follows external removal or re-equip of real gear in that anchor slot.[/*]
+[/list]
+
+
+[list]
+[*][font=Courier New]Automatic Match -> Slot[/font]: remove the direct exception and use the selected base[/*]
+[*][font=Courier New]No Linking[/font]: exclude only that appearance slot from external strip linking[/*]
+[*]A concrete slot: pin that appearance to the selected target[/*]
+[/list]
+
+
+[font=Courier New]Automatic Match[/font] is not a third mode; it removes only that card's direct exception. The Mod-Configured base permits eligible targets from 30–61. The Vanilla base permits only vanilla anchors 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, and 42. Cards belonging to the same multi-slot registered item stay synchronized.
+
+The selected base and direct mapping table are shared policy for all actors. Actual strip transactions, automatic suppression, manual eye state, and restoration results remain isolated by actor FormID.
+
+[size=3][b][color=#42ACC8]No Linking[/color][/b][/size]
+
+
+External strip and redress actions do not automatically change registered appearance visibility. Saved direct mappings are retained and return when linking is enabled again.
+
+[size=3][b][color=#42ACC8]Manual Eye Controls and Automatic State[/color][/b][/size]
+
+
+Eye controls are not locked merely because an external event is active. Automatic state is represented accurately, but the user may still operate individual and global eye controls for actual gear and registered appearances. Only restrictions owned by a separate feature, such as protected slots, remain enforced.
+
+Automatic suppression never deletes registration. An appearance already hidden by the user remains hidden after redress. An appearance that was visible returns when the external mod actually re-equips its linked gear.
+
+[line]
+[size=4][b][color=#42ACC8]External-Mod Compatibility Table[/color][/b][/size]
+
+
+The mod names below are [b]representative examples[/b], not a restricted support list. SFS does not hardcode those names; its generic observer follows common strip, redress, confiscation, and wardrobe-replacement calls together with each actor's final worn state. A mod that is not listed should therefore work in most cases when it uses ordinary strip/redress behavior, without requiring a dedicated SFS patch or an update to that mod. Mods not named in the verification column still need an individual scene check.
+
+[table]
+[tr]
+[td][b]Action Type[/b][/td]
+[td][b]Representative Mods[/b][/td]
+[td][b]Compatibility[/b][/td]
+[td][b]Verification[/b][/td]
+[/tr]
+[tr]
+[td]SexLab strip/redress[br][font=Courier New]StripActor[/font] · [font=Courier New]GetWornForm[/font][br][font=Courier New]UnequipItemEx[/font] · [font=Courier New]EquipItemEx[/font][/td]
+[td]SexLab Framework SE · SexLab Utility Plus · Soulgem Oven / SGO4 Integration Fork · Fill Her Up Baka Edition · SexLab Defeat Bane · BaboDialogue · Bimbos of Skyrim · Balazar’s Bitch · Sexy Adventures · SexLab Approach Redux · SexLab Aroused Creatures · SexLab Dialogues · SexLab Solutions · SexLab Romance · SexLab Body Search[/td]
+[td]Generic[/td]
+[td]SexLab and SGO verified[/td]
+[/tr]
+[tr]
+[td]Slot filters and individual equip changes[br][font=Courier New]AddAllEquippedItemsToArray[/font][br][font=Courier New]GetWornForm[/font][br][font=Courier New]UnequipItem/Slot/Ex[/font][br][font=Courier New]EquipItem/ByID[/font][/td]
+[td]Private Needs – Orgasm · Bathing in Skyrim – Renewed · Licenses – Player Oppression · SLHH Expansion · Trap Needs to Be Real Trap / TNTR · Simple Player Prostitution · Death Trap Chest · Soul Resurrection[/td]
+[td]Generic[/td]
+[td]PNO and Bathing verified[/td]
+[/tr]
+[tr]
+[td]DD devices and Hider[br][font=Courier New]GetWornForm[/font][br][font=Courier New]EquipItem*[/font] · [font=Courier New]UnequipItem*[/font][br][font=Courier New]zadNativeFunctions.SyncSetting[/font][/td]
+[td]Devious Devices SE/NG · Devious Helpless Redux · Devious Interests · Devious Cidhna · Devious Curses NG · Unforgiving Devices · Laura’s Bondage Shop[/td]
+[td]DD-specific[/td]
+[td]DD equip/removal verified[/td]
+[/tr]
+[tr]
+[td]Prison, confiscation, and detention[br][font=Courier New]RemoveAllItems[/font] · [font=Courier New]RemoveItem[/font][br][font=Courier New]SetOutfit[/font][br][font=Courier New]EquipItem/UnequipItem[/font][/td]
+[td]Pama Prison Alternative · Pama Orkish Bounty Hunters · Pama Punishment · Pama Bad Ends · Pama Sovngarde · Pama Deadly Furniture · Captured by the Thalmor · Captive Player · Dark Arena · Bandit Paradise · Follower Slavery Mod[/td]
+[td]Generic[/td]
+[td]Pama verified[/td]
+[/tr]
+[tr]
+[td]Slavery and forced wardrobe replacement[br][font=Courier New]StripActor[/font] · [font=Courier New]UnequipAll[/font][br][font=Courier New]RemoveAllItems[/font] · [font=Courier New]SetOutfit[/font][br][font=Courier New]EquipItem*[/font][/td]
+[td]Public Whore · Sanguine Debauchery / SD+ · Simple Slavery Plus Plus / Rebuild · S.L.U.T.S. Resume · Submissive Lola · Dress Up Lover’s NPC Outfit Changer[/td]
+[td]Generic[/td]
+[td]More per-mod testing needed[/td]
+[/tr]
+[tr]
+[td]Alternate-start and quest wardrobe replacement[br][font=Courier New]UnequipAll[/font] · [font=Courier New]RemoveAllItems[/font][br][font=Courier New]SetOutfit[/font] · [font=Courier New]EquipItem[/font][/td]
+[td]Alternate Perspective · Deviant Start · Kidnapped Start · Adventurer’s Start · The Adventurer’s Guild[/td]
+[td]Generic[/td]
+[td]More per-mod testing needed[/td]
+[/tr]
+[/table]
+
+
+[line]
+[size=4][b][color=#42ACC8]Actual Gear, Registered Appearance Visibility, and Conditions[/color][/b][/size]
+
+
+Hiding actual gear is visual only and does not unequip it or remove its armor rating, enchantments, or effects. Hiding a registered appearance removes only its display and preserves registration.
+
+Global hide and per-item eye controls compose normally. If individual items differ from the global state, the global checkbox shows the correct partial state. Automatic external-mod state follows the same display rule.
+
+Conditional appearances take priority over the same actor's base appearance. Condition and action cards are preserved independently, and empty condition/action areas share the same drag-and-drop behavior and visual style.
+
+[line]
+[size=4][b][color=#42ACC8]Actors and NPCs[/color][/b][/size]
+
+
+Registered appearances, actual-gear hiding, conditions, external transactions, and temporary display state are actor-local. The actor selector lists the player, NPCs with saved data, and currently nearby NPCs. Hostile actors and corpses are excluded from automatic nearby detection.
+
+Although every actor uses the same policy and mapping table, actual results are stored only for the affected FormID. A SexLab scene or wardrobe replacement involving NPC A cannot change NPC B or the player.
+
+[line]
+[size=4][b][color=#42ACC8]Protected Special-Effect Slots and Shields[/color][/b][/size]
+
+
+Slots 50, 51, 60, and 61 are protected by default and can be customized across slots 30–61.
+
+[list]
+[*]Actual gear containing a protected slot always remains visible[/*]
+[*]New appearance registration for protected items is blocked[/*]
+[*]Existing base and conditional appearances stay inactive while protected and return when protection is removed[/*]
+[*]Equipment, Outfit, Kit, condition registration, and the strip-link popup use the same filter[/*]
+[/list]
+
+
+[b]Use Shields as Appearance Slots[/b] is OFF by default. When off, the actual slot-39 shield remains visible and shield appearance registration is blocked. When enabled, slot 39 works as an ordinary appearance slot.
+
+[line]
+[size=4][b][color=#42ACC8]Fitting Kits[/color][/b][/size]
+
+
+Virtual game path:
+
+[font=Courier New]Data/Interface/SkyrimFittingSystem/user/kits[/font]
+
+Inside the SFS MO2 mod folder, do not create another [font=Courier New]Data[/font] directory. Use:
+
+[font=Courier New]Interface/SkyrimFittingSystem/user/kits[/font]
+
+The built-in [b]Kit Generator[/b] writes finished JSON files directly here. Externally created kits can also be copied into this folder. UTF-8 Korean, Chinese, other Unicode names and paths, and UTF-8 BOM files are supported; invalid or unreadable JSON is skipped safely.
+
+[line]
+[size=4][b][color=#42ACC8]RaceMenu BodyMorph and Wig Color[/color][/b][/size]
+
+
+When RaceMenu is present, SFS follows RaceMenu's common BodyMorph/NiOverride update path instead of a list of mod-specific events. There is no polling or global actor scan; only the actor receiving a real morph update and that actor's active registered appearance nodes are processed across DAVE, DAV, and native paths.
+
+If registered wigs become darker after loading a save, [url=https://www.nexusmods.com/skyrimspecialedition/mods/156414]Hair Colour Sync NG[/url] is recommended. Use [font=Courier New]bEnableTintHairSlot=0[/font] in RaceMenu's [font=Courier New]Data/SKSE/Plugins/skee64.ini[/font] and do not combine multiple wig-color synchronization mods.
+
+[line]
+[size=4][b][color=#42ACC8]SOS / TNG and Naked-State Checks[/color][/b][/size]
+
+
+SFS evaluates the final visible combination of actual gear and registered appearances. Original-mod and user-assigned revealing or concealing policy has priority, while SFS-owned runtime keywords are tracked and cleaned safely.
+
+Automatic slot-32/49 classification minimizes source-ARMO mutation. A confirmed slot-32 upper-only item removes opposite SFS-owned Concealing/Covering state and gains Revealing keywords. Ordinary full-body slot-32 armor already conceals through normal SOS/TNG slot behavior, so SFS clears only conflicting SFS Revealing state and does not add Concealing, Covering, or Underwear keywords. A classified slot-49 lower garment gains Concealing/Covering and Underwear keywords because basic SOS/TNG behavior may not conceal slot 49 automatically. Keywords originally supplied by an ESP, KID, or another mod are never deleted.
+
+The slot-32 upper-only name classifier ignores generic vanilla equipment taxonomy such as [font=Courier New]ArmorCuirass[/font], [font=Courier New]ArmorHeavy[/font], [font=Courier New]ArmorLight[/font], [font=Courier New]ArmorMaterial*[/font], [font=Courier New]ClothingBody[/font], and [font=Courier New]VendorItemArmor[/font]. Item names, EditorIDs, and semantic mod/KID keywords remain available, preventing ordinary vanilla armor from being mistaken for a [font=Courier New]top[/font], [font=Courier New]bra[/font], or [font=Courier New]shirt[/font].
+
+Papyrus and Skyrim engine-condition [font=Courier New]WornHasKeyword[/font] checks use the same actor-local final body display state. The actor is covered when either actual slot-32 gear or a registered slot-32 appearance is displayed, and uncovered when both are hidden. This does not forcibly replace the private logic of an external DLL that scans inventory directly.
+
+[line]
+[size=4][b][color=#42ACC8]DAV / DAVE / Native Environments[/color][/b][/size]
+
+
+SFS separates DAVE's public refresh API, ordinary DAV follow-up, and Skyrim-native skinning. Save format, actor ownership, registered FormIDs, and original slots remain identical across environments.
+
+[line]
+[size=4][b][color=#42ACC8]Wet Function Redux[/color][/b][/size]
+
+
+Wet Function Redux applies wet effects to SFS registered appearances through the separate optional compatibility patch.
+
+[line]
+[size=4][b][color=#42ACC8]Optional Compatibility Patches[/color][/b][/size]
+
+
+[list]
+[*][b]Dynamic Feminine Female Modesty Animations OAR 4.30:[/b] the separate FOMOD changes only its selected OAR JSON conditions to read SFS's final displayed outfit. It does not replace DFFMA animations, meshes, scripts, DLLs, or plugins.[/*]
+[*][b]Wet Function Redux Visual Effect Patch v1.2.0:[/b] supplies only the visual-effect script. It never replaces Wet Function's MCM script; a RaceMenu warning is Wet Function's own legacy self-check, not an SFS equipment or save-data modification.[/*]
+[*][b]Grid Inventory Costume v1.4.1+:[/b] built directly into SFSCore through Grid Inventory's public Costume-state message. Only a non-empty, player-owned armor Costume replaces the player's registered appearances. Cleared, empty, and non-armor Costume states leave SFS appearances unchanged; the first restored state after startup, save load, or revert is also ignored. No Grid DLL replacement is installed; Grid Inventory remains the owner of its Costume data, renderer, loadouts, saves, and real equipment.[/*]
+[*][b]Helmet Toggle 2:[/b] install the separate script patch only with Helmet Toggle 2. It forwards each actor's HT2-managed slots (30/31/42/44 and player 55 where applicable) to matching SFS registered appearances. Real equipment remains under HT2; SFS preserves actor-local linking, saved manual eye state, and its DAVE/DAV/native display path.[/*]
+[*][b]Dynamic Footprints SKSE BASE v3:[/b] the separate patch reads only a visible SFS Feet 37 appearance for Dynamic Footprints' own footprint classification and otherwise uses actual footwear. It disables itself unless the exact verified v3 DLL build is present.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]External Runtime Menu API[/color][/b][/size]
+
+
+The API module name changed from [font=Courier New]SkyrimFittingSystem.dll[/font] to [font=Courier New]SFSCore.dll[/font] in v1.4.0. External shortcut and menu-management mods must therefore look up [font=Courier New]SFSCore.dll[/font] when resolving these functions:
+
+[list]
+[*][font=Courier New]SkyrimFittingSystem_Open[/font][/*]
+[*][font=Courier New]SkyrimFittingSystem_Close[/font][/*]
+[*][font=Courier New]SkyrimFittingSystem_IsMenuOpen[/font][/*]
+[*][font=Courier New]SkyrimFittingSystem_SetHotkeyEnabled[/font][/*]
+[/list]
+
+
+Only the DLL lookup name changed. The four C export names and function signatures remain unchanged. Consumers supporting both versions should try [font=Courier New]SFSCore.dll[/font] first, then fall back to [font=Courier New]SkyrimFittingSystem.dll[/font] for v1.3.x. Requests are transferred to SFS's safe UI processing point, and hotkey enable state resets on every game launch. An updated consumer header and [font=Courier New]GetProcAddress[/font] example are included in the source package.
+
+[line]
+[size=4][b][color=#42ACC8]Credits / Thanks[/color][/b][/size]
+
+
+The basic UI structure of Skyrim Fitting System was developed from [url=https://www.nexusmods.com/skyrimspecialedition/mods/175182]Skyrim Vanity System[/url].
+
+The structure of [url=https://www.nexusmods.com/skyrimspecialedition/mods/42162]Skyrim Outfit System SE Revived[/url] was consulted while implementing parts of the appearance display engine.
+
+Thank you to the authors who published these projects and their source. SFS respects their licenses, identifies its lineage, and publishes its corresponding source.
+
+SFSCore also uses CommonLibSSE-NG, Dear ImGui, nlohmann/json, rapidcsv, spdlog, SimpleIni, toml11, DirectXMath, DirectX Tool Kit, and Xbyak under their respective MIT or BSD-3-Clause licenses. Full notices are included in each download. SKSE64 (the SKSE Team) and Address Library for SKSE Plugins (meh321) are required dependencies; XMake is the Apache-2.0 build tool used for the source release.

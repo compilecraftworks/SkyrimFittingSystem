@@ -1,0 +1,33 @@
+[size=4][b][color=#42ACC8]Version 1.2.2[/color][/b][/size]
+
+[size=3][b][color=#42ACC8]Workbench and Conditional Actions[/color][/b][/size]
+
+[list]
+[*]Reorganized the workbench into Actual Equipment / Registered Appearance and Condition Settings / Action Settings sections.[/*]
+[*]Added condition-driven show or hide actions for both actual equipment and registered appearances without removing their base-workbench cards.[/*]
+[*]Kept conditional actions separate from bulk appearance deletion, global appearance hiding, and kit saving.[/*]
+[*]Added consistent card styling, type icons, multiline slot labels, condition status labels, and wider condition tooltips.[/*]
+[*]Removed obsolete registered-appearance context actions and protected user-defined conditions from deletion while they remain assigned.[/*]
+[/list]
+
+[size=3][b][color=#42ACC8]Slot Replacement and Kits[/color][/b][/size]
+
+[list]
+[*]Preserved every original occupied slot when displaying and replacing multi-slot equipment.[/*]
+[*]Made a registered appearance atomic: an item that overlaps any occupied slot replaces the whole earlier item in the same base or condition layer.[/*]
+[*]Kept only the first item when an outfit or kit contains multiple pieces claiming an overlapping slot.[/*]
+[*]Cleaned legacy same-layer duplicate appearances while preserving separate base and condition layers.[/*]
+[*]Saved and restored per-slot actual-equipment visibility in SFS kit metadata while remaining compatible with older kit JSON files.[/*]
+[*]Excluded conditional-action cards and hide-protected slots from kit visibility capture.[/*]
+[/list]
+
+[size=3][b][color=#42ACC8]Visibility, Input, and Compatibility[/color][/b][/size]
+
+[list]
+[*]Added configurable Hide-Protected Slots. The default set is 39, 50, 51, 60, and 61; actual equipment and registered appearances using any selected slot cannot be manually or conditionally hidden.[/*]
+[*]Added keyboard/gamepad UI hotkey combinations and blocked Skyrim or other-mod shortcuts while a text field or hotkey capture is active, with clean release-state restoration afterward.[/*]
+[*]Made Windows font discovery and loading safe for Korean, Chinese, and other Unicode paths.[/*]
+[*]Fixed Helmet Toggle 2 handling for real 31+42 headgear combined with a registered slot-31 wig, including the workbench eye state and multi-slot card display.[/*]
+[*]Applied the same final slot and visibility rules in DAVE, ordinary DAV, and native environments.[/*]
+[*]Kept the v1.2.1 Papyrus bridges, ESL plugin, SEQ, external-event lifecycle, and backend separation unchanged.[/*]
+[/list]

@@ -1,0 +1,15 @@
+<h1>Skyrim Fitting System v1.4.5</h1>
+<hr>
+<h2>Grid Inventory Costume 내장 연동</h2>
+<ul>
+<li>Grid Inventory v1.4.1 이상의 공개 Costume 상태 메시지를 SFSCore가 직접 받습니다. 사용자가 Grid Inventory에서 Costume을 착용·교체·해제할 때만 Grid가 보낸 방어구 FormID를 기준으로 플레이어 등록 외형을 갱신하거나 비웁니다. 시작·세이브 로드·리버트 뒤 첫 복원 상태는 무시해 저장된 SFS 외형을 유지합니다.</li>
+<li>이제 <strong>GridInventory.dll 교체 패치가 필요 없습니다.</strong> 콜백 안에서는 데이터를 즉시 복사하고 SFS의 기존 안전 처리 지점에서 최신 상태만 반영하므로, Grid DLL을 로드·후킹·교체하지 않습니다.</li>
+<li>Costume 렌더링·로드아웃·세이브·실제 장비는 계속 Grid Inventory가 관리합니다. SFS는 실제 장비, 전역/NPC 행, 조건 정의, Grid 데이터를 바꾸지 않습니다.</li>
+<li>업데이트할 때 v1.4.4의 <strong>SFS Grid Inventory Costume Compatibility Patch</strong>는 제거하십시오. Grid Inventory v1.4.1 이상은 별도 SFS 패치가 필요 없습니다.</li>
+</ul>
+<hr>
+<h2>회귀 방지 범위</h2>
+<ul>
+<li>모드 설정 슬롯 연동·바닐라 슬롯 자동 연동·직접 편집·외부 탈의/재착의·DAVE/DAV/Skyrim native 표시는 기존의 액터별 상태와 처리 경로를 유지합니다.</li>
+<li>전체 <code>releasedbg</code> 빌드와 Kit Generator 로직 회귀 테스트를 통과했습니다.</li>
+</ul>

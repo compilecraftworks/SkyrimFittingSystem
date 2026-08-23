@@ -1,0 +1,11 @@
+SFS - Dynamic Feminine Female Modesty Animations OAR Displayed Outfit Patch
+FOMOD that changes only the selected DFFMA OAR display-equipment checks to SFS's final shown outfit. It does not change DFFMA animations, OAR rules, saves, or resolve DFFMA's own conflicts.
+
+SFS - Helmet Toggle 2 Compatibility Patch
+Receives only HT2's existing HT_HiddenHelmet* / HT_HiddenCirclet* transition result and forwards the matching actor-local HT2 slots (30/31/42/44; player 55) to SFS. It does not fix Helmet Toggle 2's own toggle, equipment, MCM, model, or conflict issues.
+
+SFS - Dynamic Footprints Compatibility Patch
+Provides only SFS's displayed Feet 37 appearance to the verified Dynamic Footprints build for its own classification. v1.4.5 anchors its local branch trampoline at the verified call site to avoid the CommonLib rel32 range edge case. It does not change Dynamic Footprints' assets, rules, saves, or resolve that mod's own issues.
+
+SFS - Wet Function Redux Visual Effect Patch
+Replaces only the Wet Function visual-effect script and never its MCM script. Any RaceMenu warning remains Wet Function's own legacy self-check, not an SFS equipment or save-data change.

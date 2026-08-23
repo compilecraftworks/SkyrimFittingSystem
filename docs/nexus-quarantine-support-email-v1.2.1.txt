@@ -1,0 +1,45 @@
+To: support@nexusmods.com
+Subject: Manual review request - Skyrim Fitting System v1.2.1 source archive quarantined
+
+Hello Nexus Mods Support,
+
+I uploaded the source archive for Skyrim Fitting System v1.2.1, and the file was quarantined by the Nexus Mods security scan after upload. I am requesting a manual review of the quarantined file.
+
+Mod page:
+[PASTE THE NEXUS MOD PAGE URL HERE]
+
+Quarantined file:
+Skyrim Fitting System v1.2.1 Source.zip
+
+Version:
+1.2.1
+
+Upload date/time:
+[PASTE THE UPLOAD DATE AND TIME HERE]
+
+Nexus/VirusTotal report for the quarantined v1.2.1 file:
+[PASTE THE SCAN REPORT LINK HERE]
+
+SHA-256 of the uploaded v1.2.1 source archive:
+90974EE7ABFD2EC2621931686F66388250508DC5FC9E2517F09CE95A31903DA4
+
+Archive details:
+- Standard ZIP archive created with the Windows/.NET ZIP implementation
+- 211 human-readable source and documentation files
+- C++ source and headers, Papyrus source, JSON/localization data, documentation, and required Dear ImGui source
+- No EXE, DLL, PDB, PEX, MSI, BAT, CMD, PS1, SCR, or COM files
+- No compiled build output
+- No nested ZIP, 7z, or RAR archives
+- No password protection or self-extracting archive
+- CommonLibSSE-NG is not bundled
+
+The archive is the GPL-3.0 corresponding source package for the v1.2.1 release. The ready-to-install DLL, PEX, ESP, and SEQ files are distributed separately in the main mod archive and are not present in this source archive.
+
+One possible static-analysis match is the included upstream Dear ImGui source, which contains its standard Windows shell-opening implementation and references such as ShellExecuteW in human-readable C++ source. I do not know whether this is what triggered the quarantine, so I would appreciate confirmation of the scanner or archive entry that failed.
+
+Could you please manually review and unblock the file if it is a false positive? If any specific file or format is causing the scan failure, please let me know so I can correct the package without removing required corresponding source.
+
+I have left the quarantined upload in place for moderator review, as recommended by the Nexus Mods help article. I can also provide the matching public source repository or any additional hashes and file listings you need.
+
+Thank you,
+[YOUR NEXUS USERNAME]

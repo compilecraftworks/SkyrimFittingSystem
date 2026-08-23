@@ -1,0 +1,111 @@
+#pragma once
+
+#include "imgui.h"
+
+#include <cstddef>
+#include <cstdio>
+#include <functional>
+#include <optional>
+#include <span>
+#include <string>
+#include <string_view>
+#include <vector>
+
+namespace sfs::ui::components {
+struct EditableDropdownOptionView {
+  std::string_view label;
+  bool isSection{false};
+};
+
+template <class TValue> struct EditableDropdownItem {
+  std::string label;
+  std::optional<TValue> value;
+
+  EditableDropdownOptionView AsView() const {
+    return {.label = label, .isSection = !value.has_value()};
+  }
+};
+
+namespace detail {
+bool DrawEditableDropdownIndexed(
+    const char *a_label, const char *a_hint, char *a_buffer,
+    std::size_t a_bufferSize,
+    std::span<const EditableDropdownOptionView> a_options, float a_width,
+    int *a_selectedIndex = nullptr, bool a_allowCustomInput = true,
+    int a_fallbackIndex = -1,
+    const std::function<void(int)> *a_drawItemTooltip = nullptr,
+    const void *a_optionsIdentity = nullptr,
+    int a_popupVisibleRowCount = 0);
+} // namespace detail
+
+bool DrawEditableStringDropdown(
+    const char *a_label, const char *a_hint, char *a_buffer,
+    std::size_t a_bufferSize,
+    std::span<const EditableDropdownItem<std::string>> a_items, float a_width,
+    int *a_selectedIndex = nullptr,
+    std::optional<std::string> *a_selectedValue = nullptr,
+    int a_fallbackIndex = -1);
+
+bool DrawSearchableStringDropdown(const char *a_label, const char *a_hint,
+                                  std::string &a_value,
+                                  std::span<const std::string> a_options,
+                                  float a_width);
+
+template <class TValue>
+bool DrawSearchableDropdown(
+    const char *a_label, const char *a_hint, std::string &a_value,
+    std::span<const EditableDropdownItem<TValue>> a_items, float a_width,
+    int *a_selectedIndex = nullptr,
+    std::optional<TValue> *a_selectedValue = nullptr,
+    std::function<void(const EditableDropdownItem<TValue> &)>
+        a_drawItemTooltip = {},
+    int a_popupVisibleRowCount = 0) {
+  std::vector<EditableDropdownOptionView> optionViews;
+  optionViews.reserve(a_items.size());
+  for (const auto &item : a_items) {
+    optionViews.push_back(item.AsView());
+  }
+
+  int selectedIndex = a_selectedIndex ? *a_selectedIndex : -1;
+  char buffer[128];
+  std::snprintf(buffer, sizeof(buffer), "%s", a_value.c_str());
+  std::function<void(int)> drawItemTooltip;
+  if (a_drawItemTooltip) {
+    drawItemTooltip = [&](const int a_index) {
+      if (a_index < 0 || a_index >= static_cast<int>(a_items.size())) {
+        return;
+      }
+      const auto &item = a_items[static_cast<std::size_t>(a_index)];
+      a_drawItemTooltip(item);
+    };
+  }
+  const bool changed = detail::DrawEditableDropdownIndexed(
+      a_label, a_hint, buffer, sizeof(buffer), optionViews, a_width,
+      &selectedIndex, false, selectedIndex,
+      drawItemTooltip ? &drawItemTooltip : nullptr, a_items.data(),
+      a_popupVisibleRowCount);
+
+  if (a_selectedIndex) {
+    *a_selectedIndex = selectedIndex;
+  }
+  if (a_selectedValue) {
+    if (selectedIndex >= 0 &&
+        selectedIndex < static_cast<int>(a_items.size()) &&
+        a_items[static_cast<std::size_t>(selectedIndex)].value.has_value()) {
+      *a_selectedValue = a_items[static_cast<std::size_t>(selectedIndex)].value;
+    } else {
+      a_selectedValue->reset();
+    }
+  }
+  if (selectedIndex >= 0 && selectedIndex < static_cast<int>(a_items.size())) {
+    a_value = a_items[static_cast<std::size_t>(selectedIndex)].label;
+  } else {
+    a_value = buffer;
+  }
+  return changed;
+}
+
+bool DrawSearchableStringCombo(const char *a_label, const char *a_allLabel,
+                               const std::vector<std::string> &a_options,
+                               int &a_index, ImGuiTextFilter &a_filter);
+} // namespace sfs::ui::components
