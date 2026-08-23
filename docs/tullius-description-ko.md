@@ -6,8 +6,6 @@
 
 플레이어·NPC·팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.
 
-**소스:** <https://github.com/compilecraftworks/SkyrimFittingSystem>
-
 ## 주요 기능
 
 - 실제 장비를 벗지 않는 시각적 숨김과 능력치에 영향을 주지 않는 등록 외형

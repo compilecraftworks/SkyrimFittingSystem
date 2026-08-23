@@ -12,8 +12,6 @@ Registered appearances, conditions, real-gear visibility, manual display choices
 
 SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display environments while using the same workbench and save data.
 
-**Source:** <https://github.com/compilecraftworks/SkyrimFittingSystem>
-
 ## Highlights
 
 - Separate visible appearances while retaining the stats and effects of actual equipment
@@ -325,12 +323,8 @@ The API module name changed from `SkyrimFittingSystem.dll` to `SFSCore.dll` in v
 
 Only the DLL lookup name changed. The four C export names and function signatures remain unchanged. Consumers supporting both versions should try `SFSCore.dll` first, then fall back to `SkyrimFittingSystem.dll` for v1.3.x. Requests are transferred to SFS's safe UI processing point, and hotkey enable state resets on every game launch. An updated consumer header and `GetProcAddress` example are included in the source package.
 
-## Credits / Thanks
+## Credits & License
 
-The basic UI structure of Skyrim Fitting System was developed from [Skyrim Vanity System](https://www.nexusmods.com/skyrimspecialedition/mods/175182).
+Skyrim Fitting System is licensed under [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.html). The source code is available on [GitHub](https://github.com/compilecraftworks/SkyrimFittingSystem). This project contains modified work derived from [Skyrim Vanity System](https://www.nexusmods.com/skyrimspecialedition/mods/175182) and [Skyrim Outfit System SE Revived](https://www.nexusmods.com/skyrimspecialedition/mods/42162).
 
-The structure of [Skyrim Outfit System SE Revived](https://www.nexusmods.com/skyrimspecialedition/mods/42162) was consulted while implementing parts of the appearance display engine.
-
-SFSCore is licensed under GPL-3.0. Third-party notices are included in `THIRD_PARTY_NOTICES.md`.
-
-Thanks to Skyrim Vanity System, Skyrim Outfit System SE Revived, CommonLibSSE-NG, Dear ImGui, and their contributors.
+Credits to the authors of CommonLibSSE-NG, Dear ImGui, SKSE, and Address Library for SKSE Plugins. All respective rights belong to their original authors. Third-party notices are included in `THIRD_PARTY_NOTICES.md`.

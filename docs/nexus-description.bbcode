@@ -17,8 +17,6 @@ Registered appearances, conditions, real-gear visibility, manual display choices
 
 SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display environments while using the same workbench and save data.
 
-[b]Source:[/b] [url=https://github.com/compilecraftworks/SkyrimFittingSystem]https://github.com/compilecraftworks/SkyrimFittingSystem[/url]
-
 [line]
 [size=4][b][color=#42ACC8]Highlights[/color][/b][/size]
 
@@ -471,13 +469,9 @@ The API module name changed from [font=Courier New]SkyrimFittingSystem.dll[/font
 Only the DLL lookup name changed. The four C export names and function signatures remain unchanged. Consumers supporting both versions should try [font=Courier New]SFSCore.dll[/font] first, then fall back to [font=Courier New]SkyrimFittingSystem.dll[/font] for v1.3.x. Requests are transferred to SFS's safe UI processing point, and hotkey enable state resets on every game launch. An updated consumer header and [font=Courier New]GetProcAddress[/font] example are included in the source package.
 
 [line]
-[size=4][b][color=#42ACC8]Credits / Thanks[/color][/b][/size]
+[size=5][b][color=#D98C5F]Credits & License[/color][/b][/size]
 
 
-The basic UI structure of Skyrim Fitting System was developed from [url=https://www.nexusmods.com/skyrimspecialedition/mods/175182]Skyrim Vanity System[/url].
+Skyrim Fitting System is licensed under [url=https://www.gnu.org/licenses/gpl-3.0.html]GNU GPLv3[/url]. The source code is available on [url=https://github.com/compilecraftworks/SkyrimFittingSystem]GitHub[/url]. This project contains modified work derived from [url=https://www.nexusmods.com/skyrimspecialedition/mods/175182]Skyrim Vanity System[/url] and [url=https://www.nexusmods.com/skyrimspecialedition/mods/42162]Skyrim Outfit System SE Revived[/url].
 
-The structure of [url=https://www.nexusmods.com/skyrimspecialedition/mods/42162]Skyrim Outfit System SE Revived[/url] was consulted while implementing parts of the appearance display engine.
-
-SFSCore is licensed under GPL-3.0. Third-party notices are included in [font=Courier New]THIRD_PARTY_NOTICES.md[/font].
-
-Thanks to Skyrim Vanity System, Skyrim Outfit System SE Revived, CommonLibSSE-NG, Dear ImGui, and their contributors.
+Credits to the authors of CommonLibSSE-NG, Dear ImGui, SKSE, and Address Library for SKSE Plugins. All respective rights belong to their original authors. Third-party notices are included in [font=Courier New]THIRD_PARTY_NOTICES.md[/font].
