@@ -130,6 +130,10 @@ void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
                                   RE::ActorWeightModel *a_actorWeightModel);
 void ApplyDisplaySkinning(RE::Actor *a_actor,
                           RE::ActorWeightModel *a_actorWeightModel);
+// IED's custom-skin hook expects its concrete visitor layout. The native hook
+// records that ABI boundary here so the filtering path can use the original
+// engine visitor and request an actor-level IED refresh afterward.
+void SetIedVisitWornItemsChainTarget(std::uintptr_t a_chainTarget);
 void VisitWornItemsWithHiddenRealEquipmentFilter(
     RE::InventoryChanges *a_inventory,
     RE::InventoryChanges::IItemChangeVisitor *a_visitor,

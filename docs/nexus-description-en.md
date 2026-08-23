@@ -20,11 +20,11 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation
 - Final displayed-outfit OAR conditions, built-in Grid Inventory Costume support, and optional DFFMA OAR, Helmet Toggle 2, and Dynamic Footprints bridges
 
-## Version 1.4.6 Update Summary
+## Version 1.4.7 Update Summary
 
-- Empty, cleared, and non-armor Grid Inventory Costumes now preserve existing SFS registered appearances.
-- SFS updates player appearances only when Grid Inventory changes to a Costume containing player-owned armor.
-- Grid Inventory's restored Costume state after startup, save load, or revert remains ignored.
+- Added an IED-only custom-skin compatibility boundary for the exact pre-patched `VisitWornItems` path.
+- Hidden real equipment is filtered through Skyrim's original visitor, then IED is refreshed through its public actor-level API.
+- Requests are actor-local and de-duplicated; normal linking, strip/redress, and DAVE/DAV/native behavior is unchanged.
 
 ## Requirements
 
@@ -50,7 +50,7 @@ Optional:
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.4.6 distribution ZIP as a new mod.
+5. Install the v1.4.7 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
 7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ needs no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, Helmet Toggle 2, or Dynamic Footprints after their original mod.
 

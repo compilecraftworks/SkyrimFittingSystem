@@ -4,13 +4,13 @@ set_xmakever("3.0.0")
 set_config("skse_xbyak", true)
 set_config("skyrim_vr", false)
 
--- The v1.4.6 corresponding-source archive carries the exact audited
+-- The v1.4.7 corresponding-source archive carries the exact audited
 -- CommonLibSSE-NG source used for this build under third_party/.
 includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.4.6"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.4.7"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then

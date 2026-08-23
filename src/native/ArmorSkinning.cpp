@@ -102,6 +102,11 @@ struct DisplaySetBuildScope {
 
 std::mutex g_queuedArmorRefreshMutex;
 std::unordered_map<RE::FormID, std::uint64_t> g_queuedArmorRefreshGeneration;
+std::atomic<std::uintptr_t> g_iedVisitWornItemsChainTarget{0};
+std::mutex g_queuedIedEvaluationMutex;
+std::unordered_map<RE::FormID, std::uint64_t> g_queuedIedEvaluations;
+std::uint64_t g_nextIedEvaluationToken{0};
+std::atomic_bool g_iedEvaluateDispatchWarningLogged{false};
 std::mutex g_davFallbackRefreshSignatureMutex;
 std::unordered_map<RE::FormID, DavFallbackRefreshSignature>
     g_davFallbackRefreshSignatures;
@@ -166,9 +171,79 @@ void ClearQueuedActorArmorRefreshes() {
   g_queuedArmorRefreshGeneration.clear();
 }
 
+void ClearQueuedIedEvaluations() {
+  std::lock_guard lock(g_queuedIedEvaluationMutex);
+  g_queuedIedEvaluations.clear();
+}
+
 [[nodiscard]] bool IsActorRefreshable(RE::Actor *a_actor) {
   return a_actor != nullptr && !a_actor->IsDeleted() &&
          !a_actor->IsDisabled() && a_actor->Is3DLoaded();
+}
+
+class IedEvaluateCallback final : public RE::BSScript::IStackCallbackFunctor {
+public:
+  void operator()(RE::BSScript::Variable) override {}
+
+  void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object> &) override {}
+};
+
+void QueueIedEvaluate(RE::Actor *a_actor) {
+  if (!a_actor) {
+    return;
+  }
+
+  const auto actorFormID = a_actor->GetFormID();
+  auto *taskInterface = SKSE::GetTaskInterface();
+  if (actorFormID == 0 || !taskInterface) {
+    return;
+  }
+
+  std::uint64_t token = 0;
+  {
+    std::lock_guard lock(g_queuedIedEvaluationMutex);
+    if (g_queuedIedEvaluations.contains(actorFormID)) {
+      return;
+    }
+    token = ++g_nextIedEvaluationToken;
+    g_queuedIedEvaluations.emplace(actorFormID, token);
+  }
+
+  // Run after the engine's original visitor completes. IED is then refreshed
+  // through its public actor-level API rather than being re-entered with the
+  // SFS filtering visitor.
+  taskInterface->AddTask([actorFormID, token]() {
+    {
+      std::lock_guard lock(g_queuedIedEvaluationMutex);
+      const auto queuedIt = g_queuedIedEvaluations.find(actorFormID);
+      if (queuedIt == g_queuedIedEvaluations.end() ||
+          queuedIt->second != token) {
+        return;
+      }
+      g_queuedIedEvaluations.erase(queuedIt);
+    }
+
+    auto *actor = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
+    if (!IsActorRefreshable(actor)) {
+      return;
+    }
+
+    auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+    if (!vm) {
+      return;
+    }
+
+    RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(
+        new IedEvaluateCallback());
+    if (!vm->DispatchStaticCall(
+            "IED", "Evaluate",
+            RE::MakeFunctionArguments(static_cast<RE::Actor *>(actor)),
+            callback) &&
+        !g_iedEvaluateDispatchWarningLogged.exchange(true)) {
+      logger::warn(
+          "SFS IED compatibility: IED.Evaluate could not be dispatched; hidden real equipment remains safe, but IED may refresh on its next normal update");
+    }
+  });
 }
 
 // A paused SFS menu stops the normal actor-animation tick. A replacement kit
@@ -2154,6 +2229,10 @@ void ApplyArmorOnce(const RE::TESObjectARMO *a_armor,
 } // namespace
 
 namespace sfs::native {
+void SetIedVisitWornItemsChainTarget(const std::uintptr_t a_chainTarget) {
+  g_iedVisitWornItemsChainTarget.store(a_chainTarget);
+}
+
 void SynchronizeArmorClassificationKeywords(RE::TESObjectARMO *a_armor) {
   SynchronizeArmorClassificationKeywordsImpl(a_armor);
 }
@@ -2246,6 +2325,7 @@ void InvalidateQueuedArmorRefreshes() {
   ++g_armorRefreshGeneration;
   ++g_armorClassificationMigrationScheduleGeneration;
   ClearQueuedActorArmorRefreshes();
+  ClearQueuedIedEvaluations();
   ClearDavFallbackRefreshSignatures();
   ClearEmptyEquipmentDisplaySignatures();
   sfs::native::ClearResolvedGenitalArmors();
@@ -2877,6 +2957,27 @@ void VisitWornItemsWithHiddenRealEquipmentFilter(
   }
 
   HiddenRealEquipmentFilterVisitor visitor{actor, displaySet, *a_visitor};
+  const auto iedChainTarget = g_iedVisitWornItemsChainTarget.load();
+  if (iedChainTarget != 0 && a_visitWornItems == iedChainTarget) {
+    // IED's hook accepts a concrete InitWornVisitor reference. Passing SFS's
+    // generic filtering visitor through that hook violates its ABI and can
+    // crash during an equipment rebuild. Filter through the original engine
+    // function, then queue IED's own public actor refresh.
+    static REL::Relocation<std::uintptr_t> originalVisitWornItemsRelocation{
+        RELOCATION_ID(15856, 16096)};
+    auto *originalVisitWornItems = reinterpret_cast<VisitWornItems>(
+        originalVisitWornItemsRelocation.address());
+    if (originalVisitWornItems) {
+      originalVisitWornItems(a_inventory, &visitor);
+      QueueIedEvaluate(actor);
+      return;
+    }
+
+    logger::error(
+        "SFS IED compatibility: original VisitWornItems relocation is unavailable; skipped filtered custom-skin visit to avoid an unsafe IED visitor call");
+    return;
+  }
+
   visitWornItems(a_inventory, &visitor);
 }
 

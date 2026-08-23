@@ -1,4 +1,4 @@
-# Skyrim Fitting System v1.4.6
+# Skyrim Fitting System v1.4.7
 
 ![Skyrim Fitting System](https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&key=wSK-nG9UwFePxIQ1PlXhgQ&type=orig)
 
@@ -21,7 +21,7 @@
 1. 개인 키트가 있다면 `Interface/SkyrimFittingSystem/user`를 백업합니다.
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 이전 독립형 **SFS Kit Generator**, 기존 **SFS Helmet Toggle 2 호환 패치**, v1.4.4 **SFS Grid Inventory Costume Compatibility Patch**가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.
-4. v1.4.6 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
+4. v1.4.7 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 5. 필요하면 백업한 개인 키트만 복원합니다.
 6. Grid Inventory v1.4.1 이상은 별도 패치 없이 Costume 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Helmet Toggle 2, Dynamic Footprints는 맞는 **별도 SFS 호환 패치만** 원본 모드 뒤에 설치합니다.
 

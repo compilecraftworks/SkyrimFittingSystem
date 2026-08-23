@@ -31,13 +31,13 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 
 
 [line]
-[size=4][b][color=#42ACC8]Version 1.4.6 Update Summary[/color][/b][/size]
+[size=4][b][color=#42ACC8]Version 1.4.7 Update Summary[/color][/b][/size]
 
 
 [list]
-[*]Empty, cleared, and non-armor Grid Inventory Costumes now preserve existing SFS registered appearances.[/*]
-[*]SFS updates player appearances only when Grid Inventory changes to a Costume containing player-owned armor.[/*]
-[*]Grid Inventory's restored Costume state after startup, save load, or revert remains ignored.[/*]
+[*]Added an IED-only custom-skin compatibility boundary for the exact pre-patched [font=Courier New]VisitWornItems[/font] path.[/*]
+[*]Hidden real equipment is filtered through Skyrim's original visitor, then IED is refreshed through its public actor-level API.[/*]
+[*]Requests are actor-local and de-duplicated; normal linking, strip/redress, and DAVE/DAV/native behavior is unchanged.[/*]
 [/list]
 
 
@@ -76,7 +76,7 @@ Optional:
 [*]Completely delete the previous SFS mod folder.[/*]
 [*]Completely delete any older [b]SFS Helmet Toggle 2 Compatibility Patch[/b] and the [b]v1.4.4 SFS Grid Inventory Costume Compatibility Patch[/b]. Do not delete their original mods.[/*]
 [*]If an old standalone test [b]SFS Kit Generator[/b] folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.[/*]
-[*]Install the v1.4.6 distribution ZIP as a new mod.[/*]
+[*]Install the v1.4.7 distribution ZIP as a new mod.[/*]
 [*]Enable [font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font].[/*]
 [*]Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ needs no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, Helmet Toggle 2, or Dynamic Footprints after their original mod.[/*]
 [/list]
@@ -466,7 +466,7 @@ The API module name changed from [font=Courier New]SkyrimFittingSystem.dll[/font
 Only the DLL lookup name changed. The four C export names and function signatures remain unchanged. Consumers supporting both versions should try [font=Courier New]SFSCore.dll[/font] first, then fall back to [font=Courier New]SkyrimFittingSystem.dll[/font] for v1.3.x. Requests are transferred to SFS's safe UI processing point, and hotkey enable state resets on every game launch. An updated consumer header and [font=Courier New]GetProcAddress[/font] example are included in the source package.
 
 [line]
-[size=5][b][color=#D98C5F]Credits & License[/color][/b][/size]
+[size=4][b][color=#42ACC8]Credits & License[/color][/b][/size]
 
 
 Skyrim Fitting System is licensed under [url=https://www.gnu.org/licenses/gpl-3.0.html]GNU GPLv3[/url]. The source code is available on [url=https://github.com/compilecraftworks/SkyrimFittingSystem]GitHub[/url]. This project contains modified work derived from [url=https://www.nexusmods.com/skyrimspecialedition/mods/175182]Skyrim Vanity System[/url] and [url=https://www.nexusmods.com/skyrimspecialedition/mods/42162]Skyrim Outfit System SE Revived[/url].

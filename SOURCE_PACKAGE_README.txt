@@ -1,7 +1,7 @@
-Skyrim Fitting System v1.4.6 - Corresponding Source Package
+Skyrim Fitting System v1.4.7 - Corresponding Source Package
 
 This archive contains the preferred source form and build-control files for
-the v1.4.6 SFSCore release. It contains no compiled DLL, PDB, PEX, ESL,
+the v1.4.7 SFSCore release. It contains no compiled DLL, PDB, PEX, ESL,
 build output, nested archive, or FOMOD package.
 
 Build-control files are provided under their real names: xmake.lua and
@@ -11,7 +11,7 @@ included at third_party/CommonLibSSE-NG (commit
 under lib/imgui. See THIRD_PARTY_NOTICES.md for license notices and upstream
 source locations.
 
-v1.4.6 includes the v1.4.1 actor-local empty-equipment display bootstrap and
+v1.4.7 includes the v1.4.1 actor-local empty-equipment display bootstrap and
 the complete in-game Kit Generator built into SFSCore. The generator can scan
 outfit plugins, edit candidate combinations, preview them read-only in the
 character and workbench, and write finished kits directly to the SFS user-kit
@@ -47,6 +47,13 @@ The separately distributed DFFMA OAR, Helmet Toggle 2, and Dynamic Footprints
 compatibility archives contain the source or editable configuration for their
 own integration boundary. They are intentionally not merged into the main
 runtime archive.
+
+For Immersive Equipment Displays, v1.4.7 adds a narrow custom-skin rebuild
+compatibility boundary: only when IED owns the exact pre-patched worn-item
+visitor target used by Skyrim does SFS filter the hidden-real-equipment pass
+through the original engine target, then request IED's public actor evaluation.
+It is actor-local and does not alter normal calls, appearance data, linking
+modes, strip/redress handling, or display backends.
 
 The runtime package is distributed separately and contains the compiled DLL,
 PDB, PEX, ESL, localization data, and UI assets.

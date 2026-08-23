@@ -1,3 +1,14 @@
+## Version 1.4.7
+
+- Added an IED-only custom-skin compatibility boundary. When Immersive Equipment Displays owns Skyrim's exact pre-patched `VisitWornItems` custom-skin call, SFS filters hidden real equipment through the original engine target instead of passing its generic visitor into IED's concrete visitor hook.
+- SFS then queues IED's public actor-level evaluation after that rebuild. The request is actor-local, de-duplicated, and cleared with normal SFS refresh state; it does not add polling or a global actor scan.
+- All non-IED hook chains and existing Mod-Configured, Vanilla, Direct, external strip/redress, DAVE, DAV, and native display behavior remain unchanged.
+
+## Version 1.4.6
+
+- Updated Grid Inventory Costume synchronization so an empty, cleared, non-armor, or startup-restored Costume signal leaves the player's saved SFS registered appearances unchanged.
+- Only a non-empty player Costume made of armor pieces replaces the player's registered appearances. Grid Inventory remains the owner of its own loadouts, renderer, saves, and actual equipment.
+
 ## Version 1.4.5
 
 - Added built-in Grid Inventory v1.4.1+ Costume synchronization through Grid Inventory's public Costume-state SKSE message. The active Costume updates only the player's SFS registered appearances, and clearing it clears those player appearances. The first restored state after startup, save load, or revert is ignored until Costume changes again.

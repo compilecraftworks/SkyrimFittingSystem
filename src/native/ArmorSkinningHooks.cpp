@@ -3,9 +3,14 @@
 
 #include <xbyak/xbyak.h>
 
+#include <Windows.h>
+
+#include <array>
 #include <cstring>
 #include <mutex>
 #include <optional>
+#include <string>
+#include <string_view>
 
 namespace {
 SKSE::Trampoline g_localTrampoline{"SFS native armor skinning"};
@@ -66,6 +71,45 @@ TryReadDavInitWornTarget(const std::uintptr_t a_hookAddress) {
       "SFS native armor skinning hook '{}' call site appears pre-patched: opcode {:02X}, target {:X}, expected {:X}",
       a_label, opcode, target, a_expectedTarget);
   return {.opcode = opcode, .target = target, .valid = true};
+}
+
+[[nodiscard]] bool IsAddressInModule(
+    const std::uintptr_t a_address, const std::wstring_view a_moduleName) {
+  MEMORY_BASIC_INFORMATION memoryInfo{};
+  if (a_address == 0 ||
+      ::VirtualQuery(reinterpret_cast<const void *>(a_address), &memoryInfo,
+                     sizeof(memoryInfo)) != sizeof(memoryInfo) ||
+      !memoryInfo.AllocationBase) {
+    return false;
+  }
+
+  std::array<wchar_t, MAX_PATH> path{};
+  const auto length = ::GetModuleFileNameW(
+      static_cast<HMODULE>(memoryInfo.AllocationBase), path.data(),
+      static_cast<DWORD>(path.size()));
+  if (length == 0 || length >= path.size()) {
+    return false;
+  }
+
+  const std::wstring fullPath(path.data(), length);
+  const auto separator = fullPath.find_last_of(L"\\\\/");
+  const auto fileName = fullPath.substr(
+      separator == std::wstring::npos ? 0 : separator + 1);
+  return _wcsicmp(fileName.c_str(), a_moduleName.data()) == 0;
+}
+
+void ConfigureIedCustomSkinCompatibility(const CallSiteBranch &a_callSite,
+                                         const std::string_view a_runtime) {
+  const bool iedTarget =
+      !a_callSite.expected &&
+      IsAddressInModule(a_callSite.target, L"ImmersiveEquipmentDisplays.dll");
+  sfs::native::SetIedVisitWornItemsChainTarget(
+      iedTarget ? a_callSite.target : 0);
+  if (iedTarget) {
+    logger::info(
+        "SFS IED compatibility enabled for {} custom-skin target {:X}; filtered calls use the original engine visitor path and queue IED.Evaluate afterward",
+        a_runtime, a_callSite.target);
+  }
 }
 
 bool InstallDavInitWornChainHook() {
@@ -152,6 +196,7 @@ bool InstallDontVanillaSkinHook() {
         "SFS native armor skinning vanilla block hook will chain the existing patched target {:X}",
         callSite.target);
   }
+  ConfigureIedCustomSkinCompatibility(callSite, "SE");
 
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_nextTarget,
@@ -220,6 +265,7 @@ void InstallShimWornFlagsHookSE() {
         "SFS native armor skinning worn-mask hook for SE will chain the existing patched target {:X}",
         callSite.target);
   }
+  ConfigureIedCustomSkinCompatibility(callSite, "AE");
 
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_getWornMask) {
