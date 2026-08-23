@@ -22,11 +22,9 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 
 ## Version 1.4.6 Update Summary
 
-- Grid Inventory v1.4.1+ Costume synchronization now changes SFS only for a non-empty, player-owned armor Costume. Clearing Costume, selecting no Costume, or sending a non-armor layout preserves the player's saved registered appearances.
-- The restored Costume state after startup, save load, or revert remains ignored. SFS preserves its saved registered appearances until Grid Inventory sends a later non-empty Costume change.
-- The bridge is now inside `SFSCore.dll`: it uses Grid Inventory's public SKSE message only, copies its data during the callback, and applies it at SFS's normal safe processing point. It never replaces, loads, hooks, or depends on `GridInventory.dll`.
-- Remove the old v1.4.4 Grid Inventory replacement-DLL patch when updating. Grid Inventory remains the owner of Costume rendering, loadouts, saves, and actual equipment.
-- Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, Direct Editing, external strip/redress handling, and DAVE/DAV/Skyrim-native display paths remain actor-local and unchanged.
+- Empty, cleared, and non-armor Grid Inventory Costumes now preserve existing SFS registered appearances.
+- SFS updates player appearances only when Grid Inventory changes to a Costume containing player-owned armor.
+- Grid Inventory's restored Costume state after startup, save load, or revert remains ignored.
 
 ## Requirements
 
@@ -327,4 +325,4 @@ Only the DLL lookup name changed. The four C export names and function signature
 
 Skyrim Fitting System is licensed under [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.html). The source code is available on [GitHub](https://github.com/compilecraftworks/SkyrimFittingSystem). This project contains modified work derived from [Skyrim Vanity System](https://www.nexusmods.com/skyrimspecialedition/mods/175182) and [Skyrim Outfit System SE Revived](https://www.nexusmods.com/skyrimspecialedition/mods/42162).
 
-Credits to the authors of CommonLibSSE-NG, Dear ImGui, SKSE, and Address Library for SKSE Plugins. All respective rights belong to their original authors. Third-party notices are included in `THIRD_PARTY_NOTICES.md`.
+Credits to the authors of CommonLibSSE-NG, Dear ImGui, SKSE, and Address Library for SKSE Plugins. All respective rights belong to their original authors.
