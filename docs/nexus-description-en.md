@@ -12,7 +12,7 @@ Registered appearances, conditions, real-gear visibility, manual display choices
 
 SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display environments while using the same workbench and save data.
 
-Source code and corresponding release source are available on [GitHub](https://github.com/compilecraftworks/SkyrimFittingSystem).
+**Source:** <https://github.com/compilecraftworks/SkyrimFittingSystem>
 
 ## Highlights
 
