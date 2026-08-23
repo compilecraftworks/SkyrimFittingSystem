@@ -1,10 +1,12 @@
-# Skyrim Fitting System v1.4.5
+# Skyrim Fitting System v1.4.6
 
 ![Skyrim Fitting System](https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&key=wSK-nG9UwFePxIQ1PlXhgQ&type=orig)
 
 실제 장비의 방어력·인챈트·효과는 유지하면서, 캐릭터에게 보이는 외형만 따로 구성하는 SKSE 기반 외형 시스템입니다. 기본 UI 단축키는 **F6**이며 옵션에서 바꿀 수 있습니다.
 
 플레이어·NPC·팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.
+
+소스 코드와 대응 소스 배포본은 [GitHub](https://github.com/compilecraftworks/SkyrimFittingSystem)에서 확인할 수 있습니다.
 
 ## 주요 기능
 
