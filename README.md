@@ -1,5 +1,7 @@
 # Skyrim Fitting System
 
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M1P225QD23)
+
 `Skyrim Fitting System` is a Skyrim SKSE mod for player-facing fitting outfit management.
 
 It lets the player keep their real equipped gear for gameplay while changing the visible appearance through a native in-game browser, variant workbench, and native armor skinning hooks.
