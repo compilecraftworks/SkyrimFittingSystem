@@ -1,3 +1,8 @@
+## Version 1.4.8
+
+- Fixed the workbench actor selector by enumerating the player's loaded cell before the existing 4096-unit range search. Both passes retain the same actor-local eligibility rule, radius, duplicate filtering, nearest-first order, and 32-actor cap.
+- Updated the bundled build dependency to CommonLibSSE-NG v6.7.0. This remains an SE/AE build; it does not add Skyrim VR support.
+
 ## Version 1.4.7
 
 - Added an IED-only custom-skin compatibility boundary. When Immersive Equipment Displays owns Skyrim's exact pre-patched `VisitWornItems` custom-skin call, SFS filters hidden real equipment through the original engine target instead of passing its generic visitor into IED's concrete visitor hook.

@@ -1,4 +1,4 @@
-# Skyrim Fitting System v1.4.6 — Third-Party Notices
+# Skyrim Fitting System v1.4.8 — Third-Party Notices
 
 SFSCore is distributed under the GNU General Public License, version 3.0. A
 copy is provided in `LICENSE`.
@@ -6,16 +6,19 @@ copy is provided in `LICENSE`.
 The following components are incorporated into, or linked by, SFSCore. Their
 license notices are reproduced below.
 
-## MIT-licensed components
+## GPL-3.0-or-later component
 
-### CommonLibSSE-NG
+### CommonLibSSE-NG v6.7.0
 
 Copyright (c) 2018 Ryan-rsm-McKenzie.
 
-The exact source used for SFS v1.4.6 is included at
+The exact source used for SFS v1.4.8 is included at
 `third_party/CommonLibSSE-NG`, upstream commit
-`2fcadbdf5e7fe65580ca5848d6604e5b88fab03b` from
-https://github.com/alandtse/CommonLibVR (branch `ng`).
+`3d81614617910e7f34b33d8750881811b5e36445` from
+https://github.com/alandtse/CommonLibSSE-NG (branch `ng`). Its `COPYING` and
+`EXCEPTIONS.md` files are included in the corresponding source package.
+
+## MIT-licensed components
 
 ### Dear ImGui
 

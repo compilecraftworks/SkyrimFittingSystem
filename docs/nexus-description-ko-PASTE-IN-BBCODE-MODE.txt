@@ -18,7 +18,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
 [line]
-[size=4][b][color=#42ACC8]v1.4.7 주요 기능[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.4.8 주요 기능[/color][/b][/size]
 
 
 [list]
@@ -50,7 +50,13 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 
 
 [line]
-[size=4][b][color=#42ACC8]v1.4.7 업데이트 요약[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.4.8 업데이트 요약[/color][/b][/size]
+
+
+[list]
+[*]작업대 액터 선택 목록은 플레이어의 현재 로드 셀을 먼저 확인한 뒤 기존 주변 반경 검색을 수행합니다. 액터별 선택 조건과 목록 제한은 그대로입니다.[/*]
+[*]CommonLibSSE-NG v6.7.0으로 빌드했습니다. 런타임 지원 범위는 기존처럼 Skyrim SE/AE입니다.[/*]
+[/list]
 
 
 [list]
@@ -114,7 +120,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]이전 SFS 모드 폴더를 완전히 삭제합니다.[/*]
 [*]기존의 모든 [b]SFS Helmet Toggle 2 호환 패치[/b]를 완전히 삭제합니다. Helmet Toggle 2 본체를 삭제하는 것은 아닙니다.[/*]
 [*]이전 독립형 시험용 [b]SFS Kit Generator[/b] 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.[/*]
-[*]v1.4.7 배포 ZIP을 새 모드로 설치합니다.[/*]
+[*]v1.4.8 배포 ZIP을 새 모드로 설치합니다.[/*]
 [*][font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font]을 활성화합니다.[/*]
 [*]필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상은 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Helmet Toggle 2, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.[/*]
 [/list]

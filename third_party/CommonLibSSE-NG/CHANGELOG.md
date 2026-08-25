@@ -1,3 +1,9 @@
+## [6.7.0](https://github.com/alandtse/CommonLibSSE-NG/compare/v6.6.3...v6.7.0) (2026-08-24)
+
+### Features
+
+* flag for address library v5 compatibility ([#310](https://github.com/alandtse/CommonLibSSE-NG/issues/310)) ([d8b0acd](https://github.com/alandtse/CommonLibSSE-NG/commit/d8b0acd80b5dea2ef1e0549f78a36bd57ad5144d))
+
 ## [6.6.3](https://github.com/alandtse/CommonLibSSE-NG/compare/v6.6.2...v6.6.3) (2026-08-23)
 
 ### Bug Fixes

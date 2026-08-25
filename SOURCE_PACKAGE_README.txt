@@ -1,17 +1,17 @@
-Skyrim Fitting System v1.4.7 - Corresponding Source Package
+Skyrim Fitting System v1.4.8 - Corresponding Source Package
 
 This archive contains the preferred source form and build-control files for
-the v1.4.7 SFSCore release. It contains no compiled DLL, PDB, PEX, ESL,
+the v1.4.8 SFSCore release. It contains no compiled DLL, PDB, PEX, ESL,
 build output, nested archive, or FOMOD package.
 
 Build-control files are provided under their real names: xmake.lua and
 xmake-requires.lock. The exact CommonLibSSE-NG source used for this release is
 included at third_party/CommonLibSSE-NG (commit
-2fcadbdf5e7fe65580ca5848d6604e5b88fab03b). Dear ImGui source is included
+3d81614617910e7f34b33d8750881811b5e36445). Dear ImGui source is included
 under lib/imgui. See THIRD_PARTY_NOTICES.md for license notices and upstream
 source locations.
 
-v1.4.7 includes the v1.4.1 actor-local empty-equipment display bootstrap and
+v1.4.8 includes the v1.4.1 actor-local empty-equipment display bootstrap and
 the complete in-game Kit Generator built into SFSCore. The generator can scan
 outfit plugins, edit candidate combinations, preview them read-only in the
 character and workbench, and write finished kits directly to the SFS user-kit

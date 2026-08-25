@@ -1,3 +1,13 @@
+[size=4][b][color=#42ACC8]Version 1.4.8[/color][/b][/size]
+
+
+[list]
+[*]Fixed the workbench actor selector by enumerating the player's loaded cell before the existing 4096-unit range search. Both passes retain the same actor-local eligibility rule, radius, duplicate filtering, nearest-first order, and 32-actor cap.[/*]
+[*]Updated the bundled build dependency to CommonLibSSE-NG v6.7.0. This remains an SE/AE build; it does not add Skyrim VR support.[/*]
+[/list]
+
+
+[line]
 [size=4][b][color=#42ACC8]Version 1.4.7[/color][/b][/size]
 
 

@@ -394,24 +394,38 @@ void Menu::RefreshWorkbenchActorCandidates() {
   std::vector<NearbyActorCandidate> candidates;
   std::unordered_set<RE::FormID> seenActorFormIDs{player->GetFormID()};
   const auto playerPosition = player->GetPosition();
-  tes->ForEachReferenceInRange(
-      player, kNearbyActorRadius, [&](RE::TESObjectREFR *a_ref) {
-        auto *actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
-        if (!workbench::IsSelectableWorkbenchActor(actor, player) ||
-            !seenActorFormIDs.insert(actor->GetFormID()).second) {
-          return RE::BSContainer::ForEachResult::kContinue;
-        }
+  const auto maximumDistanceSquared =
+      kNearbyActorRadius * kNearbyActorRadius;
+  const auto collectCandidate = [&](RE::TESObjectREFR *a_ref) {
+    auto *actor = a_ref ? a_ref->As<RE::Actor>() : nullptr;
+    if (!workbench::IsSelectableWorkbenchActor(actor, player)) {
+      return RE::BSContainer::ForEachResult::kContinue;
+    }
 
-        const auto position = actor->GetPosition();
-        const auto deltaX = position.x - playerPosition.x;
-        const auto deltaY = position.y - playerPosition.y;
-        const auto deltaZ = position.z - playerPosition.z;
-        candidates.push_back(
-            {.formID = actor->GetFormID(),
-             .distanceSquared =
-                 deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ});
-        return RE::BSContainer::ForEachResult::kContinue;
-      });
+    const auto position = actor->GetPosition();
+    const auto deltaX = position.x - playerPosition.x;
+    const auto deltaY = position.y - playerPosition.y;
+    const auto deltaZ = position.z - playerPosition.z;
+    const auto distanceSquared =
+        deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ;
+    if (distanceSquared > maximumDistanceSquared ||
+        !seenActorFormIDs.insert(actor->GetFormID()).second) {
+      return RE::BSContainer::ForEachResult::kContinue;
+    }
+
+    candidates.push_back(
+        {.formID = actor->GetFormID(), .distanceSquared = distanceSquared});
+    return RE::BSContainer::ForEachResult::kContinue;
+  };
+
+  // Enumerate the player's loaded cell first.  The global range visitor can
+  // occasionally omit otherwise-valid same-cell references on newer runtime
+  // layouts, but a cell enumeration has the exact same actor-local predicate,
+  // radius, deduplication, ordering, and 32-actor cap as the range pass.
+  if (auto *playerCell = player->GetParentCell()) {
+    playerCell->ForEachReference(collectCandidate);
+  }
+  tes->ForEachReferenceInRange(player, kNearbyActorRadius, collectCandidate);
 
   std::ranges::sort(candidates, {}, &NearbyActorCandidate::distanceSquared);
   if (candidates.size() > kMaximumNearbyActors) {
@@ -564,4 +578,3 @@ void Menu::SetFittingOverridesHiddenForActorSlots(
 }
 
 } // namespace sfs
-
