@@ -412,7 +412,7 @@
     "strip_link.slot.modding": "자동 매칭 -> {}",
     "strip_link.slot.disable": "연동안함",
     "options.external_mod_strip_link": "외부 모드 탈의 연동",
-    "options.external_mod_strip_link.tooltip": "모드 설정 슬롯 연동 : 각 모드의 설정된 슬롯 값에 따라 연동하며 개별 슬롯 편집 가능\n바닐라 슬롯 자동 연동 : 모드 의상 키워드를 분석하여 자동 매칭하며 개별 슬롯 편집 가능\n직접 슬롯 편집 : 두 연동 방식 중 하나를 기반으로 선택하고 필요한 슬롯만 직접 편집",
+    "options.external_mod_strip_link.tooltip": "모드 설정 슬롯 연동 : 각 모드의 설정된 슬롯 값에 따라 연동\n바닐라 슬롯 자동 연동 : 모드 의상 키워드를 분석하여 자동 매칭\n직접 슬롯 편집 : 두 연동 방식 중 하나를 기반으로 선택하고 필요한 슬롯만 직접 편집",
     "options.external_mod_strip_link.disabled": "연동 안 함",
     "options.external_mod_strip_link.mod_settings_slots": "모드 설정 슬롯 연동",
     "options.external_mod_strip_link.vanilla_slots": "바닐라 슬롯 자동 연동",

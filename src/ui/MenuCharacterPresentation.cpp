@@ -15,8 +15,8 @@ namespace {
 // Show Player In Menus-style `-requestedX - 75` conversion is intentionally
 // not used here: applying the same requested magnitude to both sides produces
 // asymmetric camera values (+90 / -240) because of the shoulder baseline.
-constexpr float kLeftCameraHorizontalOffset = 70.0f;
-constexpr float kRightCameraHorizontalOffset = -70.0f;
+constexpr float kLeftCameraHorizontalOffset = 78.0f;
+constexpr float kRightCameraHorizontalOffset = -78.0f;
 constexpr float kCameraVerticalOffset = -30.0f;
 constexpr float kCameraDistance = 150.0f;
 constexpr float kMenuWorldFov = 90.0f;

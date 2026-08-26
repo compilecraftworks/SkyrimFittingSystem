@@ -1,18 +1,20 @@
+## Version 1.4.9
+
+- Added explicit Skyrim SE 1.5.97 and Skyrim AE runtime hook profiles with instruction validation and fail-closed handling for unknown layouts. Papyrus VM/native slots are centralized and covered by SE/AE boundary tests.
+- Fixed the IED custom-skin chain at the actual `VisitWornItems` call sites. SFS filtering now uses the original engine visitor path when IED owns the call site, preventing equipment-rebuild CTDs while retaining actor-local visibility state.
+- Moved left/right menu character framing slightly farther outward with symmetric offsets; angle and height are unchanged.
+
 ## Version 1.4.8
 
-- Fixed the workbench actor selector by enumerating the player's loaded cell before the existing 4096-unit range search. Both passes retain the same actor-local eligibility rule, radius, duplicate filtering, nearest-first order, and 32-actor cap.
-- Updated the bundled build dependency to CommonLibSSE-NG v6.7.0. This remains an SE/AE build; it does not add Skyrim VR support.
-
-## Version 1.4.7
-
-- Added an IED-only custom-skin compatibility boundary. When Immersive Equipment Displays owns Skyrim's exact pre-patched `VisitWornItems` custom-skin call, SFS filters hidden real equipment through the original engine target instead of passing its generic visitor into IED's concrete visitor hook.
-- SFS then queues IED's public actor-level evaluation after that rebuild. The request is actor-local, de-duplicated, and cleared with normal SFS refresh state; it does not add polling or a global actor scan.
-- All non-IED hook chains and existing Mod-Configured, Vanilla, Direct, external strip/redress, DAVE, DAV, and native display behavior remain unchanged.
+- Fixed the CommonLibSSE-NG SE/AE virtual layout used by the workbench actor eligibility check, restoring `Actor::IsDead()` to its correct engine slot. Diagnostic actor-discovery experiments were reverted, so actor collection remains identical to v1.4.5.
+- Updated the bundled build dependency to CommonLibSSE-NG v6.7.0 and documented its narrow local SE/AE vtable correction. This remains an SE/AE build; it does not add Skyrim VR support.
 
 ## Version 1.4.6
 
-- Updated Grid Inventory Costume synchronization so an empty, cleared, non-armor, or startup-restored Costume signal leaves the player's saved SFS registered appearances unchanged.
-- Only a non-empty player Costume made of armor pieces replaces the player's registered appearances. Grid Inventory remains the owner of its own loadouts, renderer, saves, and actual equipment.
+- Hardened built-in Grid Inventory Costume synchronization. SFS imports a Costume only when it contains at least one SFS-compatible armour piece.
+- No Costume, a cleared or empty Costume, and a Costume without compatible armour now retain the player's existing SFS registered appearances. The legacy clear entry point is non-destructive as well.
+- The first restored Grid state after startup, save load, or revert remains ignored, so restored or empty Grid state cannot erase saved SFS appearances.
+- Grid Inventory continues to own its renderer, loadouts, saves, and actual equipment; SFS neither replaces nor loads `GridInventory.dll`.
 
 ## Version 1.4.5
 

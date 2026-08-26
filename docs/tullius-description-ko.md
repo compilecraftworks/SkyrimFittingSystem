@@ -1,4 +1,4 @@
-# Skyrim Fitting System v1.4.8
+# Skyrim Fitting System v1.4.9
 
 ![Skyrim Fitting System](https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&key=wSK-nG9UwFePxIQ1PlXhgQ&type=orig)
 
@@ -21,7 +21,7 @@
 1. 개인 키트가 있다면 `Interface/SkyrimFittingSystem/user`를 백업합니다.
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 이전 독립형 **SFS Kit Generator**, 기존 **SFS Helmet Toggle 2 호환 패치**, v1.4.4 **SFS Grid Inventory Costume Compatibility Patch**가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.
-4. v1.4.8 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
+4. v1.4.9 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 5. 필요하면 백업한 개인 키트만 복원합니다.
 6. Grid Inventory v1.4.1 이상은 별도 패치 없이 Costume 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Helmet Toggle 2, Dynamic Footprints는 맞는 **별도 SFS 호환 패치만** 원본 모드 뒤에 설치합니다.
 
@@ -83,14 +83,11 @@ SFS는 실제 인벤토리에 추가되지 않는 고정 FormID의 **가상 착�
 
 건드리지 않은 슬롯과 나중에 새로 등록한 외형은 계속 선택한 기반 규칙을 따릅니다. 직접 매칭도 전체 액터 공통 설정이지만 이벤트 결과는 계속 액터별로 분리됩니다.
 
-## 내장 Grid Inventory Costume 연동
-
-**Grid Inventory v1.4.1 이상**은 별도 SFS 패치 없이 SFSCore가 공개 Costume 상태 메시지를 직접 받습니다. 플레이어 소유 ARMO가 하나 이상인 Costume을 착용·교체할 때만 플레이어 등록 외형을 교체합니다. Costume 해제·빈 Costume·비장비 구성은 SFS 등록 외형을 건드리지 않으며, 시작·세이브 로드·리버트 뒤 Grid가 보내는 첫 복원 상태도 무시합니다. Grid DLL을 교체하지 않으며 Grid의 UI·렌더·로드아웃·세이브·실제 장비는 그대로 Grid가 관리합니다.
-
 ## 선택형 호환 패치
 
 - **Wet Function Redux Visual Effect Patch v1.2.0:** 시각 효과 스크립트만 제공합니다. Wet Function MCM을 덮어쓰지 않으며 RaceMenu 경고는 Wet Function의 기존 자체 검사입니다.
 - **DFFMA OAR 4.30:** 선택한 OAR `config.json`의 표시 장비 조건만 바꿉니다. DFFMA 애니메이션·OAR 규칙·세이브·충돌 자체를 고치지는 않습니다.
+- **Grid Inventory Costume v1.4.1 이상:** SFSCore가 공개 Costume 상태 메시지를 직접 받습니다. 플레이어 소유 ARMO가 하나 이상인 Costume을 착용·교체할 때만 플레이어 등록 외형을 교체합니다. Costume 해제·빈 Costume·비장비 구성은 SFS 등록 외형을 건드리지 않으며, 시작·세이브 로드·리버트 뒤 Grid가 보내는 첫 복원 상태도 무시합니다. Grid DLL을 교체하지 않으며 Grid의 UI·렌더·로드아웃·세이브·실제 장비는 그대로 Grid가 관리합니다.
 - **Helmet Toggle 2:** HT2를 설치한 경우에만 별도 패치를 원본 모드 뒤에 설치합니다. HT2가 관리하는 30 Head·31 Hair·42 Circlet·44 Beard/Mask와 플레이어의 55 Face/Mask만 해당 SFS 등록 외형에 전달합니다. 실제 장비와 HT2의 토글·MCM·모델·충돌 자체는 HT2가 계속 관리합니다.
 - **Dynamic Footprints SKSE BASE v3:** Dynamic Footprints 자신의 발자국 분류에서만 표시 중인 SFS 37번 신발 외형을 읽습니다. 발자국 규칙·에셋·세이브·충돌 자체를 고치지는 않으며 검증한 정확한 DLL 빌드가 아니면 자동 비활성화됩니다.
 
@@ -99,9 +96,3 @@ SFS는 실제 인벤토리에 추가되지 않는 고정 FormID의 **가상 착�
 - RaceMenu가 있으면 실제 모프가 바뀐 액터와 그 액터의 등록 외형만 다시 동기화합니다. 전역 액터 스캔과 주기적 폴링은 사용하지 않습니다.
 - SOS/TNG는 실제 장비와 등록 외형의 최종 표시 상태를 함께 평가합니다. 원래 ESP·KID·다른 모드의 키워드는 삭제하지 않습니다.
 - SFS는 DAVE 공개 갱신 API, 일반 DAV, Skyrim native 표시 경로를 분리해 사용합니다. 환경이 달라도 저장 형식과 액터 소유권은 같습니다.
-
-## 크레딧 및 라이선스
-
-Skyrim Fitting System은 [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.html)로 배포됩니다. 소스 코드는 [GitHub](https://github.com/compilecraftworks/SkyrimFittingSystem)에서 확인할 수 있습니다. 이 프로젝트에는 [Skyrim Vanity System](https://www.nexusmods.com/skyrimspecialedition/mods/175182)과 [Skyrim Outfit System SE Revived](https://www.nexusmods.com/skyrimspecialedition/mods/42162)에서 파생·수정한 작업이 포함됩니다.
-
-CommonLibSSE-NG, Dear ImGui, SKSE, Address Library for SKSE Plugins의 제작자분들께 감사드립니다. 각 구성 요소의 권리는 원 저작자에게 있습니다.

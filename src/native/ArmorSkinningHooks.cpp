@@ -1,5 +1,6 @@
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
+#include "runtime/RuntimeLayouts.h"
 
 #include <xbyak/xbyak.h>
 
@@ -25,16 +26,6 @@ struct CallSiteBranch {
   [[nodiscard]] bool ChainsAsCall() const { return opcode == 0xE8; }
   [[nodiscard]] bool ChainsAsJump() const { return opcode == 0xE9; }
 };
-
-[[nodiscard]] std::uintptr_t RelocationAddress(const REL::ID a_seId,
-                                               const REL::ID a_aeId,
-                                               const std::uintptr_t a_seOffset,
-                                               const std::uintptr_t a_aeOffset) {
-  if (REL::Module::IsAE()) {
-    return a_aeId.address() + a_aeOffset;
-  }
-  return a_seId.address() + a_seOffset;
-}
 
 [[nodiscard]] std::optional<std::uintptr_t>
 TryReadDavInitWornTarget(const std::uintptr_t a_hookAddress) {
@@ -112,11 +103,11 @@ void ConfigureIedCustomSkinCompatibility(const CallSiteBranch &a_callSite,
   }
 }
 
-bool InstallDavInitWornChainHook() {
+bool InstallDavInitWornChainHook(const sfs::runtime::HookLayout &a_layout) {
   auto &branchTrampoline = SKSE::GetTrampoline();
 
-  const auto hookAddress =
-      RelocationAddress(REL::ID(24232), REL::ID(24736), 0x2F0, 0x2F0);
+  const auto hookAddress = REL::ID(a_layout.armorUpdateRelocationID).address() +
+                           a_layout.davInitWornOffset;
   const auto davTarget = TryReadDavInitWornTarget(hookAddress);
   if (!davTarget.has_value()) {
     logger::warn(
@@ -172,11 +163,11 @@ bool InstallDavInitWornChainHook() {
   return true;
 }
 
-bool InstallDontVanillaSkinHook() {
+bool InstallDontVanillaSkinHook(const sfs::runtime::HookLayout &a_layout) {
   auto &branchTrampoline = SKSE::GetTrampoline();
 
-  const auto hookAddress =
-      RelocationAddress(REL::ID(24232), REL::ID(24736), 0x302, 0x302);
+  const auto hookAddress = REL::ID(a_layout.armorUpdateRelocationID).address() +
+                           a_layout.vanillaArmorOffset;
   static REL::Relocation<std::uintptr_t> applyArmorAddon{
       RELOCATION_ID(17392, 17792)};
   const auto callSite =
@@ -185,7 +176,7 @@ bool InstallDontVanillaSkinHook() {
     if (callSite.opcode == 0x90) {
       logger::warn(
           "Skipped SFS native armor skinning vanilla block hook because the call site is NOP-patched; SFS will rely on worn-mask filtering for real-equipment hiding");
-      InstallDavInitWornChainHook();
+      InstallDavInitWornChainHook(a_layout);
     } else {
       logger::warn("Skipped SFS native armor skinning vanilla block hook");
     }
@@ -196,8 +187,6 @@ bool InstallDontVanillaSkinHook() {
         "SFS native armor skinning vanilla block hook will chain the existing patched target {:X}",
         callSite.target);
   }
-  ConfigureIedCustomSkinCompatibility(callSite, "SE");
-
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_nextTarget,
          bool a_chainAsJump) {
@@ -248,10 +237,11 @@ bool InstallDontVanillaSkinHook() {
   return true;
 }
 
-void InstallShimWornFlagsHookSE() {
+void InstallShimWornFlagsHookSE(const sfs::runtime::HookLayout &a_layout) {
   auto &branchTrampoline = SKSE::GetTrampoline();
 
-  const auto hookAddress = REL::ID(24220).address() + 0x7C;
+  const auto hookAddress = REL::ID(a_layout.wornMaskRelocationID).address() +
+                           a_layout.wornMaskCallOffset;
   static REL::Relocation<std::uintptr_t> getWornMask{RELOCATION_ID(15806,
                                                                    16044)};
   const auto callSite =
@@ -265,8 +255,6 @@ void InstallShimWornFlagsHookSE() {
         "SFS native armor skinning worn-mask hook for SE will chain the existing patched target {:X}",
         callSite.target);
   }
-  ConfigureIedCustomSkinCompatibility(callSite, "AE");
-
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_getWornMask) {
       Xbyak::Label suppressVanilla;
@@ -322,10 +310,11 @@ void InstallShimWornFlagsHookSE() {
   logger::info("Installed SFS native armor skinning worn-mask hook for SE");
 }
 
-void InstallShimWornFlagsHookAE() {
+void InstallShimWornFlagsHookAE(const sfs::runtime::HookLayout &a_layout) {
   auto &branchTrampoline = SKSE::GetTrampoline();
 
-  const auto hookAddress = REL::ID(24724).address() + 0x80;
+  const auto hookAddress = REL::ID(a_layout.wornMaskRelocationID).address() +
+                           a_layout.wornMaskCallOffset;
   static REL::Relocation<std::uintptr_t> getWornMask{RELOCATION_ID(15806,
                                                                    16044)};
   const auto callSite =
@@ -395,10 +384,11 @@ void InstallShimWornFlagsHookAE() {
   logger::info("Installed SFS native armor skinning worn-mask hook for AE");
 }
 
-void InstallCustomSkinHookSE() {
+void InstallCustomSkinHookSE(const sfs::runtime::HookLayout &a_layout) {
   auto &branchTrampoline = SKSE::GetTrampoline();
 
-  const auto hookAddress = REL::ID(24231).address() + 0x81;
+  const auto hookAddress = REL::ID(a_layout.customSkinRelocationID).address() +
+                           a_layout.customSkinCallOffset;
   static REL::Relocation<std::uintptr_t> visitWornItems{RELOCATION_ID(15856,
                                                                      16096)};
   const auto callSite =
@@ -412,6 +402,7 @@ void InstallCustomSkinHookSE() {
         "SFS native armor skinning custom skin hook for SE will chain the existing patched target {:X}",
         callSite.target);
   }
+  ConfigureIedCustomSkinCompatibility(callSite, a_layout.name);
 
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems) {
@@ -474,10 +465,11 @@ void InstallCustomSkinHookSE() {
   logger::info("Installed SFS native armor skinning custom skin hook for SE");
 }
 
-void InstallCustomSkinHookAE() {
+void InstallCustomSkinHookAE(const sfs::runtime::HookLayout &a_layout) {
   auto &branchTrampoline = SKSE::GetTrampoline();
 
-  const auto hookAddress = REL::ID(24725).address() + 0x1EF;
+  const auto hookAddress = REL::ID(a_layout.customSkinRelocationID).address() +
+                           a_layout.customSkinCallOffset;
   static REL::Relocation<std::uintptr_t> visitWornItems{RELOCATION_ID(15856,
                                                                      16096)};
   const auto callSite =
@@ -491,6 +483,7 @@ void InstallCustomSkinHookAE() {
         "SFS native armor skinning custom skin hook for AE will chain the existing patched target {:X}",
         callSite.target);
   }
+  ConfigureIedCustomSkinCompatibility(callSite, a_layout.name);
 
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems) {
@@ -562,6 +555,18 @@ void InstallArmorSkinningHooks() {
       return;
     }
 
+    const auto runtimeVersion = REL::Module::get().version();
+    const auto layout = sfs::runtime::ResolveHookLayout(runtimeVersion);
+    if (!layout.has_value()) {
+      logger::critical(
+          "SFS native armor skinning hooks are disabled on unsupported Skyrim runtime {}",
+          runtimeVersion.string("."));
+      return;
+    }
+    SetIedVisitWornItemsChainTarget(0);
+    logger::info("Selected SFS armor hook layout for {} ({})", layout->name,
+                 runtimeVersion.string("."));
+
     if (g_localTrampoline.empty()) {
       g_localTrampoline.create(64 * 1024);
     }
@@ -583,14 +588,14 @@ void InstallArmorSkinningHooks() {
       logger::info(
           "Skipped SFS native armor skinning vanilla block hook for DAV/DAVE compatibility");
     } else {
-      InstallDontVanillaSkinHook();
+      InstallDontVanillaSkinHook(*layout);
     }
-    if (REL::Module::IsAE()) {
-      InstallShimWornFlagsHookAE();
-      InstallCustomSkinHookAE();
+    if (layout->isAE) {
+      InstallShimWornFlagsHookAE(*layout);
+      InstallCustomSkinHookAE(*layout);
     } else {
-      InstallShimWornFlagsHookSE();
-      InstallCustomSkinHookSE();
+      InstallShimWornFlagsHookSE(*layout);
+      InstallCustomSkinHookSE(*layout);
     }
   });
 }

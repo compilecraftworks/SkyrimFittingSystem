@@ -396,7 +396,7 @@
     "strip_link.slot.modding": "Automatic Match -> {}",
     "strip_link.slot.disable": "No Linking",
     "options.external_mod_strip_link": "External Mod Strip Link",
-    "options.external_mod_strip_link.tooltip": "Mod-Configured Slot Linking: follows each mod's configured slots and allows per-slot exceptions.\nAutomatic Vanilla-Slot Linking: analyzes outfit keywords for automatic matching and allows per-slot exceptions.\nDirect Slot Editing: choose either linking method as the base and edit only the slots that need exceptions.",
+    "options.external_mod_strip_link.tooltip": "Mod-Configured Slot Linking: follows each mod's configured slots.\nAutomatic Vanilla-Slot Linking: analyzes outfit keywords for automatic matching.\nDirect Slot Editing: choose either linking method as the base and edit only the slots that need exceptions.",
     "options.external_mod_strip_link.disabled": "No Linking",
     "options.external_mod_strip_link.mod_settings_slots": "Mod-Configured Slot Linking",
     "options.external_mod_strip_link.vanilla_slots": "Automatic Vanilla-Slot Linking",

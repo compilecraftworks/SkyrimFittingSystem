@@ -20,14 +20,11 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation
 - Final displayed-outfit OAR conditions, built-in Grid Inventory Costume support, and optional DFFMA OAR, Helmet Toggle 2, and Dynamic Footprints bridges
 
-## Version 1.4.8 Update Summary
+## Version 1.4.9 Update Summary
 
-- The workbench actor selector now checks the player's current loaded cell before the existing nearby range pass, keeping the same actor-local filter and list limits.
-- Built with CommonLibSSE-NG v6.7.0. Runtime support remains Skyrim SE/AE.
-
-- Added an IED-only custom-skin compatibility boundary for the exact pre-patched `VisitWornItems` path.
-- Hidden real equipment is filtered through Skyrim's original visitor, then IED is refreshed through its public actor-level API.
-- Requests are actor-local and de-duplicated; normal linking, strip/redress, and DAVE/DAV/native behavior is unchanged.
+- Added explicit, validated Skyrim SE 1.5.97 and Skyrim AE hook profiles with safe rejection of unknown runtime layouts.
+- Fixed IED custom-skin chaining at the actual `VisitWornItems` call sites, preventing equipment-rebuild transition CTDs without changing actor-local visibility policy.
+- Moved left/right menu character framing slightly farther outward while keeping the existing angle and height.
 
 ## Requirements
 
@@ -53,7 +50,7 @@ Optional:
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.4.8 distribution ZIP as a new mod.
+5. Install the v1.4.9 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
 7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ needs no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, Helmet Toggle 2, or Dynamic Footprints after their original mod.
 

@@ -2,6 +2,7 @@
 
 #include "ArmorUtils.h"
 #include "poc/DeviousDevicesHiderPoC.h"
+#include "runtime/RuntimeLayouts.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
 
 #include <RE/N/NativeFunctionBase.h>
@@ -29,8 +30,6 @@ constexpr std::uint32_t kStateRecordType = 'ESTR';
 constexpr std::uint32_t kStateRecordVersion = 3;
 constexpr auto kExpectationLifetime = std::chrono::seconds(3);
 constexpr auto kRecoveryProbeLifetime = std::chrono::seconds(3);
-constexpr std::size_t kNativeCallVtableIndex = 0x0F;
-constexpr std::size_t kNativeFunctionVtableEntryCount = 0x17;
 
 enum class TargetNative : std::uint8_t {
   None,
@@ -677,7 +676,8 @@ struct NativeDispatchHook {
   if (!originalVtable) {
     return false;
   }
-  const auto originalCallAddress = originalVtable[kNativeCallVtableIndex];
+  const auto originalCallAddress =
+      originalVtable[sfs::runtime::kPapyrusNativeCallVtableIndex];
   const auto replacementAddress =
       reinterpret_cast<std::uintptr_t>(NativeDispatchHook::thunk);
   if (originalCallAddress == 0 || originalCallAddress == replacementAddress) {
@@ -685,12 +685,14 @@ struct NativeDispatchHook {
   }
 
   auto storage = std::make_unique<std::uintptr_t[]>(
-      kNativeFunctionVtableEntryCount + 1);
+      sfs::runtime::kPapyrusNativeFunctionVtableEntryCount + 1);
   storage[0] = originalVtable[-1];
-  std::copy_n(originalVtable, kNativeFunctionVtableEntryCount,
+  std::copy_n(originalVtable,
+              sfs::runtime::kPapyrusNativeFunctionVtableEntryCount,
               storage.get() + 1);
   auto *replacementVtable = storage.get() + 1;
-  replacementVtable[kNativeCallVtableIndex] = replacementAddress;
+  replacementVtable[sfs::runtime::kPapyrusNativeCallVtableIndex] =
+      replacementAddress;
 
   const auto [patch, inserted] = g_patches.emplace(
       native, NativeFunctionPatch{
@@ -779,12 +781,12 @@ struct NativeRegistrationHook {
   if (g_nativeRegistrationHookInstalled.load(std::memory_order_acquire)) {
     return true;
   }
-  constexpr std::size_t kBindNativeMethodVtableIndex = 0x18;
   auto *vtable = a_vm ? *reinterpret_cast<std::uintptr_t **>(a_vm) : nullptr;
   if (!vtable) {
     return false;
   }
-  auto *slot = std::addressof(vtable[kBindNativeMethodVtableIndex]);
+  auto *slot = std::addressof(
+      vtable[sfs::runtime::kPapyrusBindNativeMethodVtableIndex]);
   const auto originalAddress = *slot;
   const auto replacementAddress =
       reinterpret_cast<std::uintptr_t>(NativeRegistrationHook::thunk);

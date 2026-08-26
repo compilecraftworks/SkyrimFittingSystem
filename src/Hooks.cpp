@@ -3,11 +3,14 @@
 #include "InputManager.h"
 #include "Keycode.h"
 #include "api/SkyrimFittingSystemAPI.h"
+#include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 #include "ui/MenuHost.h"
 #include "workbench/EquipmentRefreshEventSink.h"
 
+#include <array>
 #include <atomic>
+#include <cstring>
 #include <mutex>
 #include <unordered_map>
 #include <unordered_set>
@@ -207,8 +210,17 @@ static void
 hk_PollInputDevices(RE::BSTEventSource<RE::InputEvent *> *a_dispatcher,
                     RE::InputEvent **a_events);
 static inline REL::Relocation<decltype(hk_PollInputDevices)> g_inputHandler;
-static inline REL::Relocation<uintptr_t> g_registerClass{
-    REL::VariantID(75591, 77226, 0xDC4B90)};
+
+template <std::size_t N>
+[[nodiscard]] bool
+HasInstructionPrefix(const std::uintptr_t a_address,
+                     const std::array<std::uint8_t, N> &a_prefix) {
+  if (a_address == 0) {
+    return false;
+  }
+  return std::memcmp(reinterpret_cast<const void *>(a_address), a_prefix.data(),
+                     a_prefix.size()) == 0;
+}
 
 void hk_PollInputDevices(RE::BSTEventSource<RE::InputEvent *> *a_dispatcher,
                          RE::InputEvent **a_events) {
@@ -333,17 +345,48 @@ struct PresentHook {
 void Install() {
   auto &trampoline = SKSE::GetTrampoline();
 
+  const auto runtimeVersion = REL::Module::get().version();
+  const auto layout = sfs::runtime::ResolveHookLayout(runtimeVersion);
+  if (!layout.has_value()) {
+    logger::critical(
+        "SFS hooks are disabled on unsupported Skyrim runtime {}",
+        runtimeVersion.string("."));
+    return;
+  }
+
+  const auto inputPollCallSite =
+      REL::ID(layout->inputPollRelocationID).address() +
+      layout->inputPollCallOffset;
+  const auto registerClassCallSite =
+      REL::ID(layout->registerClassRelocationID).address() +
+      layout->registerClassCallOffset;
+  const auto d3dInitCallSite =
+      REL::ID(layout->d3dInitRelocationID).address() +
+      layout->d3dInitCallOffset;
+  const auto presentCallSite = REL::ID(layout->presentRelocationID).address() +
+                               layout->presentCallOffset;
+
+  constexpr std::array<std::uint8_t, 1> kDirectCall{0xE8};
+  constexpr std::array<std::uint8_t, 2> kIndirectCall{0xFF, 0x15};
+  if (!HasInstructionPrefix(inputPollCallSite, kDirectCall) ||
+      !HasInstructionPrefix(registerClassCallSite, kIndirectCall) ||
+      !HasInstructionPrefix(d3dInitCallSite, kDirectCall) ||
+      !HasInstructionPrefix(presentCallSite, kDirectCall)) {
+    logger::critical(
+        "SFS core hook signature validation failed for {}; no UI/input hooks were installed",
+        layout->name);
+    return;
+  }
+  logger::info("Validated SFS core hook layout for {} ({})", layout->name,
+               runtimeVersion.string("."));
+
   logger::info("Hooking BSInputDeviceManager::PollInputDevices");
-  g_inputHandler =
-      trampoline.write_call<5>(REL::RelocationID(67315, 68617).address() +
-                                   REL::Relocate(0x7B, 0x7B, 0x81),
-                               hk_PollInputDevices);
+  g_inputHandler = trampoline.write_call<5>(inputPollCallSite,
+                                             hk_PollInputDevices);
 
   logger::info("Hooking RegisterClassA");
   const auto registerClassTarget = trampoline.write_call<6>(
-      g_registerClass.address() +
-          REL::VariantOffset(0x8E, 0x15C, 0x99).offset(),
-      RegisterClassAHook::thunk);
+      registerClassCallSite, RegisterClassAHook::thunk);
   if (registerClassTarget == 0) {
     logger::critical("Failed to hook RegisterClassA");
     return;
@@ -353,14 +396,11 @@ void Install() {
       *reinterpret_cast<const uintptr_t *>(registerClassTarget);
 
   logger::info("Hooking BSGraphics::Renderer::InitD3D");
-  D3DInitHook::func = trampoline.write_call<5>(
-      REL::RelocationID(75595, 77226).address() + REL::Relocate(0x50, 0x2BC),
-      D3DInitHook::thunk);
+  D3DInitHook::func =
+      trampoline.write_call<5>(d3dInitCallSite, D3DInitHook::thunk);
 
   logger::info("Hooking DXGI present");
   PresentHook::func =
-      trampoline.write_call<5>(REL::RelocationID(75461, 77246).address() +
-                                   REL::VariantOffset(0x9, 0x9, 0x15).offset(),
-                               PresentHook::thunk);
+      trampoline.write_call<5>(presentCallSite, PresentHook::thunk);
 }
 } // namespace sfs::hooks

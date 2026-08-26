@@ -7,6 +7,7 @@
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
 #include "poc/DeviousDevicesHiderPoC.h"
+#include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 #include "workbench/AppearanceSlotProtection.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
@@ -3130,9 +3131,6 @@ using NativeCallFn = NativeCallResult (*)(
     RE::BSScript::ErrorLogger *,
     RE::BSScript::Internal::VirtualMachine *, bool);
 
-constexpr std::size_t kNativeCallVtableIndex = 0x0F;
-constexpr std::size_t kNativeFunctionVtableEntryCount = 0x17;
-
 struct NativeFunctionPatch {
   std::unique_ptr<std::uintptr_t[]> clonedVtableStorage;
   NativeCallFn originalCall{nullptr};
@@ -3258,7 +3256,8 @@ struct NativeDispatchHook {
                   native->GetName().c_str());
     return false;
   }
-  const auto originalCallAddress = originalVtable[kNativeCallVtableIndex];
+  const auto originalCallAddress =
+      originalVtable[sfs::runtime::kPapyrusNativeCallVtableIndex];
   const auto replacementAddress =
       reinterpret_cast<std::uintptr_t>(NativeDispatchHook::thunk);
   if (originalCallAddress == 0 || originalCallAddress == replacementAddress) {
@@ -3273,12 +3272,14 @@ struct NativeDispatchHook {
   // MSVC complete-object locator at [-1] as well so RTTI remains valid. This
   // keeps unrelated natives such as UI.IsMenuOpen entirely outside SFS.
   auto storage = std::make_unique<std::uintptr_t[]>(
-      kNativeFunctionVtableEntryCount + 1);
+      sfs::runtime::kPapyrusNativeFunctionVtableEntryCount + 1);
   storage[0] = originalVtable[-1];
-  std::copy_n(originalVtable, kNativeFunctionVtableEntryCount,
+  std::copy_n(originalVtable,
+              sfs::runtime::kPapyrusNativeFunctionVtableEntryCount,
               storage.get() + 1);
   auto *replacementVtable = storage.get() + 1;
-  replacementVtable[kNativeCallVtableIndex] = replacementAddress;
+  replacementVtable[sfs::runtime::kPapyrusNativeCallVtableIndex] =
+      replacementAddress;
 
   auto [patch, inserted] = g_nativeFunctionPatches.emplace(
       native,
@@ -3467,12 +3468,12 @@ struct ScriptTypeLoadHook {
   if (g_scriptTypeLoadHookInstalled.load(std::memory_order_acquire)) {
     return true;
   }
-  constexpr std::size_t getScriptObjectTypeVtableIndex = 0x09;
   auto *vtable = a_vm ? *reinterpret_cast<std::uintptr_t **>(a_vm) : nullptr;
   if (!vtable) {
     return false;
   }
-  auto *slot = std::addressof(vtable[getScriptObjectTypeVtableIndex]);
+  auto *slot = std::addressof(
+      vtable[sfs::runtime::kPapyrusGetScriptObjectTypeVtableIndex]);
   const auto originalAddress = *slot;
   const auto replacementAddress =
       reinterpret_cast<std::uintptr_t>(ScriptTypeLoadHook::thunk);
@@ -3523,12 +3524,12 @@ struct NativeRegistrationHook {
   if (g_nativeRegistrationHookInstalled.load(std::memory_order_acquire)) {
     return true;
   }
-  constexpr std::size_t bindNativeMethodVtableIndex = 0x18;
   auto *vtable = a_vm ? *reinterpret_cast<std::uintptr_t **>(a_vm) : nullptr;
   if (!vtable) {
     return false;
   }
-  auto *slot = std::addressof(vtable[bindNativeMethodVtableIndex]);
+  auto *slot = std::addressof(
+      vtable[sfs::runtime::kPapyrusBindNativeMethodVtableIndex]);
   const auto originalAddress = *slot;
   const auto replacementAddress =
       reinterpret_cast<std::uintptr_t>(NativeRegistrationHook::thunk);

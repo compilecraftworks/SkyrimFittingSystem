@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.4.8"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.4.9"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -84,6 +84,16 @@ target("KitGeneratorLogicTests")
         "src/ui/Localization.cpp"
     )
     add_includedirs("src", "lib/imgui", "lib/imgui/backends")
+    set_pcxxheader("src/pch.h")
+
+target("RuntimeLayoutTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_deps("commonlibsse-ng")
+    add_files("tests/RuntimeLayoutTests.cpp")
+    add_includedirs("src")
     set_pcxxheader("src/pch.h")
 
 -- The private personal-completion experiment is intentionally not part of the

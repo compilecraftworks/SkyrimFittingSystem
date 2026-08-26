@@ -412,7 +412,7 @@
     "strip_link.slot.modding": "自动匹配 -> {}",
     "strip_link.slot.disable": "不联动",
     "options.external_mod_strip_link": "外部模组脱衣联动",
-    "options.external_mod_strip_link.tooltip": "模组配置槽位联动：按照各模组设置的槽位值联动，并允许单独编辑槽位。\n原版槽位自动联动：分析服装关键词自动匹配，并允许单独编辑槽位。\n直接编辑槽位：选择以上一种联动方式作为基础，只编辑需要例外处理的槽位。",
+    "options.external_mod_strip_link.tooltip": "模组配置槽位联动：按照各模组设置的槽位值联动。\n原版槽位自动联动：分析服装关键词并自动匹配。\n直接编辑槽位：选择以上一种联动方式作为基础，只编辑需要例外处理的槽位。",
     "options.external_mod_strip_link.disabled": "不联动",
     "options.external_mod_strip_link.mod_settings_slots": "模组配置槽位联动",
     "options.external_mod_strip_link.vanilla_slots": "原版槽位自动联动",

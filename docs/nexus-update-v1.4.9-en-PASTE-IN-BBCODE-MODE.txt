@@ -1,0 +1,64 @@
+[center]
+[size=6][b][color=#42ACC8]Skyrim Fitting System v1.4.9[/color][/b][/size]
+[/center]
+
+
+[line]
+[size=4][b][color=#42ACC8]Runtime layout safety[/color][/b][/size]
+
+
+[list]
+[*]Replaced shared compile-time hook assumptions with explicit, verified Skyrim[/*]
+[/list]
+
+  SE 1.5.97 and Skyrim AE runtime profiles.
+[list]
+[*]Core UI/input and native armor hook locations now resolve from the active[/*]
+[/list]
+
+  runtime profile and validate their instruction form before patching. Unknown
+  runtime layouts fail closed instead of installing a hook at an unverified
+  address.
+[list]
+[*]Centralized the Papyrus VM/native-function slot contract and added boundary[/*]
+[/list]
+
+  tests for the first supported SE/AE runtimes, the AE 1.6.629 transition, the
+  current Steam/GOG runtimes, and rejected unknown/VR layouts.
+
+[line]
+[size=4][b][color=#42ACC8]Immersive Equipment Displays compatibility[/color][/b][/size]
+
+
+[list]
+[*]Fixed the IED custom-skin compatibility boundary at the actual SE and AE[/*]
+[/list]
+
+  [font=Courier New]VisitWornItems[/font] call sites.
+[list]
+[*]When IED already owns that call site, SFS no longer passes its filtering[/*]
+[/list]
+
+  visitor to IED's concrete visitor hook. Filtered work uses the original
+  engine visitor path and then requests a safe IED actor refresh.
+[list]
+[*]This prevents the equipment-rebuild crash reproducible during cell or[/*]
+[/list]
+
+  scenario transitions such as entering Helgen Keep through Alternative
+  Perspective while preserving actor-local hidden-equipment state.
+
+[line]
+[size=4][b][color=#42ACC8]Menu character framing[/color][/b][/size]
+
+
+[list]
+[*]Moved both left and right character presentation slightly farther outward[/*]
+[/list]
+
+  with symmetric offsets. Facing angle and vertical position are unchanged.
+
+Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, Direct Slot
+Editing, external strip/redress transactions, conditions, Kit Generator,
+Grid Inventory Costume synchronization, and DAVE/DAV/native actor-local state
+retain their existing behavior.

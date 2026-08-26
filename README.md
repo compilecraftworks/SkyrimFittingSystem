@@ -40,7 +40,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.4.8)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.4.9)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -58,7 +58,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.4.8/windows/x64/<mode>/` in the project root.
+`build/v1.4.9/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -88,7 +88,7 @@ For the full local build, deploy, and packaging workflow, see
 `docs/Build-Deploy-Release.md`.
 
 This writes a zip under `dist/` named like:
-`Skyrim Fitting System v1.4.8.zip`
+`Skyrim Fitting System v1.4.9.zip`
 
 Tagged clean builds produce a normal `X.Y.Z` archive version.
 Dirty or untagged builds produce a `X.Y.Z-dev+<sha>[.dirty]` archive version.
@@ -108,14 +108,14 @@ Packaging uses `releasedbg`, so the archive also includes a `.pdb` next to the D
 
 ## Runtime Menu API
 
-SFS v1.4.8 exports a stable menu API for external hotkey and menu-management
+SFS v1.4.9 exports a stable menu API for external hotkey and menu-management
 mods. Managers may temporarily disable the native F6 or user-defined shortcut
 without changing its saved binding; this runtime-only state defaults to enabled
 on every game launch. Open, Close, and IsMenuOpen remain independent. See
 `docs/SkyrimFittingSystem-Menu-API.md` and `extras/SkyrimFittingSystemAPI.h`.
-The v1.4.8 module name is `SFSCore.dll`; the four C export names are unchanged.
+The v1.4.9 module name is `SFSCore.dll`; the four C export names are unchanged.
 
-SFS v1.4.8 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
+SFS v1.4.9 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
 selected outfit plugins, builds and edits candidate combinations, previews the
 selection on the character and in the workbench, and writes finished kits
 directly to the SFS user-kit folder. Only this temporary generator preview may
@@ -144,7 +144,7 @@ Grid Inventory v1.4.1+ Costume synchronization is built into SFSCore through
 its public SKSE message rather than a replacement DLL. These use narrow,
 versioned integration boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.4.8.md` for their exact scope.
+state. See `docs/RELEASE-NOTES-v1.4.9.md` for their exact scope.
 
 ## Fitting Kits
 

@@ -1,20 +1,20 @@
-[size=4][b][color=#42ACC8]v1.4.8 업데이트 내역[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.4.9 업데이트 내역[/color][/b][/size]
 
 
 [list]
-[*]작업대 액터 선택 목록에서 플레이어의 현재 로드 셀을 먼저 열거하고 기존 4096 단위 반경 검색을 이어서 수행하도록 보완했습니다. 두 경로는 같은 액터별 선택 조건, 반경, 중복 제거, 거리순 정렬, 최대 32명 제한을 유지합니다.[/*]
-[*]빌드 의존성을 CommonLibSSE-NG v6.7.0으로 갱신했습니다. Skyrim VR 지원이 추가되는 변경은 아니며 지원 범위는 SE/AE입니다.[/*]
+[*]Skyrim SE 1.5.97과 Skyrim AE의 명시적 런타임 훅 프로필, 명령 형식 검증과 미지원 레이아웃 안전 비활성화를 추가했습니다. Papyrus VM/native 슬롯은 한곳으로 통합하고 SE/AE 경계 테스트를 추가했습니다.[/*]
+[*]실제 [font=Courier New]VisitWornItems[/font] 호출 지점에서 IED custom-skin 체인을 수정했습니다. IED가 호출 지점을 소유한 경우 SFS 필터링은 원래 엔진 visitor 경로를 사용해 장비 재구성 CTD를 막고 액터별 표시 상태를 유지합니다.[/*]
+[*]UI 캐릭터의 좌우 배치를 대칭으로 조금 더 바깥쪽으로 조정했습니다. 각도와 높이는 그대로입니다.[/*]
 [/list]
 
 
 [line]
-[size=4][b][color=#42ACC8]v1.4.7 업데이트 내역[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.4.8 업데이트 내역[/color][/b][/size]
 
 
 [list]
-[*]Immersive Equipment Displays(IED)가 Skyrim의 정확한 커스텀 스킨 [font=Courier New]VisitWornItems[/font] 호출을 선점한 경우에만 작동하는 호환 경계를 추가했습니다. SFS는 숨긴 실제 장비를 필터링할 때 일반 visitor를 IED의 구체 visitor 훅으로 넘기지 않고 원본 엔진 대상으로 처리합니다.[/*]
-[*]재구성 뒤 IED의 공개 액터별 평가를 지연 예약합니다. 요청은 액터별·중복 방지 방식이며 SFS의 일반 갱신 상태를 초기화할 때 함께 비웁니다. 주기적 폴링이나 전역 액터 스캔은 추가하지 않습니다.[/*]
-[*]IED가 아닌 훅 체인과 기존 모드 설정 연동·바닐라 연동·직접 편집·외부 탈의/재착의·DAVE·DAV·native 표시 동작은 변경하지 않습니다.[/*]
+[*]작업대 액터 적합성 판정이 사용하는 CommonLibSSE-NG의 SE/AE 가상함수 배열을 보정해 [font=Courier New]Actor::IsDead()[/font]가 올바른 엔진 슬롯을 호출하도록 수정했습니다. 진단 중 시도한 액터 수집 변경은 모두 되돌려 수집 방식은 v1.4.5와 동일합니다.[/*]
+[*]빌드 의존성을 CommonLibSSE-NG v6.7.0으로 갱신하고 최소 범위의 SE/AE 가상함수 배열 보정을 문서화했습니다. Skyrim VR 지원이 추가되는 변경은 아니며 지원 범위는 SE/AE입니다.[/*]
 [/list]
 
 
@@ -23,8 +23,10 @@
 
 
 [list]
-[*]Grid Inventory Costume 연동에서 비어 있거나 해제된 Costume, 방어구가 아닌 Costume, 시작·세이브 로드 직후 복원 신호는 플레이어의 저장된 SFS 등록 외형을 바꾸지 않도록 수정했습니다.[/*]
-[*]방어구 조각으로 구성된 비어 있지 않은 플레이어 Costume만 SFS 등록 외형을 교체합니다. Grid Inventory의 로드아웃·렌더링·세이브·실제 장비 소유권은 그대로 유지됩니다.[/*]
+[*]내장 Grid Inventory Costume 연동을 보완했습니다. SFS 호환 방어구 조각이 하나 이상 있는 Costume만 SFS에 반영합니다.[/*]
+[*]Costume 미사용·해제·비어 있는 Costume·SFS 호환 방어구가 없는 Costume은 플레이어의 기존 SFS 등록 외형을 유지합니다. 구형 Clear 진입점도 비파괴 처리합니다.[/*]
+[*]시작·세이브 로드·리버트 뒤 첫 Grid 복원 상태는 계속 무시하므로, 복원되었거나 비어 있는 Grid 상태가 저장된 SFS 외형을 지우지 않습니다.[/*]
+[*]Grid Inventory의 렌더링·로드아웃·세이브·실제 장비 소유권은 그대로이며 SFS는 [font=Courier New]GridInventory.dll[/font]을 교체하거나 로드하지 않습니다.[/*]
 [/list]
 
 
