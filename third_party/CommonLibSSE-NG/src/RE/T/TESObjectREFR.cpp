@@ -1169,6 +1169,13 @@ namespace RE
 		REL::RelocateVirtual<decltype(&TESObjectREFR::ResetInventory)>(0x8A, 0x8B, this, a_leveledOnly);
 	}
 
+	void TESObjectREFR::Unk_8C()
+	{
+		if (REL::Module::IsVR()) {
+			REL::RelocateVirtual<decltype(&TESObjectREFR::Unk_8C)>(0, 0x8C, this);
+		}
+	}
+
 	NiNode* TESObjectREFR::GetFireNode()
 	{
 		return REL::RelocateVirtual<decltype(&TESObjectREFR::GetFireNode)>(0x8B, 0x8C, this);

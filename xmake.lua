@@ -1,11 +1,12 @@
 -- set minimum xmake version
-set_xmakever("3.0.0")
+set_xmakever("3.1.0")
 
 set_config("skse_xbyak", true)
 set_config("skyrim_vr", false)
 
--- The v1.4.8 corresponding-source archive carries the exact audited
--- CommonLibSSE-NG source used for this build under third_party/.
+-- Pinned vendored CommonLibSSE-NG v6.7.0 for all normal and release builds.
+-- SFS carries a narrow SE/AE TESObjectREFR vtable-layout correction; see
+-- third_party/CommonLibSSE-NG/SFS_LOCAL_PATCHES.md.
 includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
@@ -30,7 +31,6 @@ add_rules("mode.release", "mode.debug", "mode.releasedbg")
 add_rules("plugin.vsxmake.autoupdate")
 
 add_requires("nlohmann_json v3.12.0")
-add_requires("rapidcsv v8.92")
 
 target("SkyrimFittingSystem")
     set_version(build_version)
@@ -87,8 +87,8 @@ target("KitGeneratorLogicTests")
     set_pcxxheader("src/pch.h")
 
 -- The private personal-completion experiment is intentionally not part of the
--- public GPL source archive.  Keep its optional local targets available for
--- the maintainer without emitting broken-file warnings for public builders.
+-- public GPL source archive. Keep its optional local targets available for the
+-- maintainer without emitting missing-file warnings for public builders.
 if os.isfile("private/personal_kit_completion/PersonalKitCompletion.cpp") then
 target("SkyrimFittingSystemPersonal")
     set_default(false)
@@ -128,6 +128,7 @@ target("SkyrimFittingSystemPersonal")
     add_includedirs("src", "private/personal_kit_completion", "lib/imgui", "lib/imgui/backends")
     add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")
     set_pcxxheader("src/pch.h")
+end
 
 target("SFSDynamicFootprintsPatch")
     set_default(false)
@@ -149,6 +150,7 @@ target("SFSDynamicFootprintsPatch")
     add_syslinks("bcrypt")
     set_pcxxheader("src/pch.h")
 
+if os.isfile("private/personal_kit_completion/PersonalKitCompletionTests.cpp") then
 target("PersonalKitCompletionTests")
     set_default(false)
     set_kind("binary")

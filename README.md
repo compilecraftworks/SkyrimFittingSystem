@@ -1,7 +1,5 @@
 # Skyrim Fitting System
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M1P225QD23)
-
 `Skyrim Fitting System` is a Skyrim SKSE mod for player-facing fitting outfit management.
 
 It lets the player keep their real equipped gear for gameplay while changing the visible appearance through a native in-game browser, variant workbench, and native armor skinning hooks.
@@ -24,7 +22,7 @@ Skyrim Outfit System Revived was also consulted while implementing parts of the 
 - UTF-8 SFS/Modex kit loading and creation from equipped gear or active overrides
 - Built-in fitting-kit generator with plugin scanning, candidate editing, preview, and direct kit creation
 - Stable generated-kit SFW/NSFW labels that change only through the result-list toggle, not when candidate selection changes
-- Display-only workbench sorting and optional third-person menu character placement with right-drag rotation
+- Display-only workbench sorting and optional selected-actor third-person menu placement with right-drag rotation
 - Actor-local live BodyMorph synchronization without polling or a global actor scan
 - Stable C ABI for external managers to open, close, query, and temporarily disable the native SFS menu shortcut
 - SKSE save/load for overrides.
@@ -42,14 +40,15 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) 3.0.0+
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.4.8)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
 The corresponding source is distributed as a separate download in the Nexus Files tab.
-The source archive includes the Dear ImGui source and the exact
-CommonLibSSE-NG source used for the release. See `THIRD_PARTY_NOTICES.md` for
-license notices and upstream provenance.
+The source archive includes the exact CommonLibSSE-NG and Dear ImGui sources
+used by SFS. XMake packages are resolved from the checked-in
+`xmake-requires.lock`. See `DEPENDENCIES.md` for exact upstream revisions,
+checksums, local patches, and the update policy.
 
 ## Build
 From Windows:

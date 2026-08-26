@@ -77,6 +77,8 @@ bool Menu::DrawWorkbenchFilterBar() {
     SyncWorkbenchRowsForCurrentFilter();
     workbench::EquipmentRefreshEventSink::GetSingleton()->QueueActorRefresh(
         workbenchFilter_.actorFormID);
+    ui::MenuCharacterPresentation::GetSingleton()->Apply(
+        menuCharacterSide_, ResolveWorkbenchPreviewActor());
   }
   return filterSelectionChanged;
 }

@@ -202,7 +202,8 @@ void Menu::OnMenuShow() {
         actor->GetFormID());
   }
   enabled_ = true;
-  ui::MenuCharacterPresentation::GetSingleton()->Apply(menuCharacterSide_);
+  ui::MenuCharacterPresentation::GetSingleton()->Apply(
+      menuCharacterSide_, ResolveWorkbenchPreviewActor());
 }
 
 void Menu::OnMenuHide() {

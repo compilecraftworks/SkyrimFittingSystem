@@ -2,6 +2,10 @@
 
 #include <cstdint>
 
+namespace RE {
+class Actor;
+}
+
 namespace sfs::ui {
 
 enum class MenuCharacterSide : std::uint8_t {
@@ -10,14 +14,15 @@ enum class MenuCharacterSide : std::uint8_t {
   Right = 2,
 };
 
-// Owns only the temporary camera/player presentation used while the SFS menu
-// is open. It never changes the player's world position and restores every
-// field it touches when the menu closes.
+// Owns only the temporary camera/actor presentation used while the SFS menu is
+// open. It never changes an actor's world position and restores every field it
+// touches when the actor selection changes or the menu closes.
 class MenuCharacterPresentation {
 public:
   static MenuCharacterPresentation *GetSingleton();
 
   void Apply(MenuCharacterSide a_side);
+  void Apply(MenuCharacterSide a_side, RE::Actor *a_actor);
   void Restore();
   void UpdateRotationInteraction();
 

@@ -1,15 +1,15 @@
-Skyrim Fitting System v1.4.8 - Corresponding Source Package
+Skyrim Fitting System v1.4.8 - Nexus Source Package
 
-This archive contains the preferred source form and build-control files for
-the v1.4.8 SFSCore release. It contains no compiled DLL, PDB, PEX, ESL,
-build output, nested archive, or FOMOD package.
+This archive intentionally contains human-readable source and project data only.
+It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
 
-Build-control files are provided under their real names: xmake.lua and
-xmake-requires.lock. The exact CommonLibSSE-NG source used for this release is
-included at third_party/CommonLibSSE-NG (commit
-3d81614617910e7f34b33d8750881811b5e36445). Dear ImGui source is included
-under lib/imgui. See THIRD_PARTY_NOTICES.md for license notices and upstream
-source locations.
+For Nexus scanner compatibility, xmake.lua is stored as xmake.lua.txt and
+xmake-requires.lock is stored as xmake-requires.lock.txt. Remove the final .txt
+suffixes before building. Use the pinned xmake v3.1.0 release. The exact
+CommonLibSSE-NG v6.7.0 source used for this
+release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
+required by SFS are included under lib/imgui. Exact revisions and checksums are
+listed in DEPENDENCIES.md.
 
 v1.4.8 includes the v1.4.1 actor-local empty-equipment display bootstrap and
 the complete in-game Kit Generator built into SFSCore. The generator can scan
@@ -25,10 +25,12 @@ unknown packs keep using the general name, slot, and NIF-model rules. Cross-ESP
 deduplication requires substantially shared model paths and slot coverage, and
 the result-list Delete Item command removes every Ctrl+left-click selection
 without touching unselected kits.
-The SFS menu also includes an
-isolated third-person character presentation controller, with optional
-SmoothCam public-API coordination, whose camera offset and player heading are
-fully restored on close.
+The SFS menu also includes an isolated third-person character presentation
+controller with optional SmoothCam public-API coordination. It follows the
+actor selected in the workbench, including a crosshair-selected NPC at menu
+open, without moving that actor's world position. The original camera target,
+camera settings, and temporary actor facing are restored on actor change or
+menu close.
 
 It also includes the read-only Open Animation Replacer final-rendered-outfit
 conditions, including the slot-preserving
@@ -38,22 +40,21 @@ the currently displayed SFS footwear FormID; it never alters actual equipment
 or armor keywords.
 
 Grid Inventory v1.4.1+ Costume synchronization is built into SFSCore through
-Grid Inventory's public SKSE message. Only a non-empty, player-owned armor
-Costume replaces the player's SFS registered appearance. Empty, cleared, and
-non-armor Costume signals leave saved SFS appearances unchanged. It does not
-replace GridInventory.dll; the retired v1.4.4 replacement-DLL source remains
-only as historical reference.
+Grid Inventory's public SKSE message. It does not replace GridInventory.dll;
+the retired v1.4.4 replacement-DLL source remains only as historical reference.
 The separately distributed DFFMA OAR, Helmet Toggle 2, and Dynamic Footprints
 compatibility archives contain the source or editable configuration for their
 own integration boundary. They are intentionally not merged into the main
 runtime archive.
 
-For Immersive Equipment Displays, v1.4.7 adds a narrow custom-skin rebuild
-compatibility boundary: only when IED owns the exact pre-patched worn-item
-visitor target used by Skyrim does SFS filter the hidden-real-equipment pass
-through the original engine target, then request IED's public actor evaluation.
-It is actor-local and does not alter normal calls, appearance data, linking
-modes, strip/redress handling, or display backends.
-
 The runtime package is distributed separately and contains the compiled DLL,
 PDB, PEX, ESL, localization data, and UI assets.
+
+v1.4.8 uses the vendored CommonLibSSE-NG v6.7.0 source revision
+3d81614617910e7f34b33d8750881811b5e36445 with the narrow local SE/AE vtable
+layout correction documented in third_party/CommonLibSSE-NG/SFS_LOCAL_PATCHES.md.
+The workbench actor selector itself remains the v1.4.5 implementation: the
+existing 4096-unit TES range pass, selectable-actor rule, duplicate filtering,
+nearest-first ordering, and 32-actor limit are unchanged. Saved workbench data
+and appearance, strip/redress, DAVE/DAV, and native display paths are not
+changed.

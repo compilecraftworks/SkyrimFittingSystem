@@ -328,8 +328,15 @@ namespace RE
 		SKYRIM_REL_VR_VIRTUAL void                      SetActionComplete(bool a_set);                  // 87 - { return; }
 		SKYRIM_REL_VR_VIRTUAL void                      SetMovementComplete(bool a_set);                // 89 - { return; }
 		SKYRIM_REL_VR_VIRTUAL void                      Disable();                                      // 8A
-		SKYRIM_REL_VR_VIRTUAL void                      ResetInventory(bool a_leveledOnly);             // 8B
-		SKYRIM_REL_VR_VIRTUAL void                      Unk_8C(void);                                   // 8C - real slot; checks a field at +0x430, conditionally calls cleanup
+		SKYRIM_REL_VR_VIRTUAL void                      ResetInventory(bool a_leveledOnly);             // 8A / 8B
+#if defined(EXCLUSIVE_SKYRIM_FLAT)
+		// VR-only vtable entry. Omitting it is required to preserve the SE/AE
+		// TESObjectREFR and Actor vtable layout (GetFireNode 0x8B, IsDead 0x99).
+#elif defined(EXCLUSIVE_SKYRIM_VR)
+		virtual void Unk_8C(void);  // VR 8C - checks a field at +0x430, conditionally calls cleanup
+#elif defined(SKYRIM_CROSS_VR)
+		void Unk_8C(void);  // Multi-runtime wrapper; no SE/AE vtable entry.
+#endif
 		[[nodiscard]] SKYRIM_REL_VR_VIRTUAL NiNode*     GetFireNode();                                  // 8D - { return 0; }
 		SKYRIM_REL_VR_VIRTUAL void                      SetFireNode(NiNode* a_fireNode);                // 8E - { return; }
 		[[nodiscard]] SKYRIM_REL_VR_VIRTUAL NiAVObject* GetCurrent3D() const;                           // 8F - { return Get3D2(); }

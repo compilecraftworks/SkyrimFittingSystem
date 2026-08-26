@@ -12,8 +12,11 @@ This document describes the WSL-based workflow for:
 - Run from WSL in the repo root.
 - `powershell.exe` must be available in `PATH`.
 - `wslpath` must be available.
-- `xmake` must be installed on the Windows side, since `build.sh` invokes it through PowerShell.
+- The pinned xmake v3.1.0 release must be installed on the Windows side, since `build.sh` invokes it through PowerShell.
 - `gh` should be authenticated for release work.
+
+The complete dependency baseline, immutable revisions, archive checksums, and
+local CommonLib patch boundary are recorded in `DEPENDENCIES.md`.
 
 ## Versioning
 
@@ -50,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.4.3/windows/x64/<mode>/SFSCore.dll`
-- SE/AE PDB when present: `build/v1.4.3/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.4.8/windows/x64/<mode>/SFSCore.dll`
+- SE/AE PDB when present: `build/v1.4.8/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 

@@ -69,37 +69,37 @@ float GetAngle(const RE::NiPoint2 &a_from, const RE::NiPoint2 &a_to) {
   return std::atan2(cross, dot);
 }
 
-float GetCameraAlignedPlayerYaw(RE::PlayerCharacter *a_player,
-                                RE::PlayerCamera *a_camera) {
-  if (a_player == nullptr || a_camera == nullptr ||
+float GetCameraAlignedActorYaw(RE::Actor *a_actor,
+                               RE::PlayerCamera *a_camera) {
+  if (a_actor == nullptr || a_camera == nullptr ||
       a_camera->cameraRoot == nullptr) {
-    return a_player != nullptr ? a_player->data.angle.z : 0.0f;
+    return a_actor != nullptr ? a_actor->data.angle.z : 0.0f;
   }
 
-  const auto playerPosition = a_player->GetPosition();
+  const auto actorPosition = a_actor->GetPosition();
   const auto cameraPosition = a_camera->cameraRoot->world.translate;
-  const auto targetPosition = a_player->GetLookingAtLocation();
+  const auto targetPosition = a_actor->GetLookingAtLocation();
 
-  auto playerDirectionToTarget = targetPosition - playerPosition;
-  if (VectorLength(playerDirectionToTarget) <= 0.0001f) {
-    return a_player->data.angle.z;
+  auto actorDirectionToTarget = targetPosition - actorPosition;
+  if (VectorLength(actorDirectionToTarget) <= 0.0001f) {
+    return a_actor->data.angle.z;
   }
-  playerDirectionToTarget.Unitize();
+  actorDirectionToTarget.Unitize();
 
-  const auto cameraToPlayer = playerPosition - cameraPosition;
-  const auto projected = ProjectVector(cameraToPlayer, playerDirectionToTarget);
+  const auto cameraToActor = actorPosition - cameraPosition;
+  const auto projected = ProjectVector(cameraToActor, actorDirectionToTarget);
   const auto projectedPosition = cameraPosition + projected;
   auto projectedDirectionToTarget = targetPosition - projectedPosition;
   if (VectorLength(projectedDirectionToTarget) <= 0.0001f) {
-    return a_player->data.angle.z;
+    return a_actor->data.angle.z;
   }
   projectedDirectionToTarget.Unitize();
 
   const auto currentCameraDirection =
-      RotateVector({0.0f, 1.0f}, a_player->data.angle.z);
+      RotateVector({0.0f, 1.0f}, a_actor->data.angle.z);
   const RE::NiPoint2 projectedDirection{-projectedDirectionToTarget.x,
                                         projectedDirectionToTarget.y};
-  return NormalizeAngle(a_player->data.angle.z +
+  return NormalizeAngle(a_actor->data.angle.z +
                         GetAngle(currentCameraDirection, projectedDirection));
 }
 
@@ -114,10 +114,12 @@ RE::ThirdPersonState *GetThirdPersonState(RE::PlayerCamera *a_camera) {
                           : nullptr;
 }
 
-bool CanPresentPlayer(RE::PlayerCharacter *a_player, RE::PlayerCamera *a_camera,
-                      RE::ThirdPersonState *a_thirdPersonState) {
-  if (a_player == nullptr || a_camera == nullptr ||
+bool CanPresentActor(RE::PlayerCharacter *a_player, RE::Actor *a_actor,
+                     RE::PlayerCamera *a_camera,
+                     RE::ThirdPersonState *a_thirdPersonState) {
+  if (a_player == nullptr || a_actor == nullptr || a_camera == nullptr ||
       a_thirdPersonState == nullptr || !a_player->Is3DLoaded() ||
+      !a_actor->Is3DLoaded() ||
       a_player->IsOnMount() || a_camera->IsInFreeCameraMode()) {
     return false;
   }
@@ -141,13 +143,17 @@ struct MenuCharacterPresentation::State {
   bool rotating{false};
   MenuCharacterSide side{MenuCharacterSide::Disabled};
   MenuCharacterSide requestedSide{MenuCharacterSide::Disabled};
+  RE::ActorHandle presentedActorHandle{};
+  RE::ActorHandle requestedActorHandle{};
+  RE::ActorHandle originalCameraTarget{};
   RE::TESCameraState *originalCameraState{nullptr};
   RE::NiPoint3 posOffsetExpected{};
   RE::NiPoint3 posOffsetActual{};
   RE::NiPoint3 desiredPosOffset{};
   RE::NiPoint2 freeRotation{};
-  float playerAngleX{0.0f};
-  float playerAngleZ{0.0f};
+  float actorAngleX{0.0f};
+  float actorAngleZ{0.0f};
+  bool actorPitchModified{false};
   float targetZoomOffset{0.0f};
   float pitchZoomOffset{0.0f};
   float worldFov{0.0f};
@@ -166,14 +172,26 @@ MenuCharacterPresentation *MenuCharacterPresentation::GetSingleton() {
 }
 
 void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
+  Apply(a_side, RE::PlayerCharacter::GetSingleton());
+}
+
+void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
+                                      RE::Actor *a_actor) {
   if (a_side == MenuCharacterSide::Disabled) {
     Restore();
     return;
   }
 
+  auto *player = RE::PlayerCharacter::GetSingleton();
+  auto *presentedActor = a_actor != nullptr ? a_actor : player;
+  const auto requestedActorHandle =
+      presentedActor != nullptr ? presentedActor->GetHandle() : RE::ActorHandle{};
+
   if (state_->active) {
-    if (state_->side == a_side) {
+    if (state_->side == a_side &&
+        state_->presentedActorHandle == requestedActorHandle) {
       state_->requestedSide = a_side;
+      state_->requestedActorHandle = requestedActorHandle;
       return;
     }
     Restore();
@@ -182,13 +200,13 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
   // camera states.  Keep the request so the ordinary per-frame menu update can
   // apply it as soon as third person becomes stable.
   state_->requestedSide = a_side;
+  state_->requestedActorHandle = requestedActorHandle;
 
-  auto *player = RE::PlayerCharacter::GetSingleton();
   auto *camera = RE::PlayerCamera::GetSingleton();
   auto *thirdPersonState = GetThirdPersonState(camera);
-  if (!CanPresentPlayer(player, camera, thirdPersonState)) {
+  if (!CanPresentActor(player, presentedActor, camera, thirdPersonState)) {
     logger::debug("Skipped SFS menu character presentation for the current "
-                  "player/camera state");
+                  "actor/camera state");
     return;
   }
   if (!native::smoothcam::AcquireCameraControl()) {
@@ -196,11 +214,14 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
   }
 
   state_->originalCameraState = camera->currentState.get();
+  state_->originalCameraTarget = camera->cameraTarget;
+  state_->presentedActorHandle = requestedActorHandle;
   state_->posOffsetExpected = thirdPersonState->posOffsetExpected;
   state_->posOffsetActual = thirdPersonState->posOffsetActual;
   state_->freeRotation = thirdPersonState->freeRotation;
-  state_->playerAngleX = player->data.angle.x;
-  state_->playerAngleZ = player->data.angle.z;
+  state_->actorAngleX = presentedActor->data.angle.x;
+  state_->actorAngleZ = presentedActor->data.angle.z;
+  state_->actorPitchModified = presentedActor == player;
   state_->targetZoomOffset = thirdPersonState->targetZoomOffset;
   state_->pitchZoomOffset = thirdPersonState->pitchZoomOffset;
   state_->worldFov = camera->worldFOV;
@@ -210,6 +231,10 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
   state_->rotating = false;
   state_->active = true;
 
+  camera->cameraTarget = requestedActorHandle;
+  auto cameraTargetHandle = requestedActorHandle.native_handle();
+  thirdPersonState->SetCameraHandle(cameraTargetHandle);
+
   // Match Show Player In Menus' RotatePlayer application order.  Reasserting
   // the already-active third-person state makes Skyrim rebuild its camera
   // offsets from the temporary menu settings instead of a stale tween frame.
@@ -217,12 +242,14 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
   thirdPersonState->freeRotationEnabled = true;
   thirdPersonState->toggleAnimCam = true;
 
-  if (player->GetGraphVariableBool("IsNPC", state_->headTrackingEnabled)) {
+  if (presentedActor == player &&
+      player->GetGraphVariableBool("IsNPC", state_->headTrackingEnabled)) {
     player->SetGraphVariableBool("IsNPC", false);
     state_->headTrackingModified = true;
   }
 
-  const auto cameraAlignedYaw = GetCameraAlignedPlayerYaw(player, camera);
+  const auto cameraAlignedYaw =
+      GetCameraAlignedActorYaw(presentedActor, camera);
   // Start from a near-frontal view for SFS's off-centre camera framing.
   // Rotation remains a user-controlled right-drag action after the menu opens.
   const auto facingCorrection =
@@ -230,8 +257,10 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
                                         : kRightFacingCorrection;
   const auto angleChange = std::numbers::pi_v<float> + facingCorrection;
   const auto menuFreeRotation = angleChange;
-  player->SetHeading(NormalizeAngle(cameraAlignedYaw - angleChange));
-  player->data.angle.x = kPlayerPitch;
+  presentedActor->SetHeading(NormalizeAngle(cameraAlignedYaw - angleChange));
+  if (state_->actorPitchModified) {
+    presentedActor->data.angle.x = kPlayerPitch;
+  }
   thirdPersonState->freeRotation =
       {NormalizeAngle(menuFreeRotation), 0.0f};
 
@@ -267,9 +296,10 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side) {
   camera->worldFOV = kMenuWorldFov;
 
   camera->Update();
-  player->Update3DPosition(true);
-  logger::debug("Applied SFS menu character presentation: side={}",
-                static_cast<std::uint8_t>(a_side));
+  presentedActor->Update3DPosition(true);
+  logger::debug("Applied SFS menu character presentation: side={}, actor={:08X}",
+                static_cast<std::uint8_t>(a_side),
+                presentedActor->GetFormID());
 }
 
 void MenuCharacterPresentation::Restore() {
@@ -280,28 +310,41 @@ void MenuCharacterPresentation::Restore() {
     return;
   }
   state_->requestedSide = MenuCharacterSide::Disabled;
+  state_->requestedActorHandle.reset();
   if (!state_->active) {
     native::smoothcam::ReleaseCameraControl();
     return;
   }
 
-  auto *player = RE::PlayerCharacter::GetSingleton();
+  auto presentedActor = state_->presentedActorHandle.get();
   auto *camera = RE::PlayerCamera::GetSingleton();
   auto *thirdPersonState = GetThirdPersonState(camera);
+
+  if (camera != nullptr) {
+    camera->cameraTarget = state_->originalCameraTarget;
+  }
+  if (thirdPersonState != nullptr) {
+    auto originalCameraTargetHandle =
+        state_->originalCameraTarget.native_handle();
+    thirdPersonState->SetCameraHandle(originalCameraTargetHandle);
+  }
 
   if (camera != nullptr && state_->originalCameraState != nullptr &&
       camera->currentState.get() != state_->originalCameraState) {
     camera->SetState(state_->originalCameraState);
   }
 
-  if (player != nullptr) {
-    player->data.angle.x = state_->playerAngleX;
-    player->SetHeading(state_->playerAngleZ);
-    if (state_->headTrackingModified) {
-      player->SetGraphVariableBool("IsNPC", state_->headTrackingEnabled);
+  if (presentedActor != nullptr) {
+    if (state_->actorPitchModified) {
+      presentedActor->data.angle.x = state_->actorAngleX;
     }
-    if (player->Is3DLoaded()) {
-      player->Update3DPosition(true);
+    presentedActor->SetHeading(state_->actorAngleZ);
+    if (state_->headTrackingModified) {
+      presentedActor->SetGraphVariableBool("IsNPC",
+                                           state_->headTrackingEnabled);
+    }
+    if (presentedActor->Is3DLoaded()) {
+      presentedActor->Update3DPosition(true);
     }
   }
 
@@ -327,9 +370,12 @@ void MenuCharacterPresentation::Restore() {
   }
 
   state_->originalCameraState = nullptr;
+  state_->presentedActorHandle.reset();
+  state_->originalCameraTarget.reset();
   state_->desiredPosOffset = {};
   state_->cameraSettings = {};
   state_->headTrackingModified = false;
+  state_->actorPitchModified = false;
   state_->side = MenuCharacterSide::Disabled;
   state_->rotating = false;
   state_->active = false;
@@ -345,7 +391,8 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
   if (!state_->active &&
       state_->requestedSide != MenuCharacterSide::Disabled) {
     const auto requestedSide = state_->requestedSide;
-    Apply(requestedSide);
+    auto requestedActor = state_->requestedActorHandle.get();
+    Apply(requestedSide, requestedActor.get());
   }
   if (!state_->active) {
     MenuHost::EndCharacterRotationUnpause();
@@ -382,10 +429,11 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
     MenuHost::BeginCharacterRotationUnpause();
   }
 
-  auto *player = RE::PlayerCharacter::GetSingleton();
+  auto presentedActor = state_->presentedActorHandle.get();
   auto *camera = RE::PlayerCamera::GetSingleton();
   auto *thirdPersonState = GetThirdPersonState(camera);
-  if (player == nullptr || camera == nullptr || thirdPersonState == nullptr ||
+  if (presentedActor == nullptr || camera == nullptr ||
+      thirdPersonState == nullptr ||
       camera->currentState.get() != thirdPersonState) {
     state_->rotating = false;
     MenuHost::EndCharacterRotationUnpause();
@@ -396,6 +444,11 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
   // Keep the SFS-owned menu framing stable while the menu is open.
   thirdPersonState->posOffsetExpected = state_->desiredPosOffset;
   thirdPersonState->posOffsetActual = state_->desiredPosOffset;
+  if (camera->cameraTarget != state_->presentedActorHandle) {
+    camera->cameraTarget = state_->presentedActorHandle;
+    auto cameraTargetHandle = state_->presentedActorHandle.native_handle();
+    thirdPersonState->SetCameraHandle(cameraTargetHandle);
+  }
 
   if (!state_->rotating || io.MouseDelta.x == 0.0f) {
     return;
@@ -410,10 +463,11 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
       std::clamp(-io.MouseDelta.x * kMouseRotationRadiansPerPixel,
                  -kMaxMouseRotationRadiansPerFrame,
                  kMaxMouseRotationRadiansPerFrame);
-  player->SetHeading(NormalizeAngle(player->data.angle.z + delta));
+  presentedActor->SetHeading(
+      NormalizeAngle(presentedActor->data.angle.z + delta));
   thirdPersonState->freeRotation.x =
       NormalizeAngle(thirdPersonState->freeRotation.x - delta);
-  player->Update3DPosition(true);
+  presentedActor->Update3DPosition(true);
   camera->Update();
 }
 

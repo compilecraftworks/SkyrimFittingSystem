@@ -608,7 +608,7 @@ void Menu::DrawOptionsTab() {
             menuCharacterSide_ = characterPositionModes[index];
             SaveUserSettings();
             ui::MenuCharacterPresentation::GetSingleton()->Apply(
-                menuCharacterSide_);
+                menuCharacterSide_, ResolveWorkbenchPreviewActor());
           }
           if (selected) {
             ImGui::SetItemDefaultFocus();
