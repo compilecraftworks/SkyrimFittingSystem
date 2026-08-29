@@ -92,6 +92,36 @@ void SetHeadgearToggleFittingSlotsSuppressed(
   }
 }
 
+bool ReplaceHeadgearToggleFittingSlotsSuppressed(
+    RE::Actor *a_actor, const std::uint32_t a_slotMask) {
+  const auto actorFormID = GetActorFormID(a_actor);
+  if (actorFormID == 0) {
+    return false;
+  }
+
+  std::lock_guard lock(g_stateMutex);
+  auto stateIt = g_actorStates.find(actorFormID);
+  if (stateIt == g_actorStates.end()) {
+    if (a_slotMask == 0) {
+      return false;
+    }
+    stateIt = g_actorStates.emplace(actorFormID, ActorFittingSlotState{}).first;
+  }
+
+  auto &state = stateIt->second;
+  const auto previousMask = GetEffectiveHeadgearToggleSuppressedSlotMask(state);
+  const auto newlySuppressed =
+      a_slotMask & ~state.headgearToggleSuppressedSlotMask;
+  state.headgearToggleSuppressedSlotMask = a_slotMask;
+  state.headgearToggleManualVisibleSlotMask &= a_slotMask;
+  state.headgearToggleManualVisibleSlotMask &= ~newlySuppressed;
+  const auto currentMask = GetEffectiveHeadgearToggleSuppressedSlotMask(state);
+  if (IsEmpty(state)) {
+    g_actorStates.erase(stateIt);
+  }
+  return previousMask != currentMask;
+}
+
 void ClearHeadgearToggleFittingSlotsSuppressed(RE::Actor *a_actor) {
   const auto actorFormID = GetActorFormID(a_actor);
   if (actorFormID == 0) {
@@ -106,6 +136,19 @@ void ClearHeadgearToggleFittingSlotsSuppressed(RE::Actor *a_actor) {
   stateIt->second.headgearToggleManualVisibleSlotMask = 0;
   if (IsEmpty(stateIt->second)) {
     g_actorStates.erase(stateIt);
+  }
+}
+
+void ClearAllHeadgearToggleFittingSlotStates() {
+  std::lock_guard lock(g_stateMutex);
+  for (auto stateIt = g_actorStates.begin(); stateIt != g_actorStates.end();) {
+    stateIt->second.headgearToggleSuppressedSlotMask = 0;
+    stateIt->second.headgearToggleManualVisibleSlotMask = 0;
+    if (IsEmpty(stateIt->second)) {
+      stateIt = g_actorStates.erase(stateIt);
+    } else {
+      ++stateIt;
+    }
   }
 }
 

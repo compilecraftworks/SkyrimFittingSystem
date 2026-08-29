@@ -144,5 +144,15 @@ inline constexpr std::size_t kPapyrusGetScriptObjectTypeVtableIndex = 0x09;
 inline constexpr std::size_t kPapyrusNativeCallVtableIndex = 0x0F;
 inline constexpr std::size_t kPapyrusNativeFunctionVtableEntryCount = 0x17;
 inline constexpr std::size_t kPapyrusBindNativeMethodVtableIndex = 0x18;
-} // namespace sfs::runtime
 
+// BSLightingShader's renderer binding bracket is shared by every verified
+// SE/AE profile. Keep these slots centralized so a future runtime layout
+// change fails review instead of silently spreading raw indices.
+inline constexpr std::size_t kBSLightingShaderSetupGeometryVtableIndex = 0x06;
+inline constexpr std::size_t kBSLightingShaderRestoreGeometryVtableIndex = 0x07;
+
+// ID3D11DeviceContext inherits IUnknown (0-2) and ID3D11DeviceChild (3-6).
+// These are stable Direct3D 11 COM ABI slots, not Skyrim runtime layouts.
+inline constexpr std::size_t kD3D11DeviceContextDrawIndexedVtableIndex = 0x0C;
+inline constexpr std::size_t kD3D11DeviceContextDrawVtableIndex = 0x0D;
+} // namespace sfs::runtime

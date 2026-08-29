@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.4.9/windows/x64/<mode>/SFSCore.dll`
-- SE/AE PDB when present: `build/v1.4.9/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.5.0/windows/x64/<mode>/SFSCore.dll`
+- SE/AE PDB when present: `build/v1.5.0/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 

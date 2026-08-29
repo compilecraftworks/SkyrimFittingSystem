@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skyrim Fitting System - 아카라이브 게시용</title>
+<style>
+body{max-width:980px;margin:32px auto;padding:0 24px;background:#202124;color:#e8eaed;font-family:Arial,"Noto Sans KR",sans-serif;line-height:1.72}
+h1,h2,h3{color:#42acc8;line-height:1.35} h1{text-align:center;font-size:2.2rem} h2{font-size:1.55rem} h3{font-size:1.2rem}
+hr{border:0;border-top:1px solid #4b4d50;margin:32px 0 20px} a{color:#63d3ea} code{background:#303236;padding:2px 5px;border-radius:4px}
+figure{text-align:center;margin:24px auto} figure img{display:block;width:75%;height:auto;margin:auto;border-radius:5px} figcaption{margin-top:7px;color:#aeb4ba;font-size:.9rem}
+blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;background:#292b2f} li{margin:4px 0}
+</style>
+</head>
+<body>
+<h1>v1.5.0 업데이트 내역</h1>
+<ul>
+<li>별도 Helmet Toggle 2 PEX 패치를 없애고 SFSCore 본체가 정확한 플레이어&#183;NPC&#183;팔로워 HT2 상태 신호만 액터별로 관찰하도록 교체했습니다.</li>
+<li>HT2의 중복 제거된 배열 위치가 아니라 실제 투구 ARMO의 전체 슬롯 마스크를 읽습니다.</li>
+<li>HT2가 착용 상태인 실제 31+42 투구를 숨길 때 해당 액터의 스키닝 worn-mask에서 실제 31 Hair 비트만 해제해 원래 머리카락을 표시하고 대머리 현상을 막습니다. 실제 ARMO&#183;인벤토리&#183;키워드&#183;HT2/DAVE 변형은 바꾸지 않습니다.</li>
+<li>순수 등록 31번은 독립적으로 유지하고 등록 31+42는 42번을 통해 따릅니다. 플레이어&#183;팔로워&#183;NPC는 주기적 폴링이나 주변 액터 스캔 없이 액터별로 처리합니다. 모드 설정 머리 슬롯 가상토큰&#183;바닐라 자동 연동&#183;직접 편집&#183;수동 눈 버튼&#183;외부 탈의&#183;재착의&#183;DAVE/DAV/native 동작은 그대로 유지됩니다.</li>
+<li>기존의 모든 SFS Helmet Toggle 2 호환 패치는 삭제하십시오. 이제 HT2는 별도 SFS 패치가 필요 없습니다.</li>
+</ul>
+</body>
+</html>

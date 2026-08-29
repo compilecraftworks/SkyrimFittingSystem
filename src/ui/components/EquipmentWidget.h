@@ -15,6 +15,11 @@ struct EquipmentWidgetOptions {
   bool showHideButton{false};
   bool hideButtonEnabled{true};
   const char *hideButtonTooltipKey{nullptr};
+  // Independent renderer-only action. It never changes visibility,
+  // registration, equipment, conditions, or external strip state.
+  bool showDyeButton{false};
+  bool dyeButtonEnabled{true};
+  const char *dyeButtonTooltip{nullptr};
   bool hidden{false};
   bool disabledAppearance{false};
   bool preserveContentTextColors{false};
@@ -45,6 +50,8 @@ struct EquipmentWidgetResult {
   bool doubleClicked{false};
   bool hideHovered{false};
   bool hideClicked{false};
+  bool dyeHovered{false};
+  bool dyeClicked{false};
   bool deleteHovered{false};
   bool deleteClicked{false};
 };

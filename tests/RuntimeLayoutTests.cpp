@@ -67,6 +67,14 @@ int main() {
          "Papyrus native function vtable extent changed");
   Expect(sfs::runtime::kPapyrusBindNativeMethodVtableIndex == 0x18,
          "Papyrus BindNativeMethod vtable contract changed");
+  Expect(sfs::runtime::kBSLightingShaderSetupGeometryVtableIndex == 0x06,
+         "BSLighting SetupGeometry vtable contract changed");
+  Expect(sfs::runtime::kBSLightingShaderRestoreGeometryVtableIndex == 0x07,
+         "BSLighting RestoreGeometry vtable contract changed");
+  Expect(sfs::runtime::kD3D11DeviceContextDrawIndexedVtableIndex == 0x0C,
+         "D3D11 DrawIndexed COM vtable contract changed");
+  Expect(sfs::runtime::kD3D11DeviceContextDrawVtableIndex == 0x0D,
+         "D3D11 Draw COM vtable contract changed");
 
   if (g_failures != 0) {
     std::cerr << g_failures << " runtime layout test(s) failed\n";
@@ -75,4 +83,3 @@ int main() {
   std::cout << "Runtime layout boundary tests passed\n";
   return 0;
 }
-

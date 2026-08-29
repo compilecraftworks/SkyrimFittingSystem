@@ -3,6 +3,7 @@
 #include "InputManager.h"
 #include "Keycode.h"
 #include "api/SkyrimFittingSystemAPI.h"
+#include "native/FittingDye.h"
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 #include "ui/MenuHost.h"
@@ -379,6 +380,9 @@ void Install() {
   }
   logger::info("Validated SFS core hook layout for {} ({})", layout->name,
                runtimeVersion.string("."));
+
+  // Dormant until a workbench appearance component is explicitly dyed.
+  sfs::native::dye::InstallWorldTintHook();
 
   logger::info("Hooking BSInputDeviceManager::PollInputDevices");
   g_inputHandler = trampoline.write_call<5>(inputPollCallSite,

@@ -1,3 +1,16 @@
+[size=4][b][color=#42ACC8]Version 1.5.0[/color][/b][/size]
+
+
+[list]
+[*]Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore integration. SFS observes only HT2's exact player global and actor-local NPC/follower spell transitions, without replacing HT2 scripts or polling actors.[/*]
+[*]SFS reads every real helmet's full ARMO slot mask instead of relying on the array position retained after HT2 deduplication.[/*]
+[*]Fixed bald actors when HT2 hides a still-equipped real 31+42 helmet. SFS releases only that actor's real Hair 31 bit from the skinning worn mask; the actual ARMO, inventory, HT2/DAVE variant, and keywords remain untouched.[/*]
+[*]Pure registered slot 31 remains independent, while registered 31+42 still follows through slot 42. Player, follower, and NPC transitions remain actor-local. Mod-Configured headgear virtual tokens, Automatic Vanilla-Slot Linking, Direct Slot Editing, manual eye controls, external strip/redress handling, and DAVE/DAV/native behavior are unchanged.[/*]
+[*]Remove every older SFS Helmet Toggle 2 Compatibility Patch when updating; HT2 now requires no separate SFS patch.[/*]
+[/list]
+
+
+[line]
 [size=4][b][color=#42ACC8]Version 1.4.9[/color][/b][/size]
 
 

@@ -3,7 +3,9 @@
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
 #include "native/FittingSlotState.h"
+#include "native/HelmetToggle2Integration.h"
 #include "native/ExternalEquipmentTransactions.h"
+#include "native/FittingDye.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "poc/VirtualWornTokenPoC.h"
 #include "ui/ConditionParamOptionCache.h"
@@ -21,13 +23,16 @@ void SaveCallback(SKSE::SerializationInterface *a_skse) {
   workbench::SerializeActorAutomaticEquipmentVisibilitySettings(a_skse);
   native::external_equipment::Serialize(a_skse);
   poc::SerializeVirtualWornTokenState(a_skse);
+  native::dye::SerializeSavedWorldTints(a_skse);
 }
 
 void LoadCallback(SKSE::SerializationInterface *a_skse) {
+  native::dye::ClearWorldTint();
   ui::conditions::ConditionParamOptionCache::Get().Reset();
   poc::ResetDeviousDevicesHider();
   poc::ResetVirtualWornTokenRuntimeState();
   native::external_equipment::ClearRuntimeState();
+  native::helmet_toggle::ResetRuntimeState();
   native::ClearAllFittingSlotStates();
   native::dave::ForgetHiddenRealEquipmentState();
   auto *menu = Menu::GetSingleton();
@@ -45,13 +50,17 @@ void LoadCallback(SKSE::SerializationInterface *a_skse) {
   workbench::DeserializeActorAutomaticEquipmentVisibilitySettings(a_skse);
   native::external_equipment::Deserialize(a_skse);
   poc::DeserializeVirtualWornTokenState(a_skse);
+  native::dye::DeserializeSavedWorldTints(a_skse);
   menu->ResetTransientWorkbenchUiState(false);
 }
 
 void RevertCallback([[maybe_unused]] SKSE::SerializationInterface *a_skse) {
+  native::dye::ClearWorldTint();
+  native::dye::RevertSavedWorldTints();
   ui::conditions::ConditionParamOptionCache::Get().Reset();
   poc::ResetDeviousDevicesHider();
   poc::ResetVirtualWornTokenRuntimeState();
+  native::helmet_toggle::ResetRuntimeState();
   native::ClearAllFittingSlotStates();
   native::InvalidateQueuedArmorRefreshes();
   native::RevertArmorClassificationMigrationState();

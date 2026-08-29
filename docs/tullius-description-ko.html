@@ -1,399 +1,101 @@
-<h1>Skyrim Fitting System v1.4.9</h1>
-
-<p><img src="//ac.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ" data-originalurl="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" class="fr-fic fr-dii"></p>
-
-<p><a href="https://www.nexusmods.com/skyrimspecialedition/mods/187128" target="_blank" rel="external nofollow noopener noreferrer">Skyrim Fitting System SE-AE at Skyrim Special Edition Nexus - Mods and Community</a></p>
-
-<p>실제 장비의 방어력·인챈트·효과는 유지하면서, 캐릭터에게 보이는 외형만 따로 구성하는 SKSE 기반 외형 시스템입니다. 기본 UI 단축키는 <strong>F6</strong>이며 옵션에서 바꿀 수 있습니다.</p>
-
-<p>플레이어·NPC·팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. 탈의 연동 방식과 직접 매핑 정책은 전체 액터가 공유하지만, 실제 이벤트 결과와 복원 상태는 해당 액터 FormID에만 저장됩니다.</p>
-
-<p>SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.</p>
-
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skyrim Fitting System - 아카라이브 게시용</title>
+<style>
+body{max-width:980px;margin:32px auto;padding:0 24px;background:#202124;color:#e8eaed;font-family:Arial,"Noto Sans KR",sans-serif;line-height:1.72}
+h1,h2,h3{color:#42acc8;line-height:1.35} h1{text-align:center;font-size:2.2rem} h2{font-size:1.55rem} h3{font-size:1.2rem}
+hr{border:0;border-top:1px solid #4b4d50;margin:32px 0 20px} a{color:#63d3ea} code{background:#303236;padding:2px 5px;border-radius:4px}
+figure{text-align:center;margin:24px auto} figure img{display:block;width:75%;height:auto;margin:auto;border-radius:5px} figcaption{margin-top:7px;color:#aeb4ba;font-size:.9rem}
+blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;background:#292b2f} li{margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Skyrim Fitting System v1.5.0</h1>
+<figure><a href="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" alt="Skyrim Fitting System"></a><figcaption>Skyrim Fitting System</figcaption></figure>
+<p>실제 장비의 방어력&#183;인챈트&#183;효과는 유지하면서, 캐릭터에게 보이는 외형만 따로 구성하는 SKSE 기반 외형 시스템입니다. 기본 UI 단축키는 <strong>F6</strong>이며 옵션에서 바꿀 수 있습니다.</p>
+<p>플레이어&#183;NPC&#183;팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.</p>
 <hr>
-
 <h2>주요 기능</h2>
-
 <ul>
-<li>실제 장비의 능력치와 효과를 유지하는 시각적 숨김 및 별도 등록 외형</li>
-<li>액터별 작업대 행, 조건, 수동 눈 버튼, 외부 모드 탈의·재착의 상태</li>
-<li>모드 설정 슬롯 연동, 바닐라 슬롯 자동 연동, 슬롯별 직접 편집 예외</li>
-<li>ESP 스캔, 후보 편집, 미리보기, 키트 생성을 제공하는 내장 키트 생성기</li>
-<li>최종 표시 외형을 읽는 OAR 조건, 내장 Grid Inventory Costume 연동, DFFMA OAR·Helmet Toggle 2·Dynamic Footprints용 선택형 호환 패치</li>
+<li>실제 장비를 벗지 않는 시각적 숨김과 능력치에 영향을 주지 않는 등록 외형</li>
+<li>액터별 기본 외형&#183;조건 외형&#183;표시 상태와 실제 장비/등록 외형의 개별&#183;전역 눈 버튼</li>
+<li>장비&#183;의상&#183;키트 일괄 등록, JSON 피팅 키트, 인게임 키트 생성기</li>
+<li>모드 설정 슬롯 연동, 바닐라 슬롯 자동 연동, 두 방식을 기반으로 한 직접 슬롯 편집</li>
+<li>외부 모드의 탈의&#183;재착의&#183;압수&#183;복장 교체를 액터별로 관찰하는 범용 연동</li>
+<li>RaceMenu BodyMorph, SOS/TNG, DAVE&#183;DAV&#183;native 표시 환경 지원</li>
+<li>OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume&#183;Helmet Toggle 2 연동, 선택형 DFFMA OAR&#183;Dynamic Footprints 호환 패치</li>
 </ul>
-
 <hr>
-
-<h2>v1.4.9 업데이트 요약</h2>
-
-<ul>
-<li>Skyrim SE 1.5.97과 Skyrim AE의 훅 위치를 명시적 런타임 프로필로 분리하고, 명령 형식을 확인한 뒤 설치하도록 보완했습니다.</li>
-<li>IED가 먼저 훅한 실제 <code>VisitWornItems</code> 지점에는 SFS 필터 visitor를 넘기지 않도록 수정해 장비 3D 재구성 시 CTD를 방지합니다.</li>
-<li>UI 캐릭터의 좌우 위치를 같은 절댓값으로 조금 더 바깥쪽에 배치했습니다. 각도와 높이는 그대로입니다.</li>
-</ul>
-
-<hr>
-
-<h2>필수·선택 모드</h2>
-
-<p>필수:</p>
-
-<ul>
-<li>설치한 Skyrim SE/AE 런타임에 맞는 SKSE64</li>
-<li>Address Library for SKSE Plugins</li>
-<li>본체에 포함된 <code>SkyrimFittingSystem-VirtualTokens.esl</code> 활성화</li>
-</ul>
-
-<p>선택:</p>
-
-<ul>
-<li>RaceMenu: 등록 외형의 실시간 BodyMorph 동기화</li>
-<li>DAVE 또는 DAV: 설치된 표시 환경을 자동 사용</li>
-<li>SOS 또는 TNG: 성기 가림·노출 호환</li>
-<li>Wet Function Redux: 별도 SFS 호환 패치 사용</li>
-<li>Open Animation Replacer 및 Dynamic Feminine Female Modesty Animations OAR: 별도 DFFMA 구성 패치 사용</li>
-<li>Grid Inventory v1.4.1 이상: 별도 SFS 패치 없이 Costume 연동 사용. Helmet Toggle 2·Dynamic Footprints SKSE BASE v3는 각각에 맞는 별도 SFS 패치 설치 시 사용</li>
-<li>SexLab·Soulgem Oven·Private Needs·Bathing in Skyrim·Devious Devices·Pama Prison Alternative 등 탈의/재착의 기능이 있는 외부 모드</li>
-</ul>
-
-<hr>
-
 <h2>설치와 업데이트</h2>
-
 <ol>
-<li>개인 키트가 있다면 <code>Interface/SkyrimFittingSystem/user</code>를 먼저 백업합니다.</li>
+<li>개인 키트가 있다면 <code>Interface/SkyrimFittingSystem/user</code>를 백업합니다.</li>
 <li>이전 SFS 모드 폴더를 완전히 삭제합니다.</li>
-<li>기존 <strong>SFS Helmet Toggle 2 호환 패치</strong>와 v1.4.4의 <strong>SFS Grid Inventory Costume Compatibility Patch</strong>가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.</li>
-<li>이전 독립형 시험판 <strong>SFS Kit Generator</strong> 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 이제 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요 없습니다.</li>
-<li>v1.4.9 본체 ZIP을 새 모드로 설치합니다.</li>
-<li><code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다.</li>
-<li>필요할 때만 백업한 개인 키트를 복원합니다. Grid Inventory v1.4.1 이상은 별도 패치가 필요 없으며, Wet Function Redux·DFFMA OAR·Helmet Toggle 2·Dynamic Footprints만 각각에 맞는 SFS 호환 패치를 원본 모드 뒤에 설치합니다.</li>
+<li>이전 독립형 <strong>SFS Kit Generator</strong>, 기존 <strong>SFS Helmet Toggle 2 호환 패치</strong>, v1.4.4 <strong>SFS Grid Inventory Costume Compatibility Patch</strong>가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.</li>
+<li>v1.5.0 본체 ZIP을 새 모드로 설치하고 <code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다.</li>
+<li>필요하면 백업한 개인 키트만 복원합니다.</li>
+<li>Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 <strong>별도 SFS 호환 패치만</strong> 원본 모드 뒤에 설치합니다.</li>
 </ol>
-
-<p>v1.4.0 파일 변경:</p>
-
-<ul>
-<li><code>SkyrimFittingSystem.dll</code> → <code>SFSCore.dll</code>: 추가 DLL이 아니라 기존 단일 본체 DLL의 이름 변경입니다. 새 이름은 구형 <code>skee64.dll</code>보다 먼저 로드됩니다.</li>
-<li><code>SkyrimFittingSystem-VirtualTokens.esl</code>: 외부 모드 탈의 연동용 필수 파일입니다.</li>
-<li>메인 ESP·SEQ·퇴역한 모드별 브리지 PEX/PSC는 제거되었습니다. 예전 고정 슬롯 Helmet Toggle 2 패치는 별도 v1.4.4 액터별 호환 패치로 대체되었습니다.</li>
-<li>UI 리소스와 <code>SkyrimFittingSystemNative.pex/psc</code>는 유지됩니다.</li>
-</ul>
-
-<p>구·신 본체 DLL이 함께 로드되면 같은 훅이 두 번 설치될 수 있으므로 기존 폴더 위에 덮어쓰지 마십시오.</p>
-
-<p>v1.2.x·v1.3.x 설정은 v1.4.0의 기본값인 <strong>모드 설정 슬롯 연동</strong>으로 마이그레이션됩니다. 이후 새 설정을 저장하면 선택한 방식이 유지됩니다. 기존 등록 외형·조건·표시 상태 데이터는 보존됩니다.</p>
-
+<p><code>SkyrimFittingSystem.dll</code>은 v1.4.0부터 <code>SFSCore.dll</code>로 바뀐 기존 단일 본체 DLL입니다. 구 폴더 위에 덮어쓰면 구&#183;신 DLL이 함께 로드되어 같은 훅을 두 번 설치할 수 있으므로, 반드시 이전 SFS 폴더를 지운 뒤 새로 설치하십시오. v1.2.x&#183;v1.3.x의 등록 외형&#183;조건&#183;숨김 데이터는 유지됩니다.</p>
 <hr>
-
 <h2>빠른 사용법</h2>
-
 <ol>
-<li>F6으로 SFS를 엽니다.</li>
-<li>작업대 상단에서 플레이어 또는 NPC를 선택합니다.</li>
-<li>장비·의상·키트 탭에서 외형을 찾습니다.</li>
-<li>더블클릭·드래그·컨텍스트 메뉴로 기본 영역 또는 조건 행에 등록합니다.</li>
-<li>실제 장비와 등록 외형의 눈 버튼을 각각 조절합니다.</li>
-<li>상황에 따라 바뀌는 외형은 붙박이 또는 사용자 정의 조건을 연결합니다.</li>
-<li>옵션에서 탈의 연동 방식을 고르거나, 필요한 슬롯만 <strong>직접 슬롯 편집</strong>으로 예외 지정합니다.</li>
-<li>재사용할 다중 슬롯 구성은 피팅 키트로 저장합니다.</li>
-<li>자동 키트를 만들려면 <strong>키트 생성기</strong>에서 의상 ESP를 선택해 스캔하고, 후보를 편집·미리보기한 뒤 키트를 생성합니다. 후보를 바꿔도 결과 행의 분류는 유지됩니다.</li>
-<li>옵션의 <strong>UI 열 때 캐릭터 위치</strong>를 사용 안 함·왼쪽·오른쪽으로 설정할 수 있습니다. 캐릭터가 보이는 바깥 영역을 우클릭 드래그하면 플레이어를 돌릴 수 있고, SFS를 닫으면 원래 방향으로 복원됩니다.</li>
+<li>F6으로 SFS를 열고 상단에서 플레이어 또는 NPC를 선택합니다.</li>
+<li>장비&#183;의상&#183;키트 탭에서 외형을 더블클릭하거나 드래그해 등록합니다.</li>
+<li>작업대 왼쪽 <strong>실제 장비</strong>, 오른쪽 <strong>등록 외형</strong>의 눈 버튼을 각각 조절합니다.</li>
+<li>조건 탭의 붙박이 조건 또는 사용자 정의 조건을 연결해 상황별 외형을 구성합니다.</li>
+<li>외부 모드 탈의에 외형이 반응해야 하면 옵션에서 연동 방식을 고릅니다.</li>
+<li>키트 생성기에서는 의상 ESP를 스캔하고 후보를 편집&#183;미리보기한 뒤 키트로 저장할 수 있습니다.</li>
 </ol>
-
-<p>표시 상태를 바꿔도 등록 FormID·원래 슬롯·기본/조건 행·행 순서·액터 소유권은 이동하거나 새로 만들어지지 않습니다.</p>
-
+<p>실제 장비를 숨겨도 착용은 유지되므로 방어력&#183;인챈트&#183;장비 효과가 사라지지 않습니다. 등록 외형의 눈 버튼은 시각적 표시만 바꾸며 등록 정보는 삭제하지 않습니다.</p>
 <hr>
-
-<h2>UI와 작업대</h2>
-
-<h3>작업대 기본 영역</h3>
-
-<p>상단 기본 영역은 선택한 액터의 평상시 상태입니다. 왼쪽 <strong>실제 장비</strong>는 인벤토리에 실제로 착용 중인 장비, 오른쪽 <strong>등록 외형</strong>은 SFS가 대신 보여 주는 외형입니다. 실제 장비를 눈 버튼으로 숨겨도 벗지 않으므로 방어력·인챈트·키워드·장비 효과는 유지됩니다. 등록 외형의 눈 버튼은 시각적 결과만 바꾸고 등록 정보는 지우지 않습니다.</p>
-
-<p>조건이 없는 등록 외형은 해당 슬롯의 기본 외형입니다. 적용 가능한 조건 외형이 없거나 모든 조건이 거짓이면 기본 외형으로 돌아갑니다. 기본 실제 장비·등록 외형·개별 눈 상태는 선택한 액터에게만 저장됩니다.</p>
-
-<h3>작업대 조건 영역</h3>
-
-<p>하단 조건 영역은 상황별 표시 규칙을 행으로 구성합니다. 각 행은 왼쪽 <strong>조건 설정</strong>과 오른쪽 <strong>동작 설정</strong>을 독립적으로 보존합니다.</p>
-
+<h2>작업대와 조건</h2>
+<p>작업대 기본 영역은 평소 사용할 실제 장비와 등록 외형을 보여 줍니다. 아래 조건 영역의 각 행은 왼쪽 <strong>조건 설정</strong>, 오른쪽 <strong>동작 설정</strong>으로 나뉘며, 실제 장비와 등록 외형을 조건이 참일 때 표시하거나 숨길 수 있습니다.</p>
+<figure><a href="https://ac-o.arca.live/20260815sac/48570fbbed7302d0877801be27a290dc6007671c1f65daaeb216ec7309fdf3a6.png?expires=1787378391&amp;key=3eNdI2V2cYW7YlhzROMMuw&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260815sac/48570fbbed7302d0877801be27a290dc6007671c1f65daaeb216ec7309fdf3a6.png?expires=1787378391&amp;key=3eNdI2V2cYW7YlhzROMMuw&amp;type=orig" alt="SFS 작업대 기본&#183;조건 영역"></a><figcaption>SFS 작업대 기본&#183;조건 영역</figcaption></figure>
 <ul>
-<li><strong>조건 설정:</strong> 언제 동작할지 결정합니다. 붙박이 또는 사용자 정의 조건 카드를 놓거나, 조건 탭의 카드를 더블클릭해 첫 번째 빈 조건 카드에 넣습니다.</li>
-<li><strong>동작 설정:</strong> 무엇을 어떻게 바꿀지 결정합니다. 실제 장비·기존 등록 외형·새로 등록할 외형을 놓고, 대상 눈 버튼으로 <strong>조건이 참일 때 표시</strong> 또는 <strong>조건이 참일 때 숨김</strong>을 지정합니다.</li>
+<li>조건 카드 더블클릭은 가장 위의 빈 조건 카드에 조건만 등록합니다.</li>
+<li>같은 조건의 빈 동작 행이 있으면 새 행보다 먼저 재사용합니다.</li>
+<li>기본 영역의 등록 외형을 조건 행으로 드래그할 수 있습니다.</li>
+<li>여러 조건이 동시에 참이면 위쪽 행이 우선합니다.</li>
 </ul>
-
-<p><code>+ 조건 슬롯 생성 +</code>은 양쪽이 비어 있는 행을 추가합니다. 조건만 있거나 동작만 있는 행은 안전하게 남아 있으며 반대편이 채워질 때까지 비활성입니다. 한쪽 카드를 지워도 다른 쪽은 지워지지 않고, 양쪽이 모두 비어 있는 행만 UI를 닫거나 다음 로드 경계에서 정리됩니다.</p>
-
-<p>기본 등록 외형은 조건 행의 동작 영역으로 드래그할 수 있습니다. 장비 또는 외형 카드를 컨텍스트 메뉴로 재지정할 때 같은 조건의 빈 동작 행이 있으면 중복 행을 새로 만들지 않고 먼저 재사용합니다. 조건 외형은 같은 액터의 기본 외형보다 우선하며, 여러 조건이 참이면 작업대 행 순서가 우선순위를 결정합니다. 다른 참 행이 우선 중이면 <strong>조건 충족 / 다른 조건 활성</strong>으로 표시됩니다.</p>
-
-<p><img src="//ac.arca.live/20260815sac/48570fbbed7302d0877801be27a290dc6007671c1f65daaeb216ec7309fdf3a6.png?expires=1787378391&amp;key=3eNdI2V2cYW7YlhzROMMuw" data-originalurl="https://ac-o.arca.live/20260815sac/48570fbbed7302d0877801be27a290dc6007671c1f65daaeb216ec7309fdf3a6.png?expires=1787378391&amp;key=3eNdI2V2cYW7YlhzROMMuw&amp;type=orig" class="fr-fic fr-dii"></p>
-
-<h3>장비 탭</h3>
-
-<p>설치된 ARMO 레코드를 이름·플러그인·슬롯으로 검색합니다. Ctrl을 누른 채 여러 항목을 선택한 후 우클릭하면 일괄 등록할 수 있습니다.</p>
-
-<h3>의상 탭</h3>
-
-<p>OTFT 의상의 방어구 항목을 인벤토리 실제 장비를 착용시키지 않고 한 번에 등록합니다.</p>
-
-<h3>키트 탭</h3>
-
-<p>다중 슬롯 등록 외형과 실제 장비 표시 상태를 재사용 가능한 JSON 키트로 저장하고 적용합니다. 기존 키트 JSON도 호환됩니다. 사용자 키트를 우클릭해 <strong>이름 변경</strong>을 고르면 키트 이름만 바뀌며 파일 경로·조각 구성·저장된 레이아웃은 유지됩니다. 읽기 전용 외부 키트는 변경할 수 없습니다.</p>
-
-<h3>키트 생성기 탭</h3>
-
-<p>설치된 의상 ESP를 선택해 이름·EditorID·점유 슬롯·색상·번호·SMP·노출도 규칙을 기준으로 호환되는 후보군을 구성합니다. 여러 ESP는 CPU와 메모리 예산 안에서 병렬 처리하며, 하나의 선택 ESP는 사용 가능한 작업 예산을 사용합니다. 진행률은 완료된 작업만 누적하므로 병렬 작업 완료 순서 때문에 뒤로 가지 않습니다.</p>
-
-<p>결과 행을 클릭하면 해당 키트를 선택하고 미리보기합니다. Ctrl+좌클릭으로 여러 결과 행을 선택할 수 있으며, 선택한 결과는 이름 변경·항목 삭제·합치기가 가능합니다. 후보 이름을 클릭하면 선택과 읽기 전용 미리보기만 바뀝니다. 조각 교체·삭제 화면은 별도의 <strong>편집</strong> 버튼으로만 들어갑니다. 키보드·게임패드의 위/아래는 현재 목록 선택과 미리보기를 함께 이동하고, 게임의 활성 키는 다음 단계 진입 또는 키트 적용에 사용합니다.</p>
-
-<p>후보 미리보기는 캐릭터와 작업대의 <strong>등록 외형</strong> 열에만 임시로 나타납니다. 저장된 작업대 행·인벤토리·실제 장비는 바꾸지 않습니다. 일반 Skyrim 표시 슬롯 충돌은 그대로 적용되며, 보호 슬롯과 SOS/TNG 성기 장비 후보를 보이게 하는 예외는 이 임시 생성기 미리보기에만 한정됩니다.</p>
-
-<p>스캔으로 결과 행을 만들 때의 초기 SFW/NSFW 판정은 그 결과 행에 고정됩니다. 후보 변경·조각 편집·후보 합치기는 그 분류를 다시 판정하지 않습니다. 알려진 의상 팩은 제공된 세트 카탈로그를 우선해 조각을 묶고, 그 밖의 ESP는 이름·점유 슬롯·실제 NIF 모델 경로의 일반 규칙을 사용합니다. 서로 다른 플러그인의 중복은 실제 모델 경로와 슬롯 구성이 충분히 겹칠 때만 더 완성도 높은 쪽을 유지합니다. 완성한 키트는 <code>Interface/SkyrimFittingSystem/user/kits</code>에 JSON으로 저장됩니다.</p>
-
-<h3>조건 탭</h3>
-
-<p>붙박이 조건과 사용자 정의 조건을 만들고 관리합니다. 붙박이 카드는 실내·실외·도시·마을·던전·홈, 전투·비전투, 낮·밤, 비·눈·수중, 은신·무기 상태처럼 바로 쓸 수 있는 상태를 제공합니다.</p>
-
-<p>사용자 정의 조건은 Skyrim 조건 함수, 함수 인수, 비교 연산자·값을 조합하고 AND/OR 또는 기존 붙박이·사용자 정의 조건을 참조할 수 있습니다. <code>도시 AND 비전투</code>, <code>던전 AND 전투</code>, <code>밤 AND 은신</code> 같은 규칙을 만들 수 있습니다. 연속된 OR 절은 Skyrim 방식의 OR 그룹으로 계산되고 드래그로 절 순서를 바꿀 수 있습니다.</p>
-
-<p>사용자 정의 조건에는 이름·설명·공유 표시 색상이 있습니다. 편집기는 함수 메타데이터에 맞춰 Form·정수·실수·문자열·불리언 입력을 제공하며, 저장 전 필수 인수·비교값·잘못된 참조·순환 참조를 검사합니다. 다른 조건 또는 작업대 행에서 이미 참조하는 조건은 실수로 삭제·이동하지 않도록 보호됩니다.</p>
-
-<p>조건 카드를 더블클릭하면 작업대의 첫 번째 빈 <strong>조건 카드만</strong> 채웁니다. 외형이나 실제 장비를 자동으로 끌고 오지 않으며, 동작 대상은 오른쪽에서 별도로 고릅니다.</p>
-
-<p><img src="//ac.arca.live/20260815sac/920d64d6e2084030218c8fac5859c931e6970326b4163d3063a967b1af779f80.png?expires=1787378391&amp;key=enLGynsmIVppTL5lqFhMTg" data-originalurl="https://ac-o.arca.live/20260815sac/920d64d6e2084030218c8fac5859c931e6970326b4163d3063a967b1af779f80.png?expires=1787378391&amp;key=enLGynsmIVppTL5lqFhMTg&amp;type=orig" class="fr-fic fr-dii"></p>
-
-<h3>옵션 탭</h3>
-
-<p>언어·글꼴·UI 투명도·단축키·게임 일시정지·주변 NPC 감지·외부 모드 탈의 연동·특수 효과 슬롯 보호·방패 외형 사용을 설정합니다. <strong>UI 열 때 캐릭터 위치</strong>는 사용 안 함·왼쪽·오른쪽을 고를 수 있고 3인칭에만 적용됩니다. 캐릭터가 표시되는 영역을 우클릭 드래그하면 플레이어를 회전할 수 있으며, SFS를 닫으면 원래 카메라와 방향으로 복원됩니다.</p>
-
+<p>붙박이 조건은 실내&#183;실외&#183;도시&#183;마을&#183;던전&#183;홈, 전투&#183;비전투, 낮&#183;밤, 비&#183;눈, 은신&#183;무기 상태 등을 제공합니다. 사용자 정의 조건은 Skyrim 조건 함수와 AND/OR를 조합해 <code>도시 AND 비전투</code>, <code>밤 AND 은신</code> 같은 규칙을 만들 수 있습니다.</p>
+<figure><a href="https://ac-o.arca.live/20260815sac/920d64d6e2084030218c8fac5859c931e6970326b4163d3063a967b1af779f80.png?expires=1787378391&amp;key=enLGynsmIVppTL5lqFhMTg&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260815sac/920d64d6e2084030218c8fac5859c931e6970326b4163d3063a967b1af779f80.png?expires=1787378391&amp;key=enLGynsmIVppTL5lqFhMTg&amp;type=orig" alt="SFS 조건 탭"></a><figcaption>SFS 조건 탭</figcaption></figure>
 <hr>
-
 <h2>외부 모드 탈의 연동</h2>
-
-<p>외부 모드 탈의 연동은 몇몇 모드 이름만을 위한 패치 모음이 아닙니다. 탈의·재착의·압수·복장 교체를 수행하는 외부 모드가 공통적으로 사용하는 실제 호출과 해당 액터의 최종 착용 결과를 관찰하는 범용 기능입니다. SFS는 이름 목록만 하드코딩하지 않고 <code>GetWornForm</code>, <code>UnequipItem*</code>, <code>EquipItem*</code>, <code>RemoveAllItems</code>, <code>RemoveItem</code>, <code>SetOutfit</code> 등을 관찰합니다. 아래 호환표의 모드명은 동작 유형별 대표 예시입니다.</p>
-
-<p>이 기능은 외부 모드가 시작한 장비 제어를 대상으로 합니다. 사용자가 인벤토리에서 직접 장비를 입고 벗는 일반 조작은 외부 이벤트로 분류하지 않습니다. 원본 모드가 실제 장비를 다시 입히면 연결된 자동 억제가 해제될 수 있지만, 원본 모드가 재착의하지 않으면 SFS가 대체 장비를 만들어 착용시키지는 않습니다.</p>
-
-<p>선택한 연동 방식과 직접 매핑표는 모든 액터에 공통으로 적용됩니다. 하지만 트랜잭션·자동 억제·DD 장치 상태·최종 표시 결과는 액터 FormID별이므로 NPC A의 탈의가 NPC B나 플레이어에게 누수되지 않습니다.</p>
-
+<p>특정 모드 이름만을 위한 전용 패치가 아니라 <code>GetWornForm</code>, <code>UnequipItem*</code>, <code>EquipItem*</code>, <code>RemoveAllItems</code>, <code>RemoveItem</code>, <code>SetOutfit</code> 등 공통 호출과 최종 착용 결과를 관찰하는 범용 기능입니다. 사용자가 인벤토리에서 직접 입고 벗는 조작은 외부 이벤트로 처리하지 않습니다.</p>
+<p>연동 방식과 슬롯 매칭은 모든 액터에 공통으로 적용하지만, 실제 탈의&#183;숨김&#183;복원 상태는 액터 FormID별로 분리됩니다. NPC A의 이벤트가 NPC B나 플레이어의 외형을 바꾸지 않습니다.</p>
 <h3>모드 설정 슬롯 연동</h3>
-
-<p><strong>권장 기본값입니다.</strong> SexLab 등 외부 모드가 각자의 MCM 또는 설정에서 고른 스트립 슬롯·제외 키워드·재착의 규칙은 그대로 권한을 가집니다.</p>
-
-<p>SFS는 각 등록 외형을 고정 FormID의 <strong>가상 착용 토큰</strong>으로 제공합니다. 외부 모드가 <code>GetWornForm</code>, 착용 배열, 키워드 필터로 액터를 조사할 때 실제 장비와 함께 해당 토큰을 볼 수 있습니다. 외부 모드 자신의 설정이 토큰을 탈의 대상으로 고르면 연결된 등록 외형을 숨기고, 같은 흐름에서 재착의가 확인되면 사용자가 이전에 정한 표시 상태로 돌립니다.</p>
-
-<p>토큰은 인벤토리에 추가되거나 실제로 착용되지 않으며 능력치·무게·게임플레이 효과를 만들지 않습니다. SFS는 모든 모드의 설정을 하나의 공통 규칙으로 바꾸지 않고, 바닐라/확장 슬롯 번호만으로 단순 분리하지도 않습니다. 실제 착용 장비와 빈 외형 슬롯의 가상 토큰을 함께 사용해 외부 모드 설정이 낸 결과를 등록 외형에 반영합니다.</p>
-
-<p>다음 경우에 적합합니다.</p>
-
-<ul>
-<li>SexLab 등 각 외부 모드에서 독립적으로 선택한 스트립 슬롯·제외 키워드·재착의 규칙을 그대로 따르고 싶을 때</li>
-<li>43~61번 확장 슬롯 외형도 외부 모드의 설정 규칙에 참여시킬 때</li>
-<li>대응하는 실제 장비가 없는 등록 외형도 착용 배열 또는 키워드 필터에 나타나야 할 때</li>
-</ul>
-
-<p><img src="//ac.arca.live/20260815sac/8f09085865cb2c22cca32761a03706d4258743a34474138d7c5abd17fdb4e2ca.png?expires=1787378391&amp;key=sWplAoGDlvh6MiQx_b9f-Q" data-originalurl="https://ac-o.arca.live/20260815sac/8f09085865cb2c22cca32761a03706d4258743a34474138d7c5abd17fdb4e2ca.png?expires=1787378391&amp;key=sWplAoGDlvh6MiQx_b9f-Q&amp;type=orig" class="fr-fic fr-dii"></p>
-
+<p><strong>권장 기본값입니다.</strong> SexLab 등 각 외부 모드가 MCM/INI에서 선택한 스트립 슬롯&#183;제외 키워드&#183;재착의 규칙을 그대로 따릅니다.</p>
+<p>SFS는 실제 인벤토리에 추가되지 않는 고정 FormID의 <strong>가상 착용 토큰</strong>을 제공합니다. 외부 모드가 자기 설정으로 토큰을 탈의하면 연결된 등록 외형이 숨겨지고, 같은 흐름에서 실제 장비 재착의가 확인되면 사용자의 이전 표시 상태로 돌아갑니다. 토큰은 무게&#183;능력치&#183;장비 효과를 만들지 않습니다.</p>
+<figure><a href="https://ac-o.arca.live/20260815sac/8f09085865cb2c22cca32761a03706d4258743a34474138d7c5abd17fdb4e2ca.png?expires=1787378391&amp;key=sWplAoGDlvh6MiQx_b9f-Q&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260815sac/8f09085865cb2c22cca32761a03706d4258743a34474138d7c5abd17fdb4e2ca.png?expires=1787378391&amp;key=sWplAoGDlvh6MiQx_b9f-Q&amp;type=orig" alt="모드 설정 슬롯 연동"></a><figcaption>모드 설정 슬롯 연동</figcaption></figure>
 <h3>바닐라 슬롯 자동 연동</h3>
-
-<p>이 방식의 핵심은 투구·몸통·장갑·신발·장신구처럼 외형 종류를 자동 인식한 뒤 자연스러운 바닐라 장비 슬롯에 연결하는 것입니다. SFS는 외형의 이름·EditorID·키워드·원래 ARMO/ARMA 점유 슬롯, 영어·한국어·중국어 의미 단서를 분석합니다. 온라인 학습이나 생성형 AI가 아닌 결정적 로컬 규칙 기반 판정입니다.</p>
-
-<p>이 방식은 SexLab 등 외부 모드가 각자 MCM에서 고른 스트립 슬롯·키워드 설정을 직접 따르지 않습니다. SFS가 계산한 바닐라 장비 연결과 그 실제 장비 변화에 따르므로 <strong>모드 설정 슬롯 연동</strong>과 다른 결과가 날 수 있습니다.</p>
-
-<p>자동 판정 순서:</p>
-
-<ol>
-<li>외형 ARMO와 연결된 모든 ARMA가 점유하는 슬롯을 합칩니다. 순수 Hair 31·Long Hair 41·Forearms 34·Calves 38처럼 명확한 바닐라 파티션은 먼저 보존합니다.</li>
-<li>EditorID와 표시 이름을 소문자 단어 토큰으로 정규화합니다. <code>BattleAngelsTop01</code>처럼 대소문자·문자/숫자 경계도 나누어 판정합니다.</li>
-<li>원본 ESP/KID 또는 다른 모드가 준 키워드 EditorID를 같은 판정 텍스트에 더합니다. SFS가 임시로 붙인 SOS/TNG 런타임 키워드는 다시 판정에 피드백되지 않도록 제외합니다.</li>
-<li>구체적인 종류가 넓은 종류보다 우선합니다. 예를 들어 <code>circlet</code>·<code>glasses</code>·<code>mask</code>는 42, <code>helmet</code>·<code>hood</code>·<code>hat</code>은 30, <code>necklace</code>·<code>amulet</code>·<code>choker</code>는 35를 우선합니다. 같은 뜻의 한국어·간체/번체 중국어도 포함합니다.</li>
-<li><code>glove</code>·<code>gauntlet</code>·<code>bracer</code>·팔찌 계열은 Hands 33, <code>boot</code>·<code>shoe</code>·<code>heel</code>·<code>stocking</code>은 Feet 37을 우선합니다. <code>body</code>·<code>dress</code>·<code>top</code>·<code>pants</code>·<code>skirt</code>·<code>belt</code>·<code>cloak</code> 같은 몸통 의상과 일반 장신구는 Body 32에 연결합니다.</li>
-<li>한 종류에 후보 슬롯이 여러 개면 현재 액터가 실제로 입었거나 외부 모드가 방금 벗긴 슬롯을 우선합니다. 알 수 없는 확장 슬롯 외형은 안전하게 Body 32로 돌아가며, 사용자가 보호한 슬롯은 자동 후보에서 제외됩니다.</li>
-</ol>
-
-<p>어휘는 영어·한국어·간체 중국어·번체 중국어를 다루며 위 단어는 예시입니다. 전체 로컬 규칙표에는 가발·헤어 장식·방패·반지·팔/다리 장식·속옷·수영복·로브·가방·날개·일반적인 철자 변형도 포함됩니다.</p>
-
-<p>대표 연결:</p>
-
-<ul>
-<li>투구/후드: 30, 가발/헤어: 31, 서클릿/안경/마스크: 42</li>
-<li>몸통·상의·하의·속옷·치마·벨트: 32</li>
-<li>장갑/팔 장식: 33, 전완: 34</li>
-<li>목걸이: 35, 반지: 36</li>
-<li>신발/다리 장식: 37, 종아리: 38, 방패: 39</li>
-</ul>
-
-<p>SFS는 ARMO와 연결된 모든 ARMA의 점유 슬롯을 합치므로 32+34+38 몸통 장비, 33+34 장갑, 37+38 신발, 30+31+42 머리 장비를 자연스럽게 추적합니다. 외부 모드가 연결된 실제 장비를 벗기면 등록 외형도 숨기고, 실제 장비가 재착용되면 사용자가 이전에 정한 표시 상태로 돌아갑니다.</p>
-
-<p>다음 경우에 적합합니다.</p>
-
-<ul>
-<li>각 외부 모드의 MCM 설정과 독립적으로 일반적인 신체 부위를 따라가고 싶을 때</li>
-<li>확장 슬롯 의상을 자연스러운 바닐라 몸통·장갑·신발·장신구 앵커로 분류하고 싶을 때</li>
-<li>실제 장비 탈의/재착의와 단순하게 연결하고 싶을 때</li>
-</ul>
-
-<p><img src="//ac.arca.live/20260815sac/eb3519e11948d2888ffae0236679e5087860028acc42363844ac6b5b6ee512f2.png?expires=1787378391&amp;key=V53HRWDDH135s4-JO2xPLQ" data-originalurl="https://ac-o.arca.live/20260815sac/eb3519e11948d2888ffae0236679e5087860028acc42363844ac6b5b6ee512f2.png?expires=1787378391&amp;key=V53HRWDDH135s4-JO2xPLQ&amp;type=orig" class="fr-fic fr-dii"></p>
-
+<p>등록 외형의 이름, EditorID, 키워드와 ARMO/ARMA 점유 슬롯을 분석해 투구&#183;몸통&#183;장갑&#183;신발&#183;장신구 같은 바닐라 장비 슬롯에 자동 연결합니다. 외부 모드의 MCM 설정을 직접 따르지는 않고, SFS가 계산한 바닐라 슬롯의 실제 장비 탈착 결과를 따르므로 모드 설정 슬롯 연동과 다른 결과가 날 수 있습니다.</p>
+<figure><a href="https://ac-o.arca.live/20260815sac/eb3519e11948d2888ffae0236679e5087860028acc42363844ac6b5b6ee512f2.png?expires=1787378391&amp;key=V53HRWDDH135s4-JO2xPLQ&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260815sac/eb3519e11948d2888ffae0236679e5087860028acc42363844ac6b5b6ee512f2.png?expires=1787378391&amp;key=V53HRWDDH135s4-JO2xPLQ&amp;type=orig" alt="바닐라 슬롯 자동 연동"></a><figcaption>바닐라 슬롯 자동 연동</figcaption></figure>
 <h3>직접 슬롯 편집</h3>
-
-<p>옵션에서 <strong>직접 슬롯 편집</strong>을 선택하면 등록 외형과 슬롯 관계를 함께 보여 주는 팝업이 열립니다. 직접 편집은 모든 슬롯을 수동으로 다시 만들어야 하는 별도 엔진이 아닙니다. 아래 두 자동 기반 중 하나를 유지하고 필요한 곳에만 예외를 더합니다.</p>
-
+<p>모드 설정 또는 바닐라 자동 연동을 기반으로 필요한 슬롯만 예외 지정합니다. 완전 수동인 별도의 세 번째 기반은 없습니다.</p>
 <ul>
-<li>모드 설정 슬롯 연동</li>
-<li>바닐라 슬롯 자동 연동</li>
+<li><code>자동 매칭 -&gt; 슬롯</code>: 해당 예외를 지우고 기반 방식의 자동 계산 사용</li>
+<li><code>연동안함</code>: 해당 외형 슬롯만 외부 연동에서 제외</li>
+<li>구체적인 슬롯: 선택한 대상 슬롯에 고정 연결</li>
 </ul>
-
-<p>완전 수동인 세 번째 기반은 없습니다. 자동 기반 하나를 고르고 필요한 슬롯만 예외 지정합니다. 카드 편집은 팝업 안에서 고른 기반을 바꾸지 않으며, 건드리지 않은 슬롯과 나중에 새로 등록한 외형은 계속 그 자동 규칙을 따릅니다. 적용 후 옵션 콤보에는 사용자 예외가 있다는 뜻으로 <strong>직접 슬롯 편집</strong>이 표시되지만 내부에는 모드 설정 또는 바닐라 자동 기반이 저장됩니다.</p>
-
-<ul>
-<li><strong>모드 설정 기반의 직접 예외:</strong> 외형의 가상 토큰을 30~61번 중 선택한 대상 슬롯으로 옮깁니다. SexLab 등 외부 모드는 그 대상 슬롯에 대한 자기 설정·키워드 필터를 적용합니다.</li>
-<li><strong>바닐라 기반의 직접 예외:</strong> 이름·EditorID·키워드 자동 분류 대신 사용자가 고른 실제 바닐라 장비 앵커를 사용합니다. 그 앵커 실제 장비의 탈의·재착의를 따릅니다.</li>
-<li><code>자동 매칭 → 슬롯</code>: 직접 예외만 지우고 선택한 기반으로 돌아갑니다.</li>
-<li><code>연동 안 함</code>: 해당 등록 외형 슬롯만 외부 탈의 연동에서 제외합니다.</li>
-<li>구체적인 슬롯: 해당 외형을 선택한 대상 슬롯에 고정합니다.</li>
-</ul>
-
-<p><code>자동 매칭</code>은 세 번째 모드가 아니라 해당 카드의 직접 예외만 지우는 동작입니다. 모드 설정 기반은 30~61번의 대상 슬롯을 허용하고, 바닐라 기반은 30·31·32·33·34·35·36·37·38·39·42번 바닐라 앵커만 허용합니다. 같은 다중 슬롯 등록 아이템에 속한 카드는 함께 동기화됩니다.</p>
-
-<p>선택한 기반과 직접 매핑표는 모든 액터가 공유합니다. 실제 탈의 트랜잭션·자동 억제·수동 눈 상태·복원 결과는 액터 FormID별로 분리됩니다.</p>
-
-<h3>연동 안 함</h3>
-
-<p>외부 모드의 탈의·재착의가 등록 외형 표시를 자동으로 바꾸지 않습니다. 저장된 직접 매핑값은 유지되며 나중에 연동을 다시 켜면 돌아옵니다.</p>
-
-<h3>수동 눈 버튼과 자동 상태</h3>
-
-<p>외부 이벤트가 진행 중이라는 이유만으로 눈 버튼을 잠그지 않습니다. 자동 상태는 정확히 반영하지만 실제 장비와 등록 외형의 개별·전역 눈 버튼은 계속 사용할 수 있습니다. 보호 슬롯처럼 별도 기능이 소유한 제한만 유지됩니다.</p>
-
-<p>자동 억제는 등록 정보를 지우지 않습니다. 사용자가 원래 숨긴 외형은 재착의 뒤에도 숨김으로 남고, 표시 중이던 외형은 외부 모드가 연결된 실제 장비를 실제로 재착용했을 때 복원됩니다.</p>
-
-<h3>외부 모드 호환표</h3>
-
-<p>아래 모드명은 제한된 지원 목록이 아니라 동작 유형별 대표 예시입니다. 표에 없는 모드도 일반적인 탈의·재착의·압수·복장 교체 호출을 사용한다면 별도 SFS 패치나 원본 모드 업데이트 없이 대부분 호환될 수 있습니다. 검증 열에 이름이 없는 모드는 개별 장면 확인이 필요합니다.</p>
-
-<table>
-<thead>
-<tr><th>동작 유형</th><th>대표 모드</th><th>호환성</th><th>검증 상태</th></tr>
-</thead>
-<tbody>
-<tr><td>SexLab 탈의·재착의<br><code>StripActor</code> · <code>GetWornForm</code><br><code>UnequipItemEx</code> · <code>EquipItemEx</code></td><td>SexLab Framework SE · SexLab Utility Plus · Soulgem Oven / SGO4 Integration Fork · Fill Her Up Baka Edition · SexLab Defeat Bane · BaboDialogue · Bimbos of Skyrim · Balazar’s Bitch · Sexy Adventures · SexLab Approach Redux · SexLab Aroused Creatures · SexLab Dialogues · SexLab Solutions · SexLab Romance · SexLab Body Search</td><td>범용 호환</td><td>SexLab·SGO 검증 완료</td></tr>
-<tr><td>슬롯 필터·개별 탈착<br><code>AddAllEquippedItemsToArray</code><br><code>GetWornForm</code><br><code>UnequipItem/Slot/Ex</code><br><code>EquipItem/ByID</code></td><td>Private Needs – Orgasm · Bathing in Skyrim – Renewed · Licenses – Player Oppression · SLHH Expansion · Trap Needs to Be Real Trap / TNTR · Simple Player Prostitution · Death Trap Chest · Soul Resurrection</td><td>범용 호환</td><td>PNO·Bathing 검증 완료</td></tr>
-<tr><td>DD 장치·Hider<br><code>GetWornForm</code><br><code>EquipItem*</code> · <code>UnequipItem*</code><br><code>zadNativeFunctions.SyncSetting</code></td><td>Devious Devices SE/NG · Devious Helpless Redux · Devious Interests · Devious Cidhna · Devious Curses NG · Unforgiving Devices · Laura’s Bondage Shop</td><td>DD 전용 호환</td><td>DD 착용·해제 검증 완료</td></tr>
-<tr><td>감옥·압수·구금<br><code>RemoveAllItems</code> · <code>RemoveItem</code><br><code>SetOutfit</code><br><code>EquipItem/UnequipItem</code></td><td>Pama Prison Alternative · Pama Orkish Bounty Hunters · Pama Punishment · Pama Bad Ends · Pama Sovngarde · Pama Deadly Furniture · Captured by the Thalmor · Captive Player · Dark Arena · Bandit Paradise · Follower Slavery Mod</td><td>범용 호환</td><td>Pama 검증 완료</td></tr>
-<tr><td>노예·강제 복장 교체<br><code>StripActor</code> · <code>UnequipAll</code><br><code>RemoveAllItems</code> · <code>SetOutfit</code><br><code>EquipItem*</code></td><td>Public Whore · Sanguine Debauchery / SD+ · Simple Slavery Plus Plus / Rebuild · S.L.U.T.S. Resume · Submissive Lola · Dress Up Lover’s NPC Outfit Changer</td><td>범용 호환</td><td>모드별 추가 검증 필요</td></tr>
-<tr><td>시작·퀘스트 복장 교체<br><code>UnequipAll</code> · <code>RemoveAllItems</code><br><code>SetOutfit</code> · <code>EquipItem</code></td><td>Alternate Perspective · Deviant Start · Kidnapped Start · Adventurer’s Start · The Adventurer’s Guild</td><td>범용 호환</td><td>모드별 추가 검증 필요</td></tr>
-</tbody>
-</table>
-
+<p>건드리지 않은 슬롯과 나중에 새로 등록한 외형은 계속 선택한 기반 규칙을 따릅니다. 직접 매칭도 전체 액터 공통 설정이지만 이벤트 결과는 계속 액터별로 분리됩니다.</p>
 <hr>
-
-<h2>실제 장비·등록 외형 표시와 조건</h2>
-
-<p>실제 장비 숨김은 시각적 처리만 하며 장비를 벗기거나 방어력·인챈트·효과를 없애지 않습니다. 등록 외형 숨김은 표시만 없애고 등록 정보는 보존합니다.</p>
-
-<p>전역 숨김과 개별 눈 버튼은 함께 정상 조합됩니다. 개별 항목이 전역 상태와 다르면 전역 체크박스는 정확한 부분 상태를 보여 줍니다. 외부 모드 자동 상태도 같은 표시 규칙을 따릅니다.</p>
-
-<p>조건 외형은 같은 액터의 기본 외형보다 우선합니다. 조건 카드와 동작 카드는 독립 보존되며, 빈 조건/동작 영역은 같은 드래그 앤 드롭 동작과 시각 스타일을 공유합니다.</p>
-
-<hr>
-
-<h2>액터와 NPC</h2>
-
-<p>등록 외형·실제 장비 숨김·조건·외부 트랜잭션·임시 표시 상태는 모두 액터별입니다. 액터 선택기는 플레이어·저장 데이터가 있는 NPC·현재 주변 NPC를 표시하며, 적대 액터와 시체는 자동 주변 탐지에서 제외합니다.</p>
-
-<p>모든 액터가 같은 연동 정책과 매핑표를 사용하더라도 실제 결과는 영향받은 FormID에만 저장됩니다. NPC A가 참여한 SexLab 장면이나 복장 교체가 NPC B나 플레이어를 바꾸지 않습니다.</p>
-
-<hr>
-
-<h2>보호 특수 효과 슬롯과 방패</h2>
-
-<p>50·51·60·61번 슬롯은 기본으로 보호되며 30~61번에서 사용자가 바꿀 수 있습니다.</p>
-
-<ul>
-<li>보호 슬롯을 포함한 실제 장비는 항상 표시됩니다.</li>
-<li>보호 아이템의 새 등록 외형 등록은 막힙니다.</li>
-<li>이미 등록된 기본·조건 외형은 보호 중 비활성이고 보호를 해제하면 돌아옵니다.</li>
-<li>장비·의상·키트·조건 등록·탈의 연동 팝업은 같은 필터를 사용합니다.</li>
-</ul>
-
-<p><strong>방패를 외형 슬롯으로 사용</strong>은 기본 OFF입니다. OFF이면 실제 39번 방패는 계속 표시되고 방패 외형 등록은 막힙니다. ON이면 39번을 일반 외형 슬롯처럼 쓸 수 있습니다.</p>
-
-<hr>
-
-<h2>피팅 키트</h2>
-
-<p>게임 가상 경로:</p>
-
-<p><code>Data/Interface/SkyrimFittingSystem/user/kits</code></p>
-
-<p>MO2의 SFS 모드 폴더 안에서는 <code>Data</code> 폴더를 한 번 더 만들지 말고 아래 경로를 사용합니다.</p>
-
-<p><code>Interface/SkyrimFittingSystem/user/kits</code></p>
-
-<p>내장 <strong>키트 생성기</strong>는 완성한 JSON을 이곳에 직접 씁니다. 외부에서 만든 키트도 이 폴더에 복사할 수 있습니다. UTF-8 한글·중문·기타 Unicode 이름과 경로, UTF-8 BOM 파일을 지원하며 잘못되었거나 읽을 수 없는 JSON은 안전하게 건너뜁니다.</p>
-
-<hr>
-
-<h2>RaceMenu BodyMorph와 가발 색상</h2>
-
-<p>RaceMenu가 설치되어 있으면 모드별 이벤트 목록 대신 RaceMenu의 공통 BodyMorph/NiOverride 갱신 경로를 따릅니다. 폴링이나 전역 액터 스캔 없이 실제 모프 갱신을 받은 액터와 그 액터의 활성 등록 외형 노드만 DAVE·DAV·native 경로에서 처리합니다.</p>
-
-<p>세이브 로드 뒤 등록 가발 색이 어두워지면 <a href="https://www.nexusmods.com/skyrimspecialedition/mods/156414" target="_blank" rel="external nofollow noopener noreferrer">Hair Colour Sync NG</a>를 권장합니다. RaceMenu의 <code>Data/SKSE/Plugins/skee64.ini</code>에서 <code>bEnableTintHairSlot=0</code>을 사용하고, 가발 색상 동기화 모드는 여러 개를 함께 쓰지 마십시오.</p>
-
-<hr>
-
-<h2>SOS / TNG와 나체 판정</h2>
-
-<p>SFS는 실제 장비와 등록 외형의 최종 표시 조합을 평가합니다. 원본 모드와 사용자가 지정한 노출/가림 정책이 우선하며, SFS가 소유한 런타임 키워드는 안전하게 추적·정리합니다.</p>
-
-<p>자동 32/49번 분류는 원본 ARMO 변경을 최소화합니다. 확인된 32번 상의 전용 아이템은 반대 SFS 소유 Concealing/Covering 상태를 지우고 Revealing 키워드를 얻습니다. 일반적인 32번 전신 장비는 기본 SOS/TNG 32번 동작만으로 가려지므로 SFS는 충돌하는 SFS Revealing 상태만 지우며 Concealing·Covering·Underwear 키워드를 새로 붙이지 않습니다. 분류된 49번 하의는 기본 SOS/TNG가 49번을 자동으로 가리지 않을 수 있어 Concealing/Covering·Underwear 키워드를 얻습니다. ESP·KID·다른 모드가 원래 제공한 키워드는 지우지 않습니다.</p>
-
-<p>32번 상의 전용 이름 판정은 <code>ArmorCuirass</code>·<code>ArmorHeavy</code>·<code>ArmorLight</code>·<code>ArmorMaterial*</code>·<code>ClothingBody</code>·<code>VendorItemArmor</code> 같은 일반 바닐라 장비 분류 키워드를 무시합니다. 아이템 이름·EditorID·의미 있는 모드/KID 키워드는 계속 사용하므로 일반 바닐라 방어구가 <code>top</code>·<code>bra</code>·<code>shirt</code>로 잘못 판정되지 않습니다.</p>
-
-<p>Papyrus와 Skyrim 엔진 조건 <code>WornHasKeyword</code> 검사는 같은 액터별 최종 몸통 표시 상태를 사용합니다. 실제 32번 장비 또는 등록 32번 외형 중 하나가 화면에 보이면 의상을 입은 상태이며, 둘 다 숨겨지면 나체입니다. 이 처리는 인벤토리를 직접 검사하는 외부 DLL만의 별도 로직을 강제로 바꾸지는 않습니다.</p>
-
-<hr>
-
-<h2>DAV / DAVE / Native 환경</h2>
-
-<p>SFS는 DAVE 공개 갱신 API·일반 DAV 후속 갱신·Skyrim native 스키닝을 분리합니다. 저장 형식·액터 소유권·등록 FormID·원래 슬롯은 환경에 따라 달라지지 않습니다.</p>
-
-<hr>
-
-<h2>Wet Function Redux</h2>
-
-<p>Wet Function Redux는 별도의 선택형 호환 패치를 통해 SFS 등록 외형에 젖음 효과를 적용합니다.</p>
-
-<hr>
-
 <h2>선택형 호환 패치</h2>
-
 <ul>
-<li><strong>Dynamic Feminine Female Modesty Animations OAR 4.30:</strong> 별도 FOMOD가 선택한 OAR JSON 조건만 SFS 최종 표시 외형을 읽도록 바꿉니다. DFFMA 애니메이션·메시·스크립트·DLL·플러그인은 교체하지 않습니다.</li>
-<li><strong>Wet Function Redux Visual Effect Patch v1.2.0:</strong> 시각 효과 스크립트만 제공합니다. Wet Function MCM 스크립트는 교체하지 않으며 RaceMenu 경고는 SFS 장비/세이브 데이터를 바꾼 결과가 아니라 Wet Function의 기존 자체 검사입니다.</li>
-<li><strong>Helmet Toggle 2:</strong> HT2를 쓸 때만 별도 스크립트 패치를 설치합니다. 각 액터의 HT2 관리 슬롯(30/31/42/44, 해당할 경우 플레이어 55)을 연결된 SFS 등록 외형에 전달합니다. 실제 장비는 HT2가 계속 관리하며 SFS는 액터별 연동·저장된 수동 눈 상태·DAVE/DAV/native 표시 경로를 유지합니다.</li>
-<li><strong>Dynamic Footprints SKSE BASE v3:</strong> 별도 패치는 표시 중인 SFS Feet 37 외형만 Dynamic Footprints의 발자국 분류에 제공하고, 그 외에는 실제 신발을 사용합니다. 검증한 정확한 v3 DLL이 아니면 자동 비활성화됩니다.</li>
+<li><strong>Wet Function Redux Visual Effect Patch v1.2.0:</strong> 시각 효과 스크립트만 제공합니다. Wet Function MCM을 덮어쓰지 않으며 RaceMenu 경고는 Wet Function의 기존 자체 검사입니다.</li>
+<li><strong>DFFMA OAR 4.30:</strong> 선택한 OAR <code>config.json</code>의 표시 장비 조건만 바꿉니다. DFFMA 애니메이션&#183;OAR 규칙&#183;세이브&#183;충돌 자체를 고치지는 않습니다.</li>
+<li><strong>Grid Inventory Costume v1.4.1 이상:</strong> SFSCore가 공개 Costume 상태 메시지를 직접 받습니다. 플레이어 소유 ARMO가 하나 이상인 Costume을 착용&#183;교체할 때만 플레이어 등록 외형을 교체합니다. Costume 해제&#183;빈 Costume&#183;비장비 구성은 SFS 등록 외형을 건드리지 않으며, 시작&#183;세이브 로드&#183;리버트 뒤 Grid가 보내는 첫 복원 상태도 무시합니다. Grid DLL을 교체하지 않으며 Grid의 UI&#183;렌더&#183;로드아웃&#183;세이브&#183;실제 장비는 그대로 Grid가 관리합니다.</li>
+<li><strong>Helmet Toggle 2:</strong> SFSCore 본체가 정확한 플레이어 상태 전역값과 액터별 NPC&#183;팔로워 주문 전환만 관찰하므로 별도 SFS 패치가 필요 없습니다. HT2가 숨긴 착용 상태의 실제 투구가 31 Hair를 점유하면 해당 액터의 스키닝 worn-mask에서 실제 31번만 해제해 원래 머리카락을 표시합니다. 실제 장비&#183;HT2/DAVE 변형&#183;모드 설정 가상토큰은 건드리지 않으며, 순수 등록 31번은 독립적으로 유지하고 등록 31+42 카드는 42번을 통해 따릅니다. 주기적 액터 스캔과 HT2 스크립트 교체는 없습니다.</li>
+<li><strong>Dynamic Footprints SKSE BASE v3:</strong> Dynamic Footprints 자신의 발자국 분류에서만 표시 중인 SFS 37번 신발 외형을 읽습니다. 발자국 규칙&#183;에셋&#183;세이브&#183;충돌 자체를 고치지는 않으며 검증한 정확한 DLL 빌드가 아니면 자동 비활성화됩니다.</li>
 </ul>
-
 <hr>
-
-<h2>외부 런타임 메뉴 API</h2>
-
-<p>API 모듈 이름은 v1.4.0에서 <code>SkyrimFittingSystem.dll</code>에서 <code>SFSCore.dll</code>로 변경되었습니다. 외부 단축키·메뉴 관리 모드는 아래 함수를 찾을 때 <code>SFSCore.dll</code>을 조회해야 합니다.</p>
-
+<h2>기타 호환</h2>
 <ul>
-<li><code>SkyrimFittingSystem_Open</code></li>
-<li><code>SkyrimFittingSystem_Close</code></li>
-<li><code>SkyrimFittingSystem_IsMenuOpen</code></li>
-<li><code>SkyrimFittingSystem_SetHotkeyEnabled</code></li>
+<li>RaceMenu가 있으면 실제 모프가 바뀐 액터와 그 액터의 등록 외형만 다시 동기화합니다. 전역 액터 스캔과 주기적 폴링은 사용하지 않습니다.</li>
+<li>SOS/TNG는 실제 장비와 등록 외형의 최종 표시 상태를 함께 평가합니다. 원래 ESP&#183;KID&#183;다른 모드의 키워드는 삭제하지 않습니다.</li>
+<li>SFS는 DAVE 공개 갱신 API, 일반 DAV, Skyrim native 표시 경로를 분리해 사용합니다. 환경이 달라도 저장 형식과 액터 소유권은 같습니다.</li>
 </ul>
-
-<p>바뀐 것은 DLL 조회 이름뿐이며 네 C export 이름과 함수 시그니처는 유지됩니다. 두 버전을 모두 지원하는 모드는 <code>SFSCore.dll</code>을 먼저 찾고, 없을 때만 v1.3.x용 <code>SkyrimFittingSystem.dll</code>을 보조 경로로 찾으면 됩니다. 요청은 SFS의 안전한 UI 처리 지점으로 전달되고, 단축키 활성 상태는 게임을 다시 실행하면 초기화됩니다. 소비자 헤더와 <code>GetProcAddress</code> 예제는 소스 배포본에 포함되어 있습니다.</p>
-
-<hr>
-
-<h2>Credits &amp; License</h2>
-
-<p>Skyrim Fitting System은 <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="external nofollow noopener noreferrer">GNU GPLv3</a>로 배포합니다. 소스 코드는 <a href="https://github.com/compilecraftworks/SkyrimFittingSystem" target="_blank" rel="external nofollow noopener noreferrer">GitHub</a>에서 확인할 수 있습니다. 이 프로젝트에는 <a href="https://www.nexusmods.com/skyrimspecialedition/mods/175182" target="_blank" rel="external nofollow noopener noreferrer">Skyrim Vanity System</a>과 <a href="https://www.nexusmods.com/skyrimspecialedition/mods/42162" target="_blank" rel="external nofollow noopener noreferrer">Skyrim Outfit System SE Revived</a>에서 파생·수정한 작업이 포함됩니다.</p>
-
-<p>CommonLibSSE-NG, Dear ImGui, SKSE, Address Library for SKSE Plugins의 제작자와 기여자분들께 감사드립니다. 각 권리는 원저작자에게 있습니다.</p>
+</body>
+</html>

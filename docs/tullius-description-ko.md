@@ -1,4 +1,4 @@
-# Skyrim Fitting System v1.4.9
+# Skyrim Fitting System v1.5.0
 
 ![Skyrim Fitting System](https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&key=wSK-nG9UwFePxIQ1PlXhgQ&type=orig)
 
@@ -14,16 +14,16 @@
 - 모드 설정 슬롯 연동, 바닐라 슬롯 자동 연동, 두 방식을 기반으로 한 직접 슬롯 편집
 - 외부 모드의 탈의·재착의·압수·복장 교체를 액터별로 관찰하는 범용 연동
 - RaceMenu BodyMorph, SOS/TNG, DAVE·DAV·native 표시 환경 지원
-- OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume 연동, 선택형 DFFMA OAR·Helmet Toggle 2·Dynamic Footprints 호환 패치
+- OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume·Helmet Toggle 2 연동, 선택형 DFFMA OAR·Dynamic Footprints 호환 패치
 
 ## 설치와 업데이트
 
 1. 개인 키트가 있다면 `Interface/SkyrimFittingSystem/user`를 백업합니다.
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 이전 독립형 **SFS Kit Generator**, 기존 **SFS Helmet Toggle 2 호환 패치**, v1.4.4 **SFS Grid Inventory Costume Compatibility Patch**가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.
-4. v1.4.9 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
+4. v1.5.0 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 5. 필요하면 백업한 개인 키트만 복원합니다.
-6. Grid Inventory v1.4.1 이상은 별도 패치 없이 Costume 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Helmet Toggle 2, Dynamic Footprints는 맞는 **별도 SFS 호환 패치만** 원본 모드 뒤에 설치합니다.
+6. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 **별도 SFS 호환 패치만** 원본 모드 뒤에 설치합니다.
 
 `SkyrimFittingSystem.dll`은 v1.4.0부터 `SFSCore.dll`로 바뀐 기존 단일 본체 DLL입니다. 구 폴더 위에 덮어쓰면 구·신 DLL이 함께 로드되어 같은 훅을 두 번 설치할 수 있으므로, 반드시 이전 SFS 폴더를 지운 뒤 새로 설치하십시오. v1.2.x·v1.3.x의 등록 외형·조건·숨김 데이터는 유지됩니다.
 
@@ -88,7 +88,7 @@ SFS는 실제 인벤토리에 추가되지 않는 고정 FormID의 **가상 착�
 - **Wet Function Redux Visual Effect Patch v1.2.0:** 시각 효과 스크립트만 제공합니다. Wet Function MCM을 덮어쓰지 않으며 RaceMenu 경고는 Wet Function의 기존 자체 검사입니다.
 - **DFFMA OAR 4.30:** 선택한 OAR `config.json`의 표시 장비 조건만 바꿉니다. DFFMA 애니메이션·OAR 규칙·세이브·충돌 자체를 고치지는 않습니다.
 - **Grid Inventory Costume v1.4.1 이상:** SFSCore가 공개 Costume 상태 메시지를 직접 받습니다. 플레이어 소유 ARMO가 하나 이상인 Costume을 착용·교체할 때만 플레이어 등록 외형을 교체합니다. Costume 해제·빈 Costume·비장비 구성은 SFS 등록 외형을 건드리지 않으며, 시작·세이브 로드·리버트 뒤 Grid가 보내는 첫 복원 상태도 무시합니다. Grid DLL을 교체하지 않으며 Grid의 UI·렌더·로드아웃·세이브·실제 장비는 그대로 Grid가 관리합니다.
-- **Helmet Toggle 2:** HT2를 설치한 경우에만 별도 패치를 원본 모드 뒤에 설치합니다. HT2가 관리하는 30 Head·31 Hair·42 Circlet·44 Beard/Mask와 플레이어의 55 Face/Mask만 해당 SFS 등록 외형에 전달합니다. 실제 장비와 HT2의 토글·MCM·모델·충돌 자체는 HT2가 계속 관리합니다.
+- **Helmet Toggle 2:** SFSCore 본체가 정확한 플레이어 상태 전역값과 액터별 NPC·팔로워 주문 전환만 관찰하므로 별도 SFS 패치가 필요 없습니다. HT2가 숨긴 착용 상태의 실제 투구가 31 Hair를 점유하면 해당 액터의 스키닝 worn-mask에서 실제 31번만 해제해 원래 머리카락을 표시합니다. 실제 장비·HT2/DAVE 변형·모드 설정 가상토큰은 건드리지 않으며, 순수 등록 31번은 독립적으로 유지하고 등록 31+42 카드는 42번을 통해 따릅니다. 주기적 액터 스캔과 HT2 스크립트 교체는 없습니다.
 - **Dynamic Footprints SKSE BASE v3:** Dynamic Footprints 자신의 발자국 분류에서만 표시 중인 SFS 37번 신발 외형을 읽습니다. 발자국 규칙·에셋·세이브·충돌 자체를 고치지는 않으며 검증한 정확한 DLL 빌드가 아니면 자동 비활성화됩니다.
 
 ## 기타 호환

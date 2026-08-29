@@ -1453,6 +1453,11 @@ std::uint32_t VariantWorkbench::GetHeadgearToggleFittingSlotMaskForActor(
   const auto *player = RE::PlayerCharacter::GetSingleton();
   const bool resolvingPlayer =
       player != nullptr && player->GetFormID() == a_actorFormID;
+  // HT2 owns real slot-31 hair replacement itself. SFS never projects that
+  // signal onto a registered appearance which is purely slot 31, even if a
+  // Direct edit maps its external-strip token to another headgear slot.
+  // Multi-slot 31+42 cards remain eligible through their visible slot 42.
+  constexpr std::uint32_t kManagedRegisteredHeadgearSlots = 0x02005001;
   std::uint32_t fittingSlotMask = 0;
   auto stateLock = AcquireStateLock();
   for (const auto &row : rows_) {
@@ -1466,7 +1471,8 @@ std::uint32_t VariantWorkbench::GetHeadgearToggleFittingSlotMaskForActor(
     for (const auto &item : row.overrides) {
       const auto visualSlotMask = static_cast<std::uint32_t>(
           row.GetOverrideVisualSlotMask(item));
-      if (visualSlotMask == 0) {
+      if (visualSlotMask == 0 ||
+          (visualSlotMask & kManagedRegisteredHeadgearSlots) == 0) {
         continue;
       }
 

@@ -2793,6 +2793,11 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                      : activeConditionalFittingTarget
                          ? "workbench.condition.visibility_active"
                          : nullptr,
+                 .showDyeButton = true,
+                 .dyeButtonEnabled = previewActor != nullptr &&
+                     previewActor->Is3DLoaded(),
+                 .dyeButtonTooltip =
+                     localization->GetCStr("dye.workbench.tooltip"),
                  .hidden = effectiveHidden,
                  .preserveContentTextColors = true,
                  .allowContextMenu = true,
@@ -2921,6 +2926,10 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 workbench_.RefreshNativeArmorOverridesForActorWithoutEquipmentSync(
                     overrideRow.ownerActorFormID, conditionStore_.revision);
               }
+            }
+            if (overrideWidget.dyeClicked) {
+              OpenWorkbenchDyePopup(previewActor->GetFormID(),
+                                    overrideDisplayItem, overrideSlotMask);
             }
             if (overrideWidget.deleteClicked) {
               if (isConditionalFitting) {

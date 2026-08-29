@@ -7,7 +7,9 @@
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
 #include "native/DisplayedBodyCondition.h"
+#include "native/FittingDye.h"
 #include "native/GridInventoryIntegration.h"
+#include "native/HelmetToggle2Integration.h"
 #include "native/OpenAnimationReplacerIntegration.h"
 #include "native/RaceMenuBodyMorph.h"
 #include "native/SOSStorageSync.h"
@@ -31,6 +33,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::poc::InitializeDeviousDevicesHider();
     sfs::native::racemenu::InitializeBodyMorphInterface();
     sfs::Menu::GetSingleton()->SetGameDataLoaded(true);
+    static_cast<void>(sfs::native::helmet_toggle::Initialize());
     sfs::native::CaptureArmorClassificationKeywordBaseline();
     sfs::workbench::EquipmentRefreshEventSink::Register();
     sfs::native::RequestSOSStorageSync();
@@ -44,9 +47,12 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::native::racemenu::InitializeBodyMorphInterface();
     break;
   case SKSE::MessagingInterface::kPreLoadGame:
+    sfs::native::dye::ClearWorldTint();
+    sfs::native::dye::RevertSavedWorldTints();
     sfs::Menu::GetSingleton()->SetGameDataLoaded(false);
     sfs::native::InvalidateQueuedArmorRefreshes();
     sfs::native::dave::ForgetHiddenRealEquipmentState();
+    sfs::native::helmet_toggle::ResetRuntimeState();
     sfs::native::CancelSOSStorageSync();
     sfs::native::racemenu::ForgetAllRegisteredAppearanceNodes();
     sfs::poc::ResetDeviousDevicesHider();
@@ -59,6 +65,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::workbench::EquipmentRefreshEventSink::CancelQueuedRefreshes();
     sfs::ui::conditions::ConditionParamOptionCache::Get().Reset();
     sfs::Menu::GetSingleton()->SetGameDataLoaded(true);
+    sfs::native::helmet_toggle::SynchronizePlayer(false);
     static_cast<void>(sfs::poc::RefreshDeviousDevicesHiderSettings());
     sfs::native::RequestSOSStorageSync();
     sfs::workbench::EquipmentRefreshEventSink::GetSingleton()->QueueRefresh();

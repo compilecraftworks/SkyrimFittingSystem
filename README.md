@@ -40,7 +40,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.4.9)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.0)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -58,7 +58,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.4.9/windows/x64/<mode>/` in the project root.
+`build/v1.5.0/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -88,7 +88,7 @@ For the full local build, deploy, and packaging workflow, see
 `docs/Build-Deploy-Release.md`.
 
 This writes a zip under `dist/` named like:
-`Skyrim Fitting System v1.4.9.zip`
+`Skyrim Fitting System v1.5.0.zip`
 
 Tagged clean builds produce a normal `X.Y.Z` archive version.
 Dirty or untagged builds produce a `X.Y.Z-dev+<sha>[.dirty]` archive version.
@@ -108,14 +108,14 @@ Packaging uses `releasedbg`, so the archive also includes a `.pdb` next to the D
 
 ## Runtime Menu API
 
-SFS v1.4.9 exports a stable menu API for external hotkey and menu-management
+SFS v1.5.0 exports a stable menu API for external hotkey and menu-management
 mods. Managers may temporarily disable the native F6 or user-defined shortcut
 without changing its saved binding; this runtime-only state defaults to enabled
 on every game launch. Open, Close, and IsMenuOpen remain independent. See
 `docs/SkyrimFittingSystem-Menu-API.md` and `extras/SkyrimFittingSystemAPI.h`.
-The v1.4.9 module name is `SFSCore.dll`; the four C export names are unchanged.
+The v1.5.0 module name is `SFSCore.dll`; the four C export names are unchanged.
 
-SFS v1.4.9 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
+SFS v1.5.0 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
 selected outfit plugins, builds and edits candidate combinations, previews the
 selection on the character and in the workbench, and writes finished kits
 directly to the SFS user-kit folder. Only this temporary generator preview may
@@ -138,13 +138,17 @@ and keyword observation.
 ## Optional Compatibility Patches
 
 The main DLL intentionally does not globally replace `Actor::GetWornArmor()`.
-Optional per-consumer patches are provided for Dynamic Feminine Female Modesty
-Animations OAR 4.30, Helmet Toggle 2, and Dynamic Footprints SKSE BASE v3.
-Grid Inventory v1.4.1+ Costume synchronization is built into SFSCore through
-its public SKSE message rather than a replacement DLL. These use narrow,
-versioned integration boundaries;
+Grid Inventory v1.4.1+ Costume synchronization and Helmet Toggle 2 state
+linking are built into SFSCore through narrow public/native signals; neither
+requires a replacement DLL or PEX patch. When HT2 hides a still-equipped real
+slot-31 headgear, SFS releases only that actor's Hair partition in the skinning
+worn mask so the original hair can render; it does not change the ARMO,
+inventory, HT2 variant, or Mod-Configured virtual-token behavior. Optional per-consumer patches remain
+for Dynamic Feminine Female Modesty Animations OAR 4.30, Wet Function Redux,
+and Dynamic Footprints SKSE BASE v3. These use narrow, versioned integration
+boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.4.9.md` for their exact scope.
+state. See `docs/RELEASE-NOTES-v1.5.0.md` for their exact scope.
 
 ## Fitting Kits
 

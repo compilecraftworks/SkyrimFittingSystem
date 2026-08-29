@@ -2,9 +2,10 @@
 
 Available in Skyrim Fitting System v1.3.0 and later.
 
-The v1.4.2 runtime module is `SFSCore.dll`. The four export names and their C
-ABI remain unchanged from v1.3.x. A consumer that supports both release lines
-can try `SFSCore.dll` first and then the legacy `SkyrimFittingSystem.dll`.
+The current v1.5.0 runtime module is `SFSCore.dll`. The DLL was renamed in
+v1.4.0; the four export names and their C ABI remain unchanged from v1.3.x. A
+consumer that supports both release lines can try `SFSCore.dll` first and then
+the legacy `SkyrimFittingSystem.dll`.
 
 ```cpp
 extern "C" __declspec(dllexport) bool SkyrimFittingSystem_Open();
@@ -48,6 +49,9 @@ auto module = GetModuleHandleW(L"SFSCore.dll");
 if (!module) {
   module = GetModuleHandleW(L"SkyrimFittingSystem.dll"); // v1.3.x
 }
+if (!module) {
+  return; // SFS is not loaded.
+}
 auto openSfs = reinterpret_cast<OpenSfs>(
     GetProcAddress(module, "SkyrimFittingSystem_Open"));
 auto closeSfs = reinterpret_cast<CloseSfs>(
@@ -62,6 +66,10 @@ if (openSfs && closeSfs && isSfsOpen && setSfsHotkeyEnabled) {
   openSfs();
 }
 ```
+
+Resolve the functions only after SKSE has loaded SFS. Do not call
+`LoadLibrary` or `LoadLibraryEx` to load SFS from an external mod; use the
+module handle for the instance that SKSE already loaded.
 
 A small consumer header with matching function-pointer types is provided at
 `extras/SkyrimFittingSystemAPI.h`.

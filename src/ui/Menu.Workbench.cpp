@@ -60,6 +60,7 @@ void Menu::DrawVariantWorkbenchPane() {
     const auto &visibleRowIndices = BuildVisibleWorkbenchRowIndices();
     DrawWorkbenchTable(visibleRowIndices);
   }
+  DrawWorkbenchDyePopup();
   blockWorkbenchRowActionsThisFrame_ = false;
 }
 void Menu::ResetTransientWorkbenchUiState(const bool a_queueArmorRefresh) {

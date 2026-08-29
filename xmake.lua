@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.4.9"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.0"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -67,7 +67,7 @@ target("SkyrimFittingSystem")
     )
     add_headerfiles("src/**.h")
     add_includedirs("src", "lib/imgui", "lib/imgui/backends")
-    add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")
+    add_syslinks("d3d11", "dxgi", "d3dcompiler", "windowscodecs", "ole32")
     set_pcxxheader("src/pch.h")
 
 target("KitGeneratorLogicTests")
@@ -136,7 +136,7 @@ target("SkyrimFittingSystemPersonal")
     add_headerfiles("src/**.h")
     add_headerfiles("private/personal_kit_completion/**.h")
     add_includedirs("src", "private/personal_kit_completion", "lib/imgui", "lib/imgui/backends")
-    add_syslinks("d3d11", "dxgi", "windowscodecs", "ole32")
+    add_syslinks("d3d11", "dxgi", "d3dcompiler", "windowscodecs", "ole32")
     set_pcxxheader("src/pch.h")
 end
 

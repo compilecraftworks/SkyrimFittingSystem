@@ -24,6 +24,10 @@ struct EquipmentEventResult {
 // observer never changes arguments, return values, inventory, or equipment;
 // it only marks the TESEquipEvents causally produced by an external script.
 bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm);
+// Enables three exact post-call observations used by the built-in HT2 bridge:
+// GlobalVariable.SetValue plus Actor.AddSpell/RemoveSpell. The dispatch path
+// immediately rejects every receiver/form except HT2's resolved signal forms.
+bool EnableHelmetToggleSignalObserver();
 
 // Reports how this exact event changed the actor-local external transaction
 // ledger. Manual inventory events are never accepted. Distinguishing original

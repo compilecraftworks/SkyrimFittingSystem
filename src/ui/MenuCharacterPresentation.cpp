@@ -2,6 +2,7 @@
 
 #include "imgui.h"
 #include "native/SmoothCamIntegration.h"
+#include "ui/Menu.h"
 #include "ui/MenuHost.h"
 
 #include <algorithm>
@@ -402,6 +403,8 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
   auto &io = ImGui::GetIO();
   const bool popupOpen =
       ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId);
+  const bool dyePopupOpen = Menu::GetSingleton()->IsWorkbenchDyePopupVisible();
+  const bool rotationBlockedByPopup = popupOpen && !dyePopupOpen;
   const bool overSfsWindow =
       ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow |
                              ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
@@ -413,13 +416,15 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
   // progress.  Losing app focus is important here: Windows can swallow the
   // matching right-button-up event when the game is alt-tabbed.
   if (state_->rotating &&
-      (!ImGui::IsMouseDown(ImGuiMouseButton_Right) || popupOpen ||
+      (!ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
+       rotationBlockedByPopup ||
        io.AppFocusLost)) {
     state_->rotating = false;
     MenuHost::EndCharacterRotationUnpause();
   }
 
-  if (!state_->rotating && !popupOpen && !overSfsWindow && onCharacterSide &&
+  if (!state_->rotating && !rotationBlockedByPopup && !overSfsWindow &&
+      onCharacterSide &&
       ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
     state_->rotating = true;
     // Fast SMP intentionally suspends all simulation while UI::GameIsPaused.

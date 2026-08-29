@@ -6,8 +6,10 @@
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
 #include "native/ExternalEquipmentTransactions.h"
+#include "native/FittingDye.h"
 #include "native/FittingSlotState.h"
 #include "native/GenitalArmorResolver.h"
+#include "native/HelmetToggle2Integration.h"
 #include "native/RaceMenuBodyMorph.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "poc/VirtualWornTokenPoC.h"
@@ -68,6 +70,7 @@ struct DavFallbackRefreshSignature {
   bool active{false};
   std::uint32_t slotMask{0};
   std::uint32_t hiddenSlotMask{0};
+  std::uint32_t releasedActualHairSlotMask{0};
   std::vector<RE::FormID> displayArmorFormIDs;
   std::vector<RE::FormID> hiddenArmorFormIDs;
   std::vector<RE::FormID> hiddenWornArmorFormIDs;
@@ -2029,6 +2032,9 @@ BuildDavFallbackRefreshSignature(RE::Actor *a_actor,
   return {.active = a_displaySet.active,
           .slotMask = a_displaySet.slotMask,
           .hiddenSlotMask = a_displaySet.hiddenSlotMask,
+          .releasedActualHairSlotMask =
+              sfs::native::helmet_toggle::GetActualHairSlotReleaseMask(
+                  a_actor, a_displaySet.slotMask),
           .displayArmorFormIDs = CollectDisplayArmorFormIDs(a_displaySet),
           .hiddenArmorFormIDs = CollectHiddenArmorFormIDs(a_displaySet),
           .hiddenWornArmorFormIDs =
@@ -2789,7 +2795,10 @@ bool IsRealEquipmentHiddenForActorSlots(RE::Actor *a_actor,
 
 bool ShouldOverrideSkinning(RE::TESObjectREFR *a_target) {
   auto *actor = a_target ? a_target->As<RE::Actor>() : nullptr;
-  return BuildDisplaySet(actor).active;
+  const auto displaySet = BuildDisplaySet(actor);
+  return displaySet.active ||
+         sfs::native::helmet_toggle::GetActualHairSlotReleaseMask(
+             actor, displaySet.slotMask) != 0;
 }
 
 bool ShouldBlockVanillaArmor(RE::TESObjectARMO *a_armor,
@@ -2817,8 +2826,11 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
   (void)a_inventory;
   auto *actor = a_target ? a_target->As<RE::Actor>() : nullptr;
   const auto displaySet = BuildDisplaySet(actor);
+  const auto releasedActualHairSlotMask =
+      sfs::native::helmet_toggle::GetActualHairSlotReleaseMask(
+          actor, displaySet.slotMask);
   if (!displaySet.active) {
-    return a_baseWornMask;
+    return a_baseWornMask & ~releasedActualHairSlotMask;
   }
 
   if (sfs::native::dave::IsDynamicArmorVariantsLoaded() &&
@@ -2838,7 +2850,7 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
                   actor ? actor->GetFormID() : 0, a_baseWornMask,
                   displaySet.slotMask, displaySet.hiddenSlotMask, result,
                   displaySet.genitalCorrectionActive);
-    return result;
+    return result & ~releasedActualHairSlotMask;
   }
 
   if (sfs::native::dave::IsDynamicArmorVariantsLoaded()) {
@@ -2850,7 +2862,7 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
         actor, displaySet, a_baseWornMask,
         (a_baseWornMask & ~hiddenWornSlots) | visibleWornSlots |
             displaySet.slotMask);
-    return result;
+    return result & ~releasedActualHairSlotMask;
   }
 
   const auto result = PreserveUnmanagedHeadgearWornMask(
@@ -2862,7 +2874,7 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
       "hiddenSlot={:08X} result={:08X} daveLoaded=false",
       actor ? actor->GetFormID() : 0, a_baseWornMask, displaySet.slotMask,
       displaySet.hiddenSlotMask, result);
-  return result;
+  return result & ~releasedActualHairSlotMask;
 }
 
 void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
@@ -3073,6 +3085,11 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
     return;
   }
 
+  // Reconcile only this already-refreshing actor. This restores an NPC or
+  // follower's actor-local HT2 state after its 3D is rebuilt without polling
+  // the world and without recursively scheduling another backend refresh.
+  sfs::native::helmet_toggle::SynchronizeActor(a_actor, false);
+
   const auto displaySet = BuildDisplaySet(a_actor);
   const auto *previewRows =
       menu->GetWorkbench().GetNativePreviewRowsForActor(a_actor->GetFormID());
@@ -3116,6 +3133,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
           a_actor->GetFormID());
       re::Update3D(a_actor);
       QueuePausedReplacementPreviewPoseSync(a_actor);
+      dye::QueueSavedWorldTintRestore(a_actor);
       return;
     }
     logger::debug("Refreshing actor {:08X} with DAVE API for {}",
@@ -3125,6 +3143,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
                    a_actor->GetFormID());
     } else {
       QueuePausedReplacementPreviewPoseSync(a_actor);
+      dye::QueueSavedWorldTintRestore(a_actor);
     }
     return;
   }
@@ -3142,6 +3161,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
                                             : "display-state");
       re::Update3D(a_actor);
       QueuePausedReplacementPreviewPoseSync(a_actor);
+      dye::QueueSavedWorldTintRestore(a_actor);
     }
     return;
   }
@@ -3152,6 +3172,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
         a_actor->GetFormID());
     re::Update3D(a_actor);
     QueuePausedReplacementPreviewPoseSync(a_actor);
+    dye::QueueSavedWorldTintRestore(a_actor);
     return;
   }
 
@@ -3163,6 +3184,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
   re::SetEquipFlag(process, re::EquipFlag::kNeedsUpdate);
   re::UpdateEquipment(process, a_actor);
   QueuePausedReplacementPreviewPoseSync(a_actor);
+  dye::QueueSavedWorldTintRestore(a_actor);
 }
 
 void RefreshPlayerArmor() {

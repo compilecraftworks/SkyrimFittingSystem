@@ -18,13 +18,14 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - Actor-local workbench rows, conditions, manual eye controls, and external strip/redress state
 - Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, and per-slot Direct Editing exceptions
 - Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation
-- Final displayed-outfit OAR conditions, built-in Grid Inventory Costume support, and optional DFFMA OAR, Helmet Toggle 2, and Dynamic Footprints bridges
+- Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges
 
-## Version 1.4.9 Update Summary
+## Version 1.5.0 Update Summary
 
-- Added explicit, validated Skyrim SE 1.5.97 and Skyrim AE hook profiles with safe rejection of unknown runtime layouts.
-- Fixed IED custom-skin chaining at the actual `VisitWornItems` call sites, preventing equipment-rebuild transition CTDs without changing actor-local visibility policy.
-- Moved left/right menu character framing slightly farther outward while keeping the existing angle and height.
+- Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore signal observation; no HT2 script replacement is required.
+- Reads each real helmet's full ARMO slot mask instead of its deduplicated array position.
+- Fixes bald actors when HT2 hides a still-equipped real 31+42 helmet: SFS releases only that actor's real Hair 31 skinning bit while leaving the ARMO, inventory, HT2/DAVE variant, and virtual tokens unchanged. Pure registered 31 remains independent; registered 31+42 still follows through 42.
+- Player, NPC, and follower transitions stay actor-local with no periodic polling or surrounding-actor scan. Mod-Configured, Automatic Vanilla, Direct Editing, manual eye, external strip/redress, and DAVE/DAV/native behavior is preserved.
 
 ## Requirements
 
@@ -41,7 +42,7 @@ Optional:
 - SOS or TNG for genital conceal/reveal compatibility
 - Wet Function Redux with the separate SFS compatibility patch
 - Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR for the separate DFFMA configuration patch
-- Grid Inventory v1.4.1+ for built-in Costume synchronization; Helmet Toggle 2 or Dynamic Footprints SKSE BASE v3 only when installing their matching separate SFS patch
+- Grid Inventory v1.4.1+ for built-in Costume synchronization; Helmet Toggle 2 for built-in actor-local headgear linking; Dynamic Footprints SKSE BASE v3 only with its matching separate SFS patch
 - SexLab, Soulgem Oven, Private Needs, Bathing in Skyrim, Devious Devices, Pama Prison Alternative, or other supported external-strip mods
 
 ## Installation and Updating
@@ -50,15 +51,15 @@ Optional:
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.4.9 distribution ZIP as a new mod.
+5. Install the v1.5.0 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
-7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ needs no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, Helmet Toggle 2, or Dynamic Footprints after their original mod.
+7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.
 
 File changes in v1.4.0:
 
 - `SkyrimFittingSystem.dll` → `SFSCore.dll`: the same single main plugin with a new filename, not an additional DLL. The new name also loads before legacy `skee64.dll`.
 - `SkyrimFittingSystem-VirtualTokens.esl`: new and required for external-mod strip linking.
-- Main ESP, SEQ, and retired per-mod bridge PEX/PSC files: removed. The old fixed-slot Helmet Toggle 2 patch is replaced by a separate v1.4.4 actor-local compatibility patch.
+- Main ESP, SEQ, and retired per-mod bridge PEX/PSC files: removed. Any older SFS Helmet Toggle 2 PEX patch is also retired in v1.5.0 because the integration now lives in SFSCore.
 - UI resources and `SkyrimFittingSystemNative.pex/psc`: retained.
 
 A clean reinstall prevents the old and new main DLLs from loading the same hooks twice.
@@ -302,11 +303,14 @@ SFS separates DAVE's public refresh API, ordinary DAV follow-up, and Skyrim-nati
 
 Wet Function Redux applies wet effects to SFS registered appearances through the separate optional compatibility patch.
 
+## Built-in Helmet Toggle 2 Integration
+
+Helmet Toggle 2 needs no separate SFS patch. SFSCore observes only HT2's exact player state global and exact actor-local NPC/follower spell transitions. It reads the managed real ARMO's full slots, excludes pure registered slot 31, and lets registered 31+42 cards follow through slot 42. When a hidden, still-equipped real headgear occupies Hair 31, SFS releases only that actor's Hair bit from the renderer's worn mask so the original hair is skinned. There is no periodic actor scan, and SFS never edits HT2 scripts, calls, actual equipment, DAVE variants, or Mod-Configured virtual tokens.
+
 ## Optional Compatibility Patches
 
 - **Dynamic Feminine Female Modesty Animations OAR 4.30:** the separate FOMOD changes only its selected OAR JSON conditions to read SFS's final displayed outfit. It does not replace DFFMA animations, meshes, scripts, DLLs, or plugins.
 - **Wet Function Redux Visual Effect Patch v1.2.0:** supplies only the visual-effect script. It never replaces Wet Function's MCM script; a RaceMenu warning is Wet Function's own legacy self-check, not an SFS equipment or save-data modification.
-- **Helmet Toggle 2:** install the separate script patch only with Helmet Toggle 2. It forwards each actor's HT2-managed slots (30/31/42/44 and player 55 where applicable) to matching SFS registered appearances. Real equipment remains under HT2; SFS preserves actor-local linking, saved manual eye state, and its DAVE/DAV/native display path.
 - **Dynamic Footprints SKSE BASE v3:** the separate patch reads only a visible SFS Feet 37 appearance for Dynamic Footprints' own footprint classification and otherwise uses actual footwear. It disables itself unless the exact verified v3 DLL build is present.
 
 ## External Runtime Menu API

@@ -5,6 +5,23 @@ param(
 
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $lines = [System.IO.File]::ReadAllLines((Resolve-Path $InputPath), $utf8)
+
+# Markdown release notes wrap long list items onto indented continuation lines.
+# Join those continuations before rendering so an HTML list item remains one item.
+$normalizedLines = [System.Collections.Generic.List[string]]::new()
+foreach ($line in $lines) {
+    $continuation = [regex]::Match($line, '^\s{2,}(.+)$')
+    if ($continuation.Success -and $normalizedLines.Count -gt 0 -and
+        [regex]::IsMatch($normalizedLines[$normalizedLines.Count - 1], '^[-*] .+$')) {
+        $lastIndex = $normalizedLines.Count - 1
+        $mergedLine = $normalizedLines[$lastIndex] + ' ' + $continuation.Groups[1].Value.Trim()
+        $normalizedLines.RemoveAt($lastIndex)
+        $normalizedLines.Add($mergedLine)
+        continue
+    }
+    $normalizedLines.Add($line)
+}
+$lines = $normalizedLines
 $imageUrls = @{
     'NEXUS_SCREENSHOT_01_URL' = 'arca-assets/v1.2.2/01_actor_selection.png'
     'NEXUS_SCREENSHOT_02_URL' = 'arca-assets/v1.2.2/02_workbench_layout.png'

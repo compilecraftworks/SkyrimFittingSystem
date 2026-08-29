@@ -1,6 +1,7 @@
 #include "native/ExternalEquipmentTransactions.h"
 
 #include "ArmorUtils.h"
+#include "native/HelmetToggle2Integration.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "runtime/RuntimeLayouts.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
@@ -43,7 +44,10 @@ enum class TargetNative : std::uint8_t {
   RemoveItem,
   RemoveAllItems,
   DropObject,
-  SetOutfit
+  SetOutfit,
+  GlobalSetValue,
+  ActorAddSpell,
+  ActorRemoveSpell
 };
 
 struct EventExpectation {
@@ -91,6 +95,8 @@ std::uint64_t g_nextExpectationID{1};
 
 std::atomic_bool g_observerInstalled{false};
 std::atomic_bool g_nativeRegistrationHookInstalled{false};
+std::atomic_bool g_helmetToggleSignalObserverEnabled{false};
+std::atomic<RE::BSScript::IVirtualMachine *> g_observerVm{nullptr};
 
 [[nodiscard]] bool IsAutomaticEquipmentTransactionMode() {
   return sfs::workbench::IsActualEquipmentStripLinkPolicyActive();
@@ -122,12 +128,23 @@ ClassifyNative(const NativeFunctionBase *a_function) {
       return TargetNative::EquipItemByID;
     }
     if (EqualNoCase(name, "SetOutfit")) return TargetNative::SetOutfit;
+    if (g_helmetToggleSignalObserverEnabled.load(std::memory_order_acquire)) {
+      if (EqualNoCase(name, "AddSpell")) return TargetNative::ActorAddSpell;
+      if (EqualNoCase(name, "RemoveSpell")) {
+        return TargetNative::ActorRemoveSpell;
+      }
+    }
   } else if (EqualNoCase(object, "ObjectReference")) {
     if (EqualNoCase(name, "RemoveItem")) return TargetNative::RemoveItem;
     if (EqualNoCase(name, "RemoveAllItems")) {
       return TargetNative::RemoveAllItems;
     }
     if (EqualNoCase(name, "DropObject")) return TargetNative::DropObject;
+  } else if (EqualNoCase(object, "GlobalVariable") &&
+             g_helmetToggleSignalObserverEnabled.load(
+                 std::memory_order_acquire) &&
+             EqualNoCase(name, "SetValue")) {
+    return TargetNative::GlobalSetValue;
   }
   return TargetNative::None;
 }
@@ -146,8 +163,17 @@ ClassifyNative(const NativeFunctionBase *a_function) {
     return "ObjectReference.RemoveAllItems";
   case TargetNative::DropObject: return "ObjectReference.DropObject";
   case TargetNative::SetOutfit: return "Actor.SetOutfit";
+  case TargetNative::GlobalSetValue: return "GlobalVariable.SetValue";
+  case TargetNative::ActorAddSpell: return "Actor.AddSpell";
+  case TargetNative::ActorRemoveSpell: return "Actor.RemoveSpell";
   default: return "None";
   }
+}
+
+[[nodiscard]] bool IsHelmetToggleSignalTarget(const TargetNative a_target) {
+  return a_target == TargetNative::GlobalSetValue ||
+         a_target == TargetNative::ActorAddSpell ||
+         a_target == TargetNative::ActorRemoveSpell;
 }
 
 template <class T>
@@ -605,6 +631,22 @@ void CancelOperation(const HookOperation &a_operation) {
   }
 }
 
+void ObserveHelmetToggleSignal(const TargetNative a_target,
+                               RE::BSScript::Stack *a_stack) {
+  if (!a_stack || !a_stack->top || !IsHelmetToggleSignalTarget(a_target)) {
+    return;
+  }
+  auto &frame = *a_stack->top;
+  if (a_target == TargetNative::GlobalSetValue) {
+    sfs::native::helmet_toggle::ObserveGlobalStateChanged(
+        frame.self.Unpack<RE::TESGlobal *>());
+    return;
+  }
+  auto *actor = frame.self.Unpack<RE::Actor *>();
+  auto *spell = ReadArgument<RE::SpellItem *>(frame, 0);
+  sfs::native::helmet_toggle::ObserveActorSpellChanged(actor, spell);
+}
+
 using NativeCallFn = NativeCallResult (*)(
     NativeFunctionBase *, const RE::BSTSmartPointer<RE::BSScript::Stack> &,
     RE::BSScript::ErrorLogger *, RE::BSScript::Internal::VirtualMachine *,
@@ -645,6 +687,15 @@ struct NativeDispatchHook {
       RE::BSScript::ErrorLogger *a_logger,
       RE::BSScript::Internal::VirtualMachine *a_vm, const bool a_arg4) {
     const auto target = ClassifyNative(a_function);
+    if (IsHelmetToggleSignalTarget(target)) {
+      const auto result =
+          CallOriginal(a_function, a_stack, a_logger, a_vm, a_arg4);
+      if (result != NativeCallResult::kFailedAbort &&
+          result != NativeCallResult::kFailedRetry) {
+        ObserveHelmetToggleSignal(target, a_stack.get());
+      }
+      return result;
+    }
     auto operation = PrepareOperation(target, a_stack.get());
     const auto result =
         CallOriginal(a_function, a_stack, a_logger, a_vm, a_arg4);
@@ -819,6 +870,7 @@ bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm) {
     return false;
   }
   if (g_observerInstalled.load(std::memory_order_acquire)) {
+    g_observerVm.store(a_vm, std::memory_order_release);
     return true;
   }
   if (!InstallNativeRegistrationHook(a_vm)) {
@@ -826,6 +878,8 @@ bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm) {
                   "native registration hook");
     return false;
   }
+
+  g_observerVm.store(a_vm, std::memory_order_release);
 
   constexpr std::array<std::string_view, 2> kTargetTypes{
       "Actor", "ObjectReference"};
@@ -839,6 +893,28 @@ bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm) {
   g_observerInstalled.store(true, std::memory_order_release);
   logger::info("External equipment observer ready ({} native functions "
                "available immediately)",
+               patchedCount);
+  return true;
+}
+
+bool EnableHelmetToggleSignalObserver() {
+  auto *vm = g_observerVm.load(std::memory_order_acquire);
+  if (!vm || !g_observerInstalled.load(std::memory_order_acquire)) {
+    return false;
+  }
+
+  g_helmetToggleSignalObserverEnabled.store(true, std::memory_order_release);
+  constexpr std::array<std::string_view, 2> kSignalTypes{
+      "Actor", "GlobalVariable"};
+  std::size_t patchedCount = 0;
+  for (const auto typeName : kSignalTypes) {
+    RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> type;
+    if (vm->GetScriptObjectTypeNoLoad(RE::BSFixedString(typeName), type)) {
+      PatchSelectedNativesInType(type.get(), patchedCount);
+    }
+  }
+  logger::info("Helmet Toggle 2 signal observer ready ({} exact native "
+               "functions added immediately)",
                patchedCount);
   return true;
 }

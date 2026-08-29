@@ -21,6 +21,8 @@ constexpr std::string_view kIconSlot = "\xee\x87\x89";       // ICON_LC_SHIRT
 constexpr std::string_view kIconTrash = "\xee\x86\x8c";      // ICON_LC_TRASH
 constexpr std::string_view kIconEye = "\xee\x82\xbe";        // ICON_LC_EYE
 constexpr std::string_view kIconEyeOff = "\xee\x82\xbf";     // ICON_LC_EYE_OFF
+constexpr std::string_view kIconDye =
+    "\xee\x8b\xa5"; // ICON_LC_PAINT_BUCKET (U+E2E5)
 
 // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 void DrawTooltipInfoRow(const char *a_icon, const char *a_label,
@@ -353,11 +355,13 @@ DrawEquipmentWidget(const char *a_id,
       ImVec2(slotPos.x + (hasSlotIcon ? slotIconSize.x + 9.0f : 0.0f),
              slotPos.y);
   constexpr float actionButtonWidth = 34.0f;
+  const auto dyePaneWidth =
+      a_options.showDyeButton ? actionButtonWidth : 0.0f;
   const auto hidePaneWidth =
       a_options.showHideButton ? actionButtonWidth : 0.0f;
   const auto deletePaneWidth =
       a_options.showDeleteButton ? actionButtonWidth : 0.0f;
-  const auto actionPaneWidth = hidePaneWidth + deletePaneWidth;
+  const auto actionPaneWidth = dyePaneWidth + hidePaneWidth + deletePaneWidth;
   const bool hasStatusText =
       a_options.statusText != nullptr && a_options.statusText[0] != '\0';
   const auto statusTextSize =
@@ -372,8 +376,21 @@ DrawEquipmentWidget(const char *a_id,
   actionCursorX -= deletePaneWidth;
   const auto hideButtonMin = ImVec2(actionCursorX - hidePaneWidth, rectMin.y);
   const auto hideButtonMax = ImVec2(actionCursorX, rectMax.y);
+  actionCursorX -= hidePaneWidth;
+  const auto dyeButtonMin = ImVec2(actionCursorX - dyePaneWidth, rectMin.y);
+  const auto dyeButtonMax = ImVec2(actionCursorX, rectMax.y);
   bool deleteHeld = false;
   bool hideHeld = false;
+  bool dyeHeld = false;
+  if (a_options.showDyeButton && a_options.interactive) {
+    const auto dyeState = ui::input_widgets::EvaluateRectClickTarget(
+        ImGui::GetID("##equipment-widget-dye"), dyeButtonMin, dyeButtonMax);
+    result.dyeHovered = dyeState.hovered;
+    dyeHeld = a_options.dyeButtonEnabled && dyeState.held;
+    result.dyeClicked = a_options.dyeButtonEnabled && dyeState.pressed;
+  } else {
+    result.dyeHovered = false;
+  }
   if (a_options.showHideButton && a_options.interactive) {
     const auto hideState = ui::input_widgets::EvaluateRectClickTarget(
         ImGui::GetID("##equipment-widget-hide"), hideButtonMin, hideButtonMax);
@@ -393,7 +410,7 @@ DrawEquipmentWidget(const char *a_id,
   } else {
     result.deleteHovered = false;
   }
-  if (result.hideHovered || result.deleteHovered) {
+  if (result.dyeHovered || result.hideHovered || result.deleteHovered) {
     result.clicked = false;
     result.doubleClicked = false;
     result.active = false;
@@ -525,6 +542,31 @@ DrawEquipmentWidget(const char *a_id,
                          : ImDrawFlags_RoundCornersRight);
   }
 
+  if (a_options.showDyeButton) {
+    const auto dyeFill = IM_COL32(0, 0, 0, 255);
+    const auto dyeIconColor = !a_options.dyeButtonEnabled
+                                  ? theme->GetColorU32("TEXT_DISABLED")
+                              : dyeHeld
+                                  ? theme->GetColorU32("PRIMARY")
+                              : result.dyeHovered
+                                  ? theme->GetColorU32("PRIMARY", 0.95f)
+                                  : theme->GetColorU32("PRIMARY");
+    const auto rounding =
+        a_options.showHideButton || a_options.showDeleteButton
+            ? ImDrawFlags_RoundCornersLeft
+            : ImDrawFlags_RoundCornersAll;
+    drawList->AddRectFilled(dyeButtonMin, dyeButtonMax, dyeFill, 8.0f,
+                            rounding);
+    drawList->AddLine(ImVec2(dyeButtonMax.x, rectMin.y + 1.0f),
+                      ImVec2(dyeButtonMax.x, rectMax.y - 1.0f),
+                      theme->GetColorU32("BORDER"), 1.0f);
+    const auto iconSize = ImGui::CalcTextSize(kIconDye.data());
+    drawList->AddText(
+        ImVec2(dyeButtonMin.x + ((actionButtonWidth - iconSize.x) * 0.5f),
+               rectMin.y + ((frameHeight - iconSize.y) * 0.5f) - 1.0f),
+        dyeIconColor, kIconDye.data());
+  }
+
   if (a_options.showDeleteButton) {
     const auto deleteFill = !a_options.deleteButtonEnabled
                                 ? theme->GetColorU32("TEXT_DISABLED", 0.26f)
@@ -545,6 +587,13 @@ DrawEquipmentWidget(const char *a_id,
             : (a_options.hidden ? "workbench.show" : "workbench.hide");
     ImGui::SetTooltip("%s", localization->GetCStr(tooltipKey));
   }
+  if (result.dyeHovered && !ImGui::IsDragDropActive()) {
+    ImGui::SetTooltip(
+        "%s", a_options.dyeButtonTooltip != nullptr
+                  ? a_options.dyeButtonTooltip
+                  : Localization::GetSingleton()->GetCStr(
+                        "dye.workbench.tooltip"));
+  }
   if (result.deleteHovered && !ImGui::IsDragDropActive()) {
     ImGui::SetTooltip("%s",
                       Localization::GetSingleton()->GetCStr("common.delete"));
@@ -553,7 +602,8 @@ DrawEquipmentWidget(const char *a_id,
   const bool hasContextMenuEntries =
       a_options.interactive && a_options.allowContextMenu &&
       (static_cast<bool>(a_options.drawContextMenuEntries) ||
-       a_options.showHideButton || a_options.showDeleteButton);
+       a_options.showDyeButton || a_options.showHideButton ||
+       a_options.showDeleteButton);
   if (hasContextMenuEntries && result.hovered &&
       ImGui::IsMouseReleased(ImGuiMouseButton_Right)) {
     ImGui::OpenPopup("##equipment-widget-context");
@@ -562,7 +612,7 @@ DrawEquipmentWidget(const char *a_id,
   const auto tooltipId = "equipment:" + a_item.key;
   if ((a_item.SupportsInfoTooltip() || a_item.IsSlot() ||
        a_options.drawTooltipExtras) &&
-      !result.hideHovered && !result.deleteHovered &&
+      !result.dyeHovered && !result.hideHovered && !result.deleteHovered &&
       !ImGui::IsDragDropActive()) {
     DrawEquipmentInfoTooltip(tooltipId, result.hovered, a_item,
                              a_options.drawTooltipExtras);
@@ -573,6 +623,24 @@ DrawEquipmentWidget(const char *a_id,
     bool drewCustomEntries = false;
     if (a_options.drawContextMenuEntries) {
       a_options.drawContextMenuEntries();
+      drewCustomEntries = true;
+    }
+
+    if (a_options.showDyeButton) {
+      if (drewCustomEntries) {
+        ImGui::Separator();
+      }
+      ImGui::BeginDisabled(!a_options.dyeButtonEnabled);
+      const auto *dyeText =
+          a_options.dyeButtonTooltip != nullptr
+              ? a_options.dyeButtonTooltip
+              : Localization::GetSingleton()->GetCStr(
+                    "dye.workbench.tooltip");
+      const std::string dyeLabel = std::string(kIconDye) + " " + dyeText;
+      if (ImGui::MenuItem(dyeLabel.c_str())) {
+        result.dyeClicked = true;
+      }
+      ImGui::EndDisabled();
       drewCustomEntries = true;
     }
 

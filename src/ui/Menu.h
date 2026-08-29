@@ -141,6 +141,7 @@ public:
   [[nodiscard]] bool ApplyGridInventoryCostume(const std::uint32_t *a_formIDs,
                                                 std::uint32_t a_count);
   [[nodiscard]] bool ClearGridInventoryCostume();
+  [[nodiscard]] bool IsWorkbenchDyePopupVisible() const;
 
 private:
   static constexpr const char *kDefaultFontPath = "C:/Windows/Fonts/malgun.ttf";
@@ -274,6 +275,10 @@ private:
                                    WorkbenchSortState &a_state,
                                    WorkbenchSortColumn a_column);
   void DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices);
+  void OpenWorkbenchDyePopup(RE::FormID a_actorFormID,
+                             const workbench::EquipmentWidgetItem &a_item,
+                             std::uint64_t a_slotMask);
+  void DrawWorkbenchDyePopup();
   void DrawGeneratedKitPreviewWorkbenchTable(
       const std::vector<workbench::VariantWorkbenchRow> &a_previewRows);
   [[nodiscard]] bool DrawSlotCreationRow(bool a_drawConditionSectionHeader,
