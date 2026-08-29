@@ -18,10 +18,14 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - Actor-local workbench rows, conditions, manual eye controls, and external strip/redress state
 - Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, and per-slot Direct Editing exceptions
 - Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation
+- Actor-local Fitting Dye for individual rendered components of a registered appearance, available from its dye button or right-click context menu
 - Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges
 
 ## Version 1.5.0 Update Summary
 
+- Added **Fitting Dye** to registered-appearance cards in both base and condition rows. Open it with the card's dye button or right-click context menu, select a rendered appearance component, identify it by its brief world-space pulse, then apply a color or restore the original.
+- Dye is saved as actor FormID → registered appearance ARMO → exact rendered component. Another actor or appearance using the same mesh or diffuse texture remains unchanged, and an ambiguous or changed component identity fails closed instead of tinting a guessed match.
+- The renderer builds a private RGB-multiplied tint texture for the exact matched geometry. Source DDS files, shader materials, actual equipment, inventory, keywords, workbench rows, conditions, kits, virtual tokens, strip-link policies, and DAVE/DAV/native ownership are never modified.
 - Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore signal observation; no HT2 script replacement is required.
 - Reads each real helmet's full ARMO slot mask instead of its deduplicated array position.
 - Fixes bald actors when HT2 hides a still-equipped real 31+42 helmet: SFS releases only that actor's real Hair 31 skinning bit while leaving the ARMO, inventory, HT2/DAVE variant, and virtual tokens unchanged. Pure registered 31 remains independent; registered 31+42 still follows through 42.
@@ -72,12 +76,13 @@ v1.2.x and v1.3.x settings migrate to the v1.4.0 default, **Mod-Configured Slot 
 2. Select the player or NPC at the top of the workbench.
 3. Find an appearance in Equipment, Outfit, or Kits.
 4. Register it in the base area or a condition row by double-clicking, dragging, or using the context menu.
-5. Use the separate eye controls for actual gear and registered appearances.
-6. Attach a built-in or custom condition when an appearance should react to gameplay state.
-7. Choose a strip-link policy in Options, or use **Direct Slot Editing** for per-slot exceptions.
-8. Save reusable multi-slot setups as Fitting Kits.
-9. To build a new kit automatically, choose outfit ESPs in **Kit Generator**, scan them, edit and preview a candidate, then create the kit. Changing candidates preserves the result classification.
-10. Under Options, set **Character Position While Open** to Disabled, Left, or Right. Right-drag the outer area where the character is shown to rotate the player; closing SFS restores the original facing.
+5. To recolor a registered appearance, use its dye button or right-click it and choose **Fitting Dye**. Select a component, confirm its brief pulse on the character, choose a color, and apply it.
+6. Use the separate eye controls for actual gear and registered appearances.
+7. Attach a built-in or custom condition when an appearance should react to gameplay state.
+8. Choose a strip-link policy in Options, or use **Direct Slot Editing** for per-slot exceptions.
+9. Save reusable multi-slot setups as Fitting Kits.
+10. To build a new kit automatically, choose outfit ESPs in **Kit Generator**, scan them, edit and preview a candidate, then create the kit. Changing candidates preserves the result classification.
+11. Under Options, set **Character Position While Open** to Disabled, Left, or Right. Right-drag the outer area where the character is shown to rotate the player; closing SFS restores the original facing.
 
 Display changes never move or recreate the registered FormID, original slots, base or conditional row, row order, or actor ownership.
 
@@ -90,6 +95,14 @@ Display changes never move or recreate the registered FormID, original slots, ba
 The upper base area represents the selected actor's ordinary state. **Actual Gear** on the left shows equipment truly worn from inventory, while **Registered Appearance** on the right shows what SFS displays instead. Hiding actual gear with its eye button does not unequip it, so armor rating, enchantments, keywords, and equipment effects remain active. The registered-appearance eye changes only the visual result and does not delete registration.
 
 A registered appearance without a condition is that slot's base appearance. It returns whenever no conditional appearance is applicable or every condition is false. Base actual gear, registered appearances, and individual eye state are stored only for the selected actor.
+
+### Fitting Dye
+
+Every registered-appearance card in the base or condition area has a separate dye action. Use its dye button or right-click the card and choose **Fitting Dye**. The popup lists only dyeable third-person rendered components that belong to that exact registered ARMO. Selecting a row makes the component pulse briefly on the character so it can be identified before choosing and applying a color. **Restore original color** removes the saved tint for that component. If a verified matching first-person counterpart exists, it follows the selected third-person component.
+
+Fitting Dye multiplies the component's source diffuse RGB into a private GPU texture and substitutes it only for the exact matched geometry during its draw. It does not edit the original DDS, NIF, shader material, ARMO/ARMA, inventory item, keyword, equipment state, or registered-appearance data. Body, face, hands, feet, collision/helper geometry, overlays, and components without a supported direct diffuse binding are not offered as dye targets.
+
+Saved color identity is actor FormID → registered appearance ARMO → shape name, diffuse texture, and exact scene path. The same outfit or DDS on another actor or another registered appearance is therefore not recolored. Zero or multiple exact matches are skipped rather than guessed. Saved colors are restored only when that actor and exact registered component return after save loading or an actor 3D refresh, including the existing DAVE, DAV, and native refresh paths. Fitting Dye remains independent of workbench rows, conditions, kits, manual eye state, actual-equipment visibility, virtual tokens, and every external strip/redress linking policy.
 
 ### Workbench Condition Area
 

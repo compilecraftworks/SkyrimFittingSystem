@@ -17,6 +17,12 @@ outfit plugins, edit candidate combinations, preview them read-only in the
 character and workbench, and write finished kits directly to the SFS user-kit
 folder. No separate SFSKitGenerator.dll is included or required. Generator-only
 preview exceptions do not change normal registration, application, or saving.
+Fitting Dye is integrated into registered-appearance cards in the workbench and
+their right-click context menu. It saves colors independently by actor FormID,
+registered appearance ARMO, and exact rendered-component identity, and applies
+them through private geometry-scoped renderer textures. It never edits source
+DDS/NIF files, actual equipment, inventory, workbench rows, conditions, kits,
+virtual tokens, strip/redress state, or DAVE/DAV/native ownership.
 The integrated scanner uses bounded parallelism and keeps unrelated slots out
 of exact multi-slot DP. Candidate selection and editing preserve the result-list
 SFW/NSFW classification; the manual result-list toggle button has been removed.

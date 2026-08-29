@@ -21,6 +21,7 @@ Skyrim Outfit System Revived was also consulted while implementing parts of the 
 - Ctrl multi-selection and batch appearance registration from the gear catalog
 - UTF-8 SFS/Modex kit loading and creation from equipped gear or active overrides
 - Built-in fitting-kit generator with plugin scanning, candidate editing, preview, and direct kit creation
+- Actor-local Fitting Dye for exact rendered components of registered appearances, opened from the workbench dye action or card context menu
 - Stable generated-kit SFW/NSFW labels that change only through the result-list toggle, not when candidate selection changes
 - Display-only workbench sorting and optional selected-actor third-person menu placement with right-drag rotation
 - Actor-local live BodyMorph synchronization without polling or a global actor scan
@@ -101,6 +102,7 @@ Packaging uses `releasedbg`, so the archive also includes a `.pdb` next to the D
 - Runtime settings are stored under:
   - `Data/SKSE/Plugins/SkyrimFittingSystem/settings.json`
 - Actor-owned appearances, conditions, and visibility are stored in the SKSE co-save. The selected strip-link policy and per-slot mappings are shared user settings applied to all actors, while active transactions and suppression results remain actor-local.
+- Fitting Dye colors are stored independently by actor FormID, registered appearance ARMO, and exact rendered-component identity; no source texture, material, actual equipment, or workbench registration data is changed.
 - Favorites are stored separately in:
   - `Data/SKSE/Plugins/SkyrimFittingSystem/favorites.json`
 - Bundled UI assets are under:

@@ -7,6 +7,23 @@ param(
 
 $utf8 = [System.Text.UTF8Encoding]::new($false)
 $lines = [System.IO.File]::ReadAllLines((Resolve-Path $InputPath), $utf8)
+
+# Release notes wrap long list items onto indented continuation lines. Join
+# them before conversion so each Markdown item remains one valid BBCode item.
+$normalizedLines = [System.Collections.Generic.List[string]]::new()
+foreach ($line in $lines) {
+    $continuation = [regex]::Match($line, '^\s{2,}(.+)$')
+    if ($continuation.Success -and $normalizedLines.Count -gt 0 -and
+        [regex]::IsMatch($normalizedLines[$normalizedLines.Count - 1], '^(?:[-*]|\d+\.) .+$')) {
+        $lastIndex = $normalizedLines.Count - 1
+        $mergedLine = $normalizedLines[$lastIndex] + ' ' + $continuation.Groups[1].Value.Trim()
+        $normalizedLines.RemoveAt($lastIndex)
+        $normalizedLines.Add($mergedLine)
+        continue
+    }
+    $normalizedLines.Add($line)
+}
+$lines = $normalizedLines
 $output = [System.Collections.Generic.List[string]]::new()
 $listKind = $null
 

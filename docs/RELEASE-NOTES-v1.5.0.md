@@ -1,5 +1,27 @@
 # Skyrim Fitting System v1.5.0
 
+## Fitting Dye
+
+- Added Fitting Dye to every registered-appearance card in the workbench base
+  and condition areas. Open it with the dedicated dye action or the card's
+  right-click context menu.
+- The popup lists only rendered components belonging to that exact registered
+  ARMO. Selecting a component makes it pulse briefly on the actor before a dye
+  color is applied, and Restore original color removes that component's saved
+  tint.
+- Dye is stored as actor FormID -> registered appearance ARMO -> exact rendered
+  component identity. The same mesh or diffuse texture on another actor or
+  appearance remains original, while zero or multiple exact matches fail
+  closed instead of tinting a guessed component.
+- RGB tinting uses a private GPU texture and a geometry-scoped draw-time
+  substitution. Original DDS/NIF files, shader materials, actual ARMO,
+  inventory, keywords, equipment state, workbench rows, conditions, and kits
+  are never modified.
+- Saved colors return only for the same actor, registered appearance, and exact
+  component after save loading or an actor 3D refresh. Mod-Configured virtual
+  tokens, Automatic Vanilla-Slot Linking, Direct Slot Editing, external
+  strip/redress state, and the DAVE/DAV/native display paths remain isolated.
+
 ## Helmet Toggle 2 compatibility
 
 - Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore

@@ -2,6 +2,10 @@
 
 
 [list]
+[*]Added actor-local Fitting Dye to registered-appearance cards in base and condition rows, available from the dedicated dye action and right-click context menu.[/*]
+[*]Dye targets an exact rendered component, provides a brief world-space identification pulse, and can restore the component's original color.[/*]
+[*]Colors are saved by actor FormID, registered appearance ARMO, and exact component identity. Shared meshes or diffuse textures on another actor or appearance are not recolored, and ambiguous matches fail closed.[/*]
+[*]Tinting uses a private geometry-scoped renderer texture without changing source DDS/NIF files, actual equipment, inventory, workbench rows, conditions, kits, virtual tokens, external strip/redress state, or DAVE/DAV/native ownership.[/*]
 [*]Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore integration. SFS observes only HT2's exact player global and actor-local NPC/follower spell transitions, without replacing HT2 scripts or polling actors.[/*]
 [*]SFS reads every real helmet's full ARMO slot mask instead of relying on the array position retained after HT2 deduplication.[/*]
 [*]Fixed bald actors when HT2 hides a still-equipped real 31+42 helmet. SFS releases only that actor's real Hair 31 bit from the skinning worn mask; the actual ARMO, inventory, HT2/DAVE variant, and keywords remain untouched.[/*]
