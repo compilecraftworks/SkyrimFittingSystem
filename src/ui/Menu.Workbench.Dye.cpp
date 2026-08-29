@@ -116,41 +116,7 @@ FilterShapesForRegisteredAppearance(
 
   std::vector<native::dye::RenderedShapeInfo> matches;
   for (const auto &shape : a_shapes) {
-    if (shape.likelyBodyOverlay) {
-      continue;
-    }
-    std::string normalizedShapeName = shape.shapeName;
-    std::ranges::transform(normalizedShapeName, normalizedShapeName.begin(),
-                           [](const unsigned char a_character) {
-                             return static_cast<char>(std::tolower(a_character));
-                           });
-    // These are character/base-body geometry labels observed in the loaded
-    // player and NPC graphs.  They are not dyeable appearance components even
-    // when an outfit's scene branch happens to contain the same ARMA token.
-    const bool characterBaseGeometry =
-        normalizedShapeName.starts_with("3ba") ||
-        normalizedShapeName.starts_with("cbbe") ||
-        normalizedShapeName.starts_with("virtual") ||
-        normalizedShapeName.find("collision") != std::string::npos ||
-        normalizedShapeName == "body" ||
-        normalizedShapeName == "hands" ||
-        normalizedShapeName == "feet" ||
-        normalizedShapeName == "face" ||
-        normalizedShapeName == "head";
-    if (characterBaseGeometry) {
-      continue;
-    }
-    // A visual candidate must already have the precise renderer binding that
-    // the renderer can tint. This removes collision/physics nodes, virtual helper
-    // geometry, and non-diffuse shader paths instead of merely hiding them by
-    // display name.
-    const bool supportsDye =
-        shape.shaderType == "BSLightingShaderProperty" &&
-        shape.geometryAddress != 0 &&
-        shape.shaderPropertyAddress != 0 &&
-        shape.diffuseRendererTextureAddress != 0 &&
-        shape.diffuseShaderResourceAddress != 0;
-    if (!supportsDye) {
+    if (!native::dye::IsDyeableAppearanceComponent(shape)) {
       continue;
     }
     const bool ownedBySelectedAppearance = std::ranges::any_of(

@@ -96,6 +96,49 @@ std::vector<RenderedShapeInfo> ScanLoadedActorShapes(RE::Actor *a_actor) {
   return shapes;
 }
 
+bool IsDyeableAppearanceComponent(const RenderedShapeInfo &a_shape) {
+  if (a_shape.likelyBodyOverlay) {
+    return false;
+  }
+
+  const auto lowerAscii = [](std::string a_value) {
+    std::ranges::transform(a_value, a_value.begin(),
+                           [](const unsigned char a_character) {
+                             return static_cast<char>(
+                                 std::tolower(a_character));
+                           });
+    return a_value;
+  };
+  const auto normalizedShapeName = lowerAscii(a_shape.shapeName);
+  const auto separator = a_shape.diffuseTexture.find_last_of("\\/");
+  const auto normalizedDiffuseFilename = lowerAscii(
+      separator == std::string::npos
+          ? a_shape.diffuseTexture
+          : a_shape.diffuseTexture.substr(separator + 1));
+
+  const bool characterBaseGeometry =
+      normalizedShapeName.starts_with("3ba") ||
+      normalizedShapeName == "3bbb" ||
+      normalizedShapeName.starts_with("3bbb_") ||
+      normalizedShapeName.starts_with("cbbe") ||
+      normalizedShapeName.starts_with("virtual") ||
+      normalizedShapeName.find("collision") != std::string::npos ||
+      normalizedShapeName == "body" || normalizedShapeName == "hands" ||
+      normalizedShapeName == "feet" || normalizedShapeName == "face" ||
+      normalizedShapeName == "head";
+  const bool characterBaseDiffuse =
+      normalizedDiffuseFilename.starts_with("femalebody");
+  if (characterBaseGeometry || characterBaseDiffuse) {
+    return false;
+  }
+
+  return a_shape.shaderType == "BSLightingShaderProperty" &&
+         a_shape.geometryAddress != 0 &&
+         a_shape.shaderPropertyAddress != 0 &&
+         a_shape.diffuseRendererTextureAddress != 0 &&
+         a_shape.diffuseShaderResourceAddress != 0;
+}
+
 namespace {
 using Microsoft::WRL::ComPtr;
 
@@ -151,12 +194,10 @@ std::mutex g_savedWorldTintRestoreQueueMutex;
 std::unordered_set<RE::FormID> g_queuedSavedWorldTintRestores;
 std::atomic<std::uint64_t> g_savedWorldTintRestoreGeneration{0};
 
+[[nodiscard]] ComPtr<ID3D11DeviceContext> SnapshotHookedContext();
+
 [[nodiscard]] bool IsDyeableRendererShape(const RenderedShapeInfo &a_shape) {
-  return a_shape.shaderType == "BSLightingShaderProperty" &&
-         a_shape.geometryAddress != 0 &&
-         a_shape.shaderPropertyAddress != 0 &&
-         a_shape.diffuseRendererTextureAddress != 0 &&
-         a_shape.diffuseShaderResourceAddress != 0;
+  return IsDyeableAppearanceComponent(a_shape);
 }
 
 [[nodiscard]] bool HasSameRuntimeBinding(
@@ -316,17 +357,23 @@ void RestoreSavedWorldTintsForActor(RE::Actor *a_actor) {
     }
     auto *source = reinterpret_cast<ID3D11ShaderResourceView *>(
         thirdPersonShape.diffuseShaderResourceAddress);
-    ComPtr<ID3D11Device> device;
-    ComPtr<ID3D11DeviceContext> context;
     if (!source) {
       continue;
     }
-    source->GetDevice(device.GetAddressOf());
-    if (!device) {
-      continue;
-    }
-    device->GetImmediateContext(context.GetAddressOf());
+    auto context = SnapshotHookedContext();
     if (!context) {
+      ComPtr<ID3D11Device> sourceDevice;
+      source->GetDevice(sourceDevice.GetAddressOf());
+      if (!sourceDevice) {
+        continue;
+      }
+      sourceDevice->GetImmediateContext(context.GetAddressOf());
+    }
+    ComPtr<ID3D11Device> device;
+    if (context) {
+      context->GetDevice(device.GetAddressOf());
+    }
+    if (!device || !context) {
       continue;
     }
     std::string status;
@@ -401,6 +448,15 @@ std::atomic<DrawIndexedFn> g_originalDrawIndexed{nullptr};
 std::atomic<DrawFn> g_originalDraw{nullptr};
 ID3D11DeviceContext *g_hookedContext{nullptr};
 std::mutex g_contextHookMutex;
+
+ComPtr<ID3D11DeviceContext> SnapshotHookedContext() {
+  std::scoped_lock lock(g_contextHookMutex);
+  ComPtr<ID3D11DeviceContext> context;
+  if (g_hookedContext) {
+    context = g_hookedContext;
+  }
+  return context;
+}
 
 [[nodiscard]] bool CompileShader(const char *a_source, const char *a_entry,
                                  const char *a_target, ComPtr<ID3DBlob> &a_blob,

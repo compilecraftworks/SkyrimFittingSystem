@@ -37,6 +37,12 @@ struct WorldTintColor {
 // scene pointers and never edits a geometry, property, material, or texture.
 [[nodiscard]] std::vector<RenderedShapeInfo> ScanLoadedActorShapes(RE::Actor *a_actor);
 
+// Shared workbench/runtime gate for actual appearance components. This keeps
+// body, overlay, collision, and helper geometry out of both the popup and
+// durable restoration, including records saved by an older build.
+[[nodiscard]] bool
+IsDyeableAppearanceComponent(const RenderedShapeInfo &a_shape);
+
 // The hook is dormant until ConfigureWorldTints succeeds. It replaces the
 // selected shape's source SRV only inside its SetupGeometry/RestoreGeometry
 // bracket, leaving game materials, appearances and save data untouched.
