@@ -21,6 +21,11 @@
 
 ## Helmet Toggle 2 호환
 
+- HT2 설치 상태에서 작업대 액터를 플레이어에서 새 NPC로 전환할 때
+  발생하던 SFSCore CTD를 수정했습니다. 중복 활성 마법효과 소유권 보조
+  판정을 제거하고, NPC·팔로워 판정은 HT2 모니터 Spell·정확한
+  `HT_HeadGearEquipped` AddSpell/RemoveSpell 신호·액터별 FormID 캐시를
+  계속 사용합니다.
 - 별도 Helmet Toggle 2 PEX 패치를 없애고 SFSCore 본체 내장 연동으로
   교체했습니다. SFS는 HT2의 정확한 플레이어 상태 전역값과 액터별
   NPC·팔로워 주문 전환만 관찰하며 HT2 스크립트·호출·실제 장비·DAVE

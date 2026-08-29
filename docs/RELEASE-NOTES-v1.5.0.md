@@ -24,6 +24,11 @@
 
 ## Helmet Toggle 2 compatibility
 
+- Fixed an SFSCore CTD when switching the workbench from the player to a new
+  NPC while HT2 was installed. The redundant active-magic-effect ownership
+  fallback was removed; NPC/follower ownership continues to use HT2's resolved
+  monitor spells, exact `HT_HeadGearEquipped` AddSpell/RemoveSpell signals, and
+  the actor-local FormID cache.
 - Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore
   integration. SFS observes only HT2's exact player state global and its exact
   actor-local NPC/follower spell transitions; it never replaces or edits HT2

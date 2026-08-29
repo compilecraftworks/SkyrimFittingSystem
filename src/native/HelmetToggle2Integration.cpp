@@ -71,7 +71,6 @@ struct HelmetToggleForms {
   RE::TESGlobal *enableMask{nullptr};
 
   std::array<RE::SpellItem *, 3> monitorSpells{};
-  std::array<RE::EffectSetting *, 4> monitorEffects{};
 };
 
 HelmetToggleForms g_forms;
@@ -106,18 +105,6 @@ template <class T>
                               const RE::BGSKeyword *a_keyword) {
   return a_armor != nullptr && a_keyword != nullptr &&
          a_armor->HasKeyword(a_keyword);
-}
-
-[[nodiscard]] bool IsMonitorOwnershipForm(const RE::TESForm *a_form) {
-  if (!IsHelmetToggleForm(a_form)) {
-    return false;
-  }
-  const auto editorID = sfs::armor::GetEditorID(a_form);
-  return editorID == "HT_NPCSpellMonitor" ||
-         editorID == "HT_FollowerSpellMonitor" ||
-         editorID == "HT_CustomFollowerSpellMonitor" ||
-         editorID == "HT_NPCManagedEffect" ||
-         editorID == "HT_SpellMonitorEffect";
 }
 
 [[nodiscard]] bool IsManagedHeadgear(const RE::TESObjectARMO *a_armor,
@@ -227,37 +214,9 @@ void SetActorHiddenState(RE::Actor *a_actor, const bool a_hidden) {
   return g_hiddenActors.contains(a_actor->GetFormID());
 }
 
-[[nodiscard]] bool HasAnyMonitorEffect(RE::Actor *a_actor) {
-  auto *effects = a_actor ? a_actor->GetActiveEffectList() : nullptr;
-  if (!effects) {
-    return false;
-  }
-  for (auto *effect : *effects) {
-    if (!effect) {
-      continue;
-    }
-    const auto *base = effect->GetBaseObject();
-    if (IsMonitorOwnershipForm(base) ||
-        IsMonitorOwnershipForm(effect->spell)) {
-      return true;
-    }
-    for (const auto *monitor : g_forms.monitorEffects) {
-      if (monitor != nullptr && base == monitor) {
-        return true;
-      }
-    }
-  }
-  return false;
-}
-
 [[nodiscard]] bool HasResolvedMonitorOwnershipForm() {
   for (const auto *spell : g_forms.monitorSpells) {
     if (spell != nullptr) {
-      return true;
-    }
-  }
-  for (const auto *effect : g_forms.monitorEffects) {
-    if (effect != nullptr) {
       return true;
     }
   }
@@ -277,7 +236,13 @@ void SetActorHiddenState(RE::Actor *a_actor, const bool a_hidden) {
       return true;
     }
   }
-  return HasAnyMonitorEffect(a_actor);
+  // HT2's NPC/follower monitor scripts run from persistent monitor spells,
+  // while HT_HeadGearEquipped AddSpell/RemoveSpell calls provide the exact
+  // visible-state signal and seed the actor-local cache. Do not inspect the
+  // Actor MagicTarget active-effect list here: actor selection can run while
+  // that secondary vtable/list is unavailable, and the redundant fallback
+  // caused a null-vtable CTD during RefreshArmorFor/SynchronizeActor.
+  return false;
 }
 
 [[nodiscard]] bool IsManagedNpc(RE::Actor *a_actor) {
@@ -455,11 +420,6 @@ bool Initialize() {
       LookupHelmetToggleForm<RE::SpellItem>("HT_NPCSpellMonitor"),
       LookupHelmetToggleForm<RE::SpellItem>("HT_FollowerSpellMonitor"),
       LookupHelmetToggleForm<RE::SpellItem>("HT_CustomFollowerSpellMonitor")};
-  forms.monitorEffects = {
-      LookupHelmetToggleForm<RE::EffectSetting>("HT_NPCSpellMonitor"),
-      LookupHelmetToggleForm<RE::EffectSetting>("HT_FollowerSpellMonitor"),
-      LookupHelmetToggleForm<RE::EffectSetting>("HT_NPCManagedEffect"),
-      LookupHelmetToggleForm<RE::EffectSetting>("HT_SpellMonitorEffect")};
 
   g_forms = forms;
   g_available.store(true, std::memory_order_release);
