@@ -18,7 +18,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
 [line]
-[size=4][b][color=#42ACC8]v1.5.0 주요 기능[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.5.1 주요 기능[/color][/b][/size]
 
 
 [list]
@@ -47,6 +47,20 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]3인칭 SFS 메뉴의 캐릭터 좌우 배치와 우클릭 드래그 플레이어 회전[/*]
 [*]액터별 최종 표시 장비를 읽는 OAR용 읽기 전용 조건[/*]
 [*]내장 Grid Inventory Costume·Helmet Toggle 2 연동과 DFFMA OAR·Dynamic Footprints v3 선택형 호환 패치[/*]
+[*]선택 액터의 바디 계열에 맞춰 장비·의상·키트 목록을 자동 필터링하는 카탈로그[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]v1.5.1 업데이트 요약[/color][/b][/size]
+
+
+[list]
+[*]장비·의상·키트 목록이 작업대에서 선택한 액터의 바디 계열을 자동으로 따릅니다. 여성은 CBBE/3BA/3BBB, UNP/UNPB/UUNP/BHUNP, UBE, Vanilla/미확인으로, 남성은 HIMBO, SAM, Vanilla/미확인으로 묶습니다.[/*]
+[*]명확히 충돌하는 계열만 숨기고 표식 없는 같은 성별 Vanilla/미확인 항목은 유지합니다. 이미 로드된 폼과 선택 액터 정보만 사용하며 BodySlide·NIF 디스크 스캔, 주변 액터 폴링과 전역 액터 스캔은 없습니다.[/*]
+[*]액터 전환은 표시 목록 캐시만 다시 계산합니다. 등록 외형·조건·실제 장비·키트·피팅 염색·가상토큰·외부 탈의/재착의·DAVE/DAV/native 소유 상태를 변경하지 않습니다.[/*]
+[*]플레이어·NPC·팔로워 등록 외형의 RaceMenu 실시간 BodyMorph 동기화를 복원했습니다.[/*]
+[*]실제 SFS 텍스트 입력칸에 편집 커서가 있고 포커스를 가진 동안만 Skyrim과 다른 모드 입력을 잠그고, 포커스가 벗어나면 즉시 해제합니다. 단축키 캡처의 의도된 잠금은 별도로 유지합니다.[/*]
 [/list]
 
 
@@ -58,6 +72,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]기본·조건 영역의 등록 외형 카드에 [b]피팅 염색[/b]을 추가했습니다. 전용 염색 버튼이나 카드 우클릭 메뉴로 열고, 렌더 외형 조각을 선택해 월드의 짧은 점멸로 확인한 뒤 색상을 적용하거나 원본 색상으로 복원할 수 있습니다.[/*]
 [*]염색 색상은 액터 FormID → 등록 외형 ARMO → 정확한 렌더 조각 단위로 저장합니다. 같은 메시나 diffuse를 쓰는 다른 액터·다른 등록 외형으로 번지지 않으며, 일치 항목이 없거나 둘 이상이면 추측 적용하지 않고 안전하게 건너뜁니다.[/*]
 [*]원본 diffuse RGB를 곱한 전용 GPU 텍스처를 정확한 geometry에만 사용합니다. 원본 DDS/NIF·셰이더 머티리얼·실제 장비·인벤토리·키워드·작업대 행·조건·키트·가상토큰·탈의 연동·DAVE/DAV/native 소유 구조는 바꾸지 않습니다.[/*]
+[*]HT2 설치 상태에서 작업대 액터를 플레이어에서 새 NPC로 바꿀 때 발생하던 SFSCore CTD를 수정했습니다. 중복 활성효과 목록 보조 판정을 제거했으며, HT2 NPC·팔로워 지원은 모니터 Spell·정확한 [font=Courier New]HT_HeadGearEquipped[/font] AddSpell/RemoveSpell 신호·액터별 FormID 캐시로 계속 동작합니다.[/*]
 [*]별도 Helmet Toggle 2 PEX 패치를 없애고 SFSCore 본체가 정확한 HT2 상태 신호만 관찰하도록 교체했습니다. HT2 스크립트 교체가 필요 없습니다.[/*]
 [*]중복 제거된 배열 위치가 아니라 실제 투구 ARMO의 전체 슬롯 마스크를 읽습니다.[/*]
 [*]HT2가 착용 상태인 실제 31+42 투구를 숨길 때 해당 액터의 렌더링용 실제 31 Hair 비트만 해제해 원래 머리카락이 보이도록 수정했습니다. 실제 ARMO·인벤토리·HT2/DAVE 변형·가상토큰은 바꾸지 않으며, 순수 등록 31은 독립적으로 유지하고 등록 31+42는 42를 통해 따릅니다.[/*]
@@ -119,7 +134,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]이전 SFS 모드 폴더를 완전히 삭제합니다.[/*]
 [*]기존의 모든 [b]SFS Helmet Toggle 2 호환 패치[/b]를 완전히 삭제합니다. Helmet Toggle 2 본체를 삭제하는 것은 아닙니다.[/*]
 [*]이전 독립형 시험용 [b]SFS Kit Generator[/b] 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.[/*]
-[*]v1.5.0 배포 ZIP을 새 모드로 설치합니다.[/*]
+[*]v1.5.1 배포 ZIP을 새 모드로 설치합니다.[/*]
 [*][font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font]을 활성화합니다.[/*]
 [*]필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.[/*]
 [/list]
@@ -372,37 +387,54 @@ SFS는 등록 외형을 외부 모드가 실제 착용 장비처럼 조회할 �
 [td][b]검증 상태[/b][/td]
 [/tr]
 [tr]
-[td]SexLab 탈의·재착의[br][font=Courier New]StripActor[/font] · [font=Courier New]GetWornForm[/font][br][font=Courier New]UnequipItemEx[/font] · [font=Courier New]EquipItemEx[/font][/td]
+[td]SexLab 탈의·재착의
+[font=Courier New]StripActor[/font] · [font=Courier New]GetWornForm[/font]
+[font=Courier New]UnequipItemEx[/font] · [font=Courier New]EquipItemEx[/font][/td]
 [td]SexLab Framework SE · SexLab Utility Plus · Soulgem Oven / SGO4 Integration Fork · Fill Her Up Baka Edition · SexLab Defeat Bane · BaboDialogue · Bimbos of Skyrim · Balazar’s Bitch · Sexy Adventures · SexLab Approach Redux · SexLab Aroused Creatures · SexLab Dialogues · SexLab Solutions · SexLab Romance · SexLab Body Search[/td]
 [td]범용 호환[/td]
 [td]SexLab·SGO 검증 완료[/td]
 [/tr]
 [tr]
-[td]슬롯 필터·개별 탈착[br][font=Courier New]AddAllEquippedItemsToArray[/font][br][font=Courier New]GetWornForm[/font][br][font=Courier New]UnequipItem/Slot/Ex[/font][br][font=Courier New]EquipItem/ByID[/font][/td]
+[td]슬롯 필터·개별 탈착
+[font=Courier New]AddAllEquippedItemsToArray[/font]
+[font=Courier New]GetWornForm[/font]
+[font=Courier New]UnequipItem/Slot/Ex[/font]
+[font=Courier New]EquipItem/ByID[/font][/td]
 [td]Private Needs – Orgasm · Bathing in Skyrim – Renewed · Licenses – Player Oppression · SLHH Expansion · Trap Needs to Be Real Trap / TNTR · Simple Player Prostitution · Death Trap Chest · Soul Resurrection[/td]
 [td]범용 호환[/td]
 [td]PNO·Bathing 검증 완료[/td]
 [/tr]
 [tr]
-[td]DD 장치·Hider[br][font=Courier New]GetWornForm[/font][br][font=Courier New]EquipItem*[/font] · [font=Courier New]UnequipItem*[/font][br][font=Courier New]zadNativeFunctions.SyncSetting[/font][/td]
+[td]DD 장치·Hider
+[font=Courier New]GetWornForm[/font]
+[font=Courier New]EquipItem*[/font] · [font=Courier New]UnequipItem*[/font]
+[font=Courier New]zadNativeFunctions.SyncSetting[/font][/td]
 [td]Devious Devices SE/NG · Devious Helpless Redux · Devious Interests · Devious Cidhna · Devious Curses NG · Unforgiving Devices · Laura’s Bondage Shop[/td]
 [td]DD 전용 호환[/td]
 [td]DD 착용·해제 검증 완료[/td]
 [/tr]
 [tr]
-[td]감옥·압수·구금[br][font=Courier New]RemoveAllItems[/font] · [font=Courier New]RemoveItem[/font][br][font=Courier New]SetOutfit[/font][br][font=Courier New]EquipItem/UnequipItem[/font][/td]
+[td]감옥·압수·구금
+[font=Courier New]RemoveAllItems[/font] · [font=Courier New]RemoveItem[/font]
+[font=Courier New]SetOutfit[/font]
+[font=Courier New]EquipItem/UnequipItem[/font][/td]
 [td]Pama Prison Alternative · Pama Orkish Bounty Hunters · Pama Punishment · Pama Bad Ends · Pama Sovngarde · Pama Deadly Furniture · Captured by the Thalmor · Captive Player · Dark Arena · Bandit Paradise · Follower Slavery Mod[/td]
 [td]범용 호환[/td]
 [td]Pama 검증 완료[/td]
 [/tr]
 [tr]
-[td]노예·강제 복장 교체[br][font=Courier New]StripActor[/font] · [font=Courier New]UnequipAll[/font][br][font=Courier New]RemoveAllItems[/font] · [font=Courier New]SetOutfit[/font][br][font=Courier New]EquipItem*[/font][/td]
+[td]노예·강제 복장 교체
+[font=Courier New]StripActor[/font] · [font=Courier New]UnequipAll[/font]
+[font=Courier New]RemoveAllItems[/font] · [font=Courier New]SetOutfit[/font]
+[font=Courier New]EquipItem*[/font][/td]
 [td]Public Whore · Sanguine Debauchery / SD+ · Simple Slavery Plus Plus / Rebuild · S.L.U.T.S. Resume · Submissive Lola · Dress Up Lover’s NPC Outfit Changer[/td]
 [td]범용 호환[/td]
 [td]추가 검증 필요[/td]
 [/tr]
 [tr]
-[td]시작·퀘스트 복장 교체[br][font=Courier New]UnequipAll[/font] · [font=Courier New]RemoveAllItems[/font][br][font=Courier New]SetOutfit[/font] · [font=Courier New]EquipItem[/font][/td]
+[td]시작·퀘스트 복장 교체
+[font=Courier New]UnequipAll[/font] · [font=Courier New]RemoveAllItems[/font]
+[font=Courier New]SetOutfit[/font] · [font=Courier New]EquipItem[/font][/td]
 [td]Alternate Perspective · Deviant Start · Kidnapped Start · Adventurer’s Start · The Adventurer’s Guild[/td]
 [td]범용 호환[/td]
 [td]추가 검증 필요[/td]

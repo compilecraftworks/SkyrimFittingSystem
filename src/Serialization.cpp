@@ -1,5 +1,6 @@
 #include "Serialization.h"
 
+#include "catalog/BodyFamily.h"
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
 #include "native/FittingSlotState.h"
@@ -27,6 +28,7 @@ void SaveCallback(SKSE::SerializationInterface *a_skse) {
 }
 
 void LoadCallback(SKSE::SerializationInterface *a_skse) {
+  body_family::ResetRuntimeCaches();
   native::dye::ClearWorldTint();
   ui::conditions::ConditionParamOptionCache::Get().Reset();
   poc::ResetDeviousDevicesHider();
@@ -55,6 +57,7 @@ void LoadCallback(SKSE::SerializationInterface *a_skse) {
 }
 
 void RevertCallback([[maybe_unused]] SKSE::SerializationInterface *a_skse) {
+  body_family::ResetRuntimeCaches();
   native::dye::ClearWorldTint();
   native::dye::RevertSavedWorldTints();
   ui::conditions::ConditionParamOptionCache::Get().Reset();

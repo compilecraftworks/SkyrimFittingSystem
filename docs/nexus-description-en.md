@@ -1,3 +1,5 @@
+[![Support Skyrim Fitting System on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M1P225QD23)
+
 # Skyrim Fitting System
 
 An SKSE appearance system that preserves the armor rating, enchantments, and effects of actual equipped gear while letting you build a separate visible outfit.
@@ -19,7 +21,40 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, and per-slot Direct Editing exceptions
 - Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation
 - Actor-local Fitting Dye for individual rendered components of a registered appearance, available from its dye button or right-click context menu
+- Actor-aware Equipment, Outfits, and Kits filtering for CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM, and same-sex Vanilla/fallback content
 - Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges
+
+![Hiding Actual Equipment](https://i.ibb.co/4bb432f/image.gif)
+**Hiding Actual Equipment**
+
+![Appearance Preview](https://i.ibb.co/mrfbJX7S/image.gif)
+**Appearance Preview (Character Positioned on the Left or Right)**
+
+![Per-Actor Appearance Registration](https://i.ibb.co/TpxyZnR/image.gif)
+**Per-Actor Appearance Registration (Nearby Detection and Actor-Specific View)**
+
+![Condition and Action Setup](https://i.ibb.co/Kj4RNjs3/image.gif)
+**Condition Setup (Preset/Custom) – Action Setup (Show/Hide Equipment and Appearances)**
+
+![Kit Generator](https://i.ibb.co/RpgXkxYN/image.gif)
+**Kit Generator (Automatically Generate Kits from a Selected ESP)**
+
+![Appearance Dye System](https://i.ibb.co/Rf3djws/image.gif)
+**Appearance Dye System (Select and Dye Individual Outfit Components)**
+
+![External Mod Strip and Redress Integration](https://i.ibb.co/DDBX4WJH/image.gif)
+**External Mod Strip/Redress Integration (Follows Each Mod’s MCM-Configured Slots, Including SexLab)**
+
+![Helmet Toggle 2 Appearance Hiding Integration](https://i.ibb.co/S4JHn3DT/2.gif)
+**Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)**
+
+## Version 1.5.1 Update Summary
+
+- Equipment, Outfits, and Kits now filter automatically for the body family of the actor selected in the workbench. Female groups are CBBE/3BA/3BBB, UNP/UNPB/UUNP/BHUNP, UBE, and Vanilla/fallback; male groups are HIMBO, SAM, and Vanilla/fallback.
+- Explicitly conflicting body families are hidden while unlabelled same-sex Vanilla/fallback entries remain visible. The filter uses loaded form and selected-actor metadata only, with no BodySlide/NIF disk scan, nearby-actor polling, or global actor scan.
+- Changing actors rebuilds only the visible catalog cache. Registered appearances, conditions, actual equipment, kits, Fitting Dye, virtual tokens, external strip/redress state, and DAVE/DAV/native ownership are not changed.
+- Restored live RaceMenu BodyMorph synchronization for registered appearances on the player, NPCs, and followers.
+- Skyrim and other-mod input is now suppressed only while a real SFS text editor owns focus and shows its caret, and is released immediately when focus leaves that editor. Intentional keybind capture remains separately locked.
 
 ## Version 1.5.0 Update Summary
 
@@ -34,21 +69,24 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 
 ## Requirements
 
-Required:
+Required: (Required base mod)
 
 - SKSE64 matching the installed Skyrim SE/AE runtime
 - Address Library for SKSE Plugins
-- The included `SkyrimFittingSystem-VirtualTokens.esl` enabled
 
-Optional:
+Optional: (Required optional patch file)
+
+- Wet Function Redux with the separate SFS compatibility patch
+- Dynamic Footprints SKSE BASE v3 only with its matching separate SFS patch
+- Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR with the separate DFFMA configuration patch
+
+Built-in: (Not required any patch file)
 
 - RaceMenu for live BodyMorph synchronization on registered appearances
 - DAVE or DAV; SFS automatically uses the installed display environment
 - SOS or TNG for genital conceal/reveal compatibility
-- Wet Function Redux with the separate SFS compatibility patch
-- Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR for the separate DFFMA configuration patch
-- Grid Inventory v1.4.1+ for built-in Costume synchronization; Helmet Toggle 2 for built-in actor-local headgear linking; Dynamic Footprints SKSE BASE v3 only with its matching separate SFS patch
-- SexLab, Soulgem Oven, Private Needs, Bathing in Skyrim, Devious Devices, Pama Prison Alternative, or other supported external-strip mods
+- Helmet Toggle 2 for built-in actor-local registered-appearance headgear hiding; SFS does not interfere with Helmet Toggle 2's actual equipment control
+- Grid Inventory v1.4.1
 
 ## Installation and Updating
 
@@ -56,7 +94,7 @@ Optional:
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.5.0 distribution ZIP as a new mod.
+5. Install the v1.5.1 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
 7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.
 
@@ -343,3 +381,5 @@ Only the DLL lookup name changed. The four C export names and function signature
 Skyrim Fitting System is licensed under [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.html). The source code is available on [GitHub](https://github.com/compilecraftworks/SkyrimFittingSystem). This project contains modified work derived from [Skyrim Vanity System](https://www.nexusmods.com/skyrimspecialedition/mods/175182) and [Skyrim Outfit System SE Revived](https://www.nexusmods.com/skyrimspecialedition/mods/42162).
 
 Credits to the authors of CommonLibSSE-NG, Dear ImGui, SKSE, and Address Library for SKSE Plugins. All respective rights belong to their original authors.
+
+[![Support Skyrim Fitting System on Ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/M1P225QD23)

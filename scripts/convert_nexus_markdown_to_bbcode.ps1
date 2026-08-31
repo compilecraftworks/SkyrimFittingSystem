@@ -36,7 +36,8 @@ function Close-List {
 }
 
 function Convert-Inline([string]$text) {
-    $text = [regex]::Replace($text, '<br\s*/?>', '[br]', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $text = [regex]::Replace($text, '<br\s*/?>', [Environment]::NewLine, [System.Text.RegularExpressions.RegexOptions]::IgnoreCase)
+    $text = [regex]::Replace($text, '\[!\[([^\]]*)\]\(([^)]+)\)\]\((https?://[^)]+)\)', '[center][url=$3][img]$2[/img][/url][/center]')
     $text = [regex]::Replace($text, '!\[([^\]]*)\]\(([^)]+)\)', '[center][img]$2[/img][/center]')
     $text = [regex]::Replace($text, '\[([^\]]+)\]\((https?://[^)]+)\)', '[url=$2]$1[/url]')
     $text = [regex]::Replace($text, '\*\*([^*]+)\*\*', '[b]$1[/b]')

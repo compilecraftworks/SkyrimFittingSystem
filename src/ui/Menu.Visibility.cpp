@@ -46,14 +46,16 @@ constexpr auto kBlockedGameplayControls = static_cast<UserEventFlag>(
         UserEventFlag::kWheelZoom) |
     static_cast<std::underlying_type_t<UserEventFlag>>(UserEventFlag::kVATS));
 
-bool IsAnyMouseButtonDown(const ImGuiIO &a_io) {
-  for (const bool mouseDown : a_io.MouseDown) {
-    if (mouseDown) {
-      return true;
-    }
+bool IsCurrentFrameEditableTextInputActive() {
+  auto *context = ImGui::GetCurrentContext();
+  if (context == nullptr || !context->PlatformImeData.WantTextInput ||
+      context->ActiveId == 0) {
+    return false;
   }
 
-  return false;
+  const auto *textState = ImGui::GetInputTextState(context->ActiveId);
+  return textState != nullptr &&
+         (textState->Flags & ImGuiInputTextFlags_ReadOnly) == 0;
 }
 
 void AllowTextInput([[maybe_unused]] RE::ControlMap *a_controlMap,
@@ -89,6 +91,7 @@ void Menu::Open() {
   workbenchBaseSessionOrder_.clear();
   workbenchConditionalSessionOrder_.clear();
   workbenchDerived_ = {};
+  catalogActorBodyState_ = {};
 
   if (!CatalogBrowserState().initialized) {
     QueueCatalogRefresh();
@@ -579,21 +582,24 @@ void Menu::ApplySmoothScroll() {
   }
 }
 
-void Menu::SyncAllowTextInput() {
+void Menu::SyncAllowTextInput(const bool a_afterWidgetDraw) {
   const auto &io = ImGui::GetIO();
   const bool currentWantTextInput =
-      visibilityState_ != VisibilityState::Closing && io.WantTextInput;
+      visibilityState_ != VisibilityState::Closing &&
+      (a_afterWidgetDraw ? IsCurrentFrameEditableTextInputActive()
+                         : io.WantTextInput);
 
-  // Toggling Skyrim text input off on every ImGui text-field blur causes the
-  // active Scaleform frame to visibly flash, so defer it across blur clicks.
+  // io.WantTextInput is the finalized state from the preceding ImGui frame.
+  // After drawing widgets, use the current active InputText/IME state instead
+  // so clicking a button, list, or other non-text control releases external
+  // shortcut suppression in the same frame that the edit cursor disappears.
   if (currentWantTextInput && !skyrimTextInputAllowed_) {
     if (auto *controlMap = RE::ControlMap::GetSingleton();
         controlMap != nullptr) {
       AllowTextInput(controlMap, true);
       skyrimTextInputAllowed_ = true;
     }
-  } else if (!currentWantTextInput && skyrimTextInputAllowed_ &&
-             !IsAnyMouseButtonDown(io)) {
+  } else if (!currentWantTextInput && skyrimTextInputAllowed_) {
     if (auto *controlMap = RE::ControlMap::GetSingleton();
         controlMap != nullptr) {
       AllowTextInput(controlMap, false);
@@ -622,7 +628,7 @@ void Menu::Draw() {
   InputManager::GetSingleton()->UpdateMousePosition();
   ImGui::NewFrame();
   ui::components::BeginPinnableTooltipFrame();
-  SyncAllowTextInput();
+  SyncAllowTextInput(false);
 
   {
     // DrawWindow keeps direct references into both stores while building the
@@ -633,7 +639,7 @@ void Menu::Draw() {
     DrawWindow();
   }
   ui::MenuCharacterPresentation::GetSingleton()->UpdateRotationInteraction();
-  SyncAllowTextInput();
+  SyncAllowTextInput(true);
   ui::components::EndPinnableTooltipFrame();
   ApplySmoothScroll();
   UpdateVisibilityAnimation(ImGui::GetIO().DeltaTime);

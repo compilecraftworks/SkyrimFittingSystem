@@ -1,0 +1,35 @@
+[center]
+[size=6][b][color=#42ACC8]Skyrim Fitting System v1.5.1[/color][/b][/size]
+[/center]
+
+
+[line]
+[size=4][b][color=#42ACC8]선택 액터 바디 계열 카탈로그 필터[/color][/b][/size]
+
+
+[list]
+[*]장비·의상·키트 목록이 작업대에서 선택한 액터의 바디 계열을 자동으로 따릅니다. 액터를 바꾸면 표시 목록만 다시 계산하며 등록 외형·조건·키트· 실제 장비·저장 상태는 변경하지 않습니다.[/*]
+[*]여성은 CBBE/3BA/3BBB, UNP/UNPB/UUNP/BHUNP, UBE, Vanilla/미확인 계열로 묶고 남성은 HIMBO, SAM, Vanilla/미확인 계열로 묶습니다. 명확히 충돌하는 계열만 숨기며 표식이 없는 Vanilla/미확인 항목은 같은 성별 액터에게 계속 표시합니다.[/*]
+[*]이미 로드된 플러그인명·ARMO·키워드·ARMA 모델·Skin과 선택 액터의 장면 정보만 사용합니다. BodySlide 프로젝트나 NIF 파일을 디스크에서 스캔하지 않고, 주변 액터 폴링이나 전역 액터 스캔도 사용하지 않습니다.[/*]
+[*]액터 캐시는 FormID와 Skin/Race/3D 서명으로 분리하고 세이브 전환 때 초기화합니다. DAVE·DAV·native 표시, 외부 탈의/재착의, 가상토큰, HT2, Grid Inventory, 피팅 염색과 OAR 상태는 필터 밖에 유지합니다.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]회귀 수정[/color][/b][/size]
+
+
+[list]
+[*]플레이어·NPC·팔로워 등록 외형의 RaceMenu 실시간 BodyMorph 동기화를 복원했습니다. 액터별 노드 부착 및 지연 [font=Courier New]UpdateModelWeight[/font] 경로는 DAVE·DAV·native에서 유지되며 폴링이나 주변 액터 스캔을 사용하지 않습니다.[/*]
+[*]실제 SFS 텍스트 입력칸이 키보드 포커스를 가지고 편집 커서를 표시할 때만 Skyrim과 다른 모드의 입력을 잠급니다. 포커스가 입력칸을 벗어나면 즉시 해제하며, 단축키 캡처는 별도의 의도된 입력 잠금을 계속 사용합니다.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]호환 경계[/color][/b][/size]
+
+
+[list]
+[*]새 카탈로그 필터는 표시 전용입니다. 장비 착탈, 액터 3D 갱신, BodyMorph 적용, 작업대 행·조건 변경이나 새로운 게임 상태 저장을 수행하지 않습니다.[/*]
+[*]모드 설정 슬롯 연동, 바닐라 슬롯 자동 연동, 직접 슬롯 편집, 수동 눈 버튼, DD·Pama·외부 장비 트랜잭션과 액터별 DAVE/DAV/native 소유 구조는 v1.5.0 동작을 유지합니다.[/*]
+[/list]

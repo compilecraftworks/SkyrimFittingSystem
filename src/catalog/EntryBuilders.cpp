@@ -102,6 +102,7 @@ const sfs::ArmorMetadata &GetOrBuildArmorMetadata(
   metadata.displayName = sfs::armor::GetDisplayName(a_armor);
   metadata.category = GetArmorCategory(a_armor);
   metadata.slotMask = sfs::armor::GetArmorWorkbenchSlotMask(a_armor);
+  metadata.bodyFamilies = sfs::body_family::ClassifyCatalogArmor(a_armor);
   metadata.slots = sfs::armor::GetArmorSlotLabels(metadata.slotMask);
   return a_cache.emplace(formID, std::move(metadata)).first->second;
 }
@@ -177,6 +178,18 @@ void AppendSearchToken(std::string &a_searchText, std::string_view a_token) {
     a_searchText.push_back(' ');
   }
   a_searchText.append(a_token);
+}
+
+sfs::body_family::Mask DetectEntryBodyFamilies(
+    const std::initializer_list<std::string_view> a_signals) {
+  std::string combined;
+  for (const auto signal : a_signals) {
+    AppendSearchToken(combined, signal);
+  }
+  return sfs::body_family::DetectText(combined,
+                                      sfs::body_family::Sex::Female) |
+         sfs::body_family::DetectText(combined,
+                                      sfs::body_family::Sex::Male);
 }
 
 std::string BuildGearSearchText(const sfs::GearEntry &a_entry) {
@@ -432,6 +445,8 @@ std::shared_ptr<const sfs::CatalogResolvedData> FinalizeResolvedData(
             : GetOrBuildArmorMetadata(armor, a_armorMetadataCache);
 
     resolved->slotMask |= metadata.slotMask;
+    resolved->bodyFamilies = sfs::body_family::MergeCatalogMasks(
+        resolved->bodyFamilies, metadata.bodyFamilies);
   }
 
   SortUniqueStrings(resolved->pieces);
@@ -622,6 +637,7 @@ std::optional<GearEntry> BuildGearEntry(
   SortUniqueStrings(entry.keywords);
   entry.keywordsText = JoinStrings(entry.keywords);
   entry.searchText = BuildGearSearchText(entry);
+  entry.bodyFamilies = metadata.bodyFamilies;
   return entry;
 }
 
@@ -664,6 +680,10 @@ std::optional<OutfitEntry> BuildOutfitEntry(
   entry.resolved = FinalizeResolvedData(
       std::move(description.armorFormIDs), std::move(description.itemTree),
       std::move(description.pieces), a_armorMetadataCache);
+  entry.bodyFamilies = sfs::body_family::MergeCatalogMasks(
+      entry.resolved ? entry.resolved->bodyFamilies : 0,
+      DetectEntryBodyFamilies(
+          {entry.name, entry.editorID, entry.plugin, entry.summary}));
   entry.searchText = BuildOutfitSearchText(entry);
   return entry;
 }
@@ -736,6 +756,10 @@ std::optional<KitEntry> BuildKitEntry(
       std::move(description.armorFormIDs), std::move(description.itemTree),
       std::move(description.pieces), a_armorMetadataCache);
   entry.layout = std::move(layout);
+  entry.bodyFamilies = sfs::body_family::MergeCatalogMasks(
+      entry.resolved ? entry.resolved->bodyFamilies : 0,
+      DetectEntryBodyFamilies(
+          {entry.name, entry.collection, entry.filepath, entry.summary}));
   entry.searchText = BuildKitSearchText(entry);
   return entry;
 }

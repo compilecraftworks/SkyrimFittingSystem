@@ -1,6 +1,7 @@
 #pragma once
 
 #include "IncrementalLoader.h"
+#include "catalog/BodyFamily.h"
 
 #include <memory>
 #include <optional>
@@ -31,6 +32,7 @@ struct CatalogResolvedData {
   std::shared_ptr<const CatalogCollectionChildren> itemTree;
   std::vector<std::string> pieces;
   std::uint64_t slotMask{0};
+  body_family::Mask bodyFamilies{0};
   std::string piecesText;
 };
 
@@ -44,6 +46,7 @@ struct ArmorMetadata {
   std::string displayName;
   std::string category;
   std::uint64_t slotMask{0};
+  body_family::Mask bodyFamilies{0};
   std::vector<std::string> slots;
 };
 
@@ -63,6 +66,7 @@ struct GearEntry {
   std::vector<std::string> keywords;
   std::string keywordsText;
   std::string searchText;
+  body_family::Mask bodyFamilies{0};
 };
 
 struct OutfitEntry {
@@ -74,6 +78,7 @@ struct OutfitEntry {
   std::string summary;
   std::shared_ptr<const CatalogResolvedData> resolved;
   std::string searchText;
+  body_family::Mask bodyFamilies{0};
 
   [[nodiscard]] const std::vector<RE::FormID> &GetArmorFormIDs() const;
   [[nodiscard]] const std::vector<CatalogCollectionItemNode> &
@@ -107,6 +112,7 @@ struct KitEntry {
   std::shared_ptr<const CatalogResolvedData> resolved;
   std::shared_ptr<const Layout> layout;
   std::string searchText;
+  body_family::Mask bodyFamilies{0};
 
   [[nodiscard]] const std::vector<RE::FormID> &GetArmorFormIDs() const;
   [[nodiscard]] const std::vector<CatalogCollectionItemNode> &

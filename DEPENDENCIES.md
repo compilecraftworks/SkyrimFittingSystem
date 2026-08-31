@@ -1,7 +1,7 @@
 # Dependency baseline
 
 This file is the reproducible external-dependency baseline for Skyrim Fitting
-System v1.4.8. Dependency updates follow three rules: use the latest verified
+System v1.5.1. Dependency updates follow three rules: use the latest verified
 stable upstream release, pin an immutable tag/revision/checksum, and document
 every local change and verification boundary.
 

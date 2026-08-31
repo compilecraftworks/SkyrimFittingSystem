@@ -25,6 +25,8 @@ Skyrim Outfit System Revived was also consulted while implementing parts of the 
 - Stable generated-kit SFW/NSFW labels that change only through the result-list toggle, not when candidate selection changes
 - Display-only workbench sorting and optional selected-actor third-person menu placement with right-drag rotation
 - Actor-local live BodyMorph synchronization without polling or a global actor scan
+- Actor-aware Equipment, Outfits, and Kits filtering for CBBE/3BA/3BBB,
+  UNP/BHUNP, UBE, HIMBO, SAM, and same-sex Vanilla/fallback content
 - Stable C ABI for external managers to open, close, query, and temporarily disable the native SFS menu shortcut
 - SKSE save/load for overrides.
 - Modex-style theme loading, fade behavior, and smooth scrolling.
@@ -41,7 +43,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.0)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.1)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -59,7 +61,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.5.0/windows/x64/<mode>/` in the project root.
+`build/v1.5.1/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -79,24 +81,20 @@ By default this deploys to:
 `/mnt/f/games/skyrim/modlists/pt_test/mods/Skyrim Fitting System`
 
 ## Build And Package
-To build a release mod archive:
+To build the curated runtime and corresponding-source archives from Windows
+PowerShell:
 
-```bash
-./scripts/build-package.sh
+```powershell
+.\scripts\package-release.ps1
 ```
 
 For the full local build, deploy, and packaging workflow, see
 `docs/Build-Deploy-Release.md`.
 
-This writes a zip under `dist/` named like:
-`Skyrim Fitting System v1.5.0.zip`
-
-Tagged clean builds produce a normal `X.Y.Z` archive version.
-Dirty or untagged builds produce a `X.Y.Z-dev+<sha>[.dirty]` archive version.
-
-The archive root contains a single `Data/` directory. Install the archive as-is
-with MO2, or copy the contents of that `Data/` directory into Skyrim's `Data/`.
-Packaging uses `releasedbg`, so the archive also includes a `.pdb` next to the DLL.
+This writes the MO2-installable flat runtime ZIP to `Release/`, the minimal
+complete corresponding-source ZIP to `Sources/`, matching copies to `dist/`,
+and a SHA-256 manifest to `Release/`. Packaging uses `releasedbg`, so the
+runtime archive includes a `.pdb` next to the DLL.
 
 ## Settings And Data
 - Runtime settings are stored under:
@@ -110,14 +108,14 @@ Packaging uses `releasedbg`, so the archive also includes a `.pdb` next to the D
 
 ## Runtime Menu API
 
-SFS v1.5.0 exports a stable menu API for external hotkey and menu-management
+SFS v1.5.1 exports a stable menu API for external hotkey and menu-management
 mods. Managers may temporarily disable the native F6 or user-defined shortcut
 without changing its saved binding; this runtime-only state defaults to enabled
 on every game launch. Open, Close, and IsMenuOpen remain independent. See
 `docs/SkyrimFittingSystem-Menu-API.md` and `extras/SkyrimFittingSystemAPI.h`.
-The v1.5.0 module name is `SFSCore.dll`; the four C export names are unchanged.
+The v1.5.1 module name is `SFSCore.dll`; the four C export names are unchanged.
 
-SFS v1.5.0 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
+SFS v1.5.1 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
 selected outfit plugins, builds and edits candidate combinations, previews the
 selection on the character and in the workbench, and writes finished kits
 directly to the SFS user-kit folder. Only this temporary generator preview may
@@ -150,7 +148,7 @@ for Dynamic Feminine Female Modesty Animations OAR 4.30, Wet Function Redux,
 and Dynamic Footprints SKSE BASE v3. These use narrow, versioned integration
 boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.5.0.md` for their exact scope.
+state. See `docs/RELEASE-NOTES-v1.5.1.md` for the current release scope.
 
 ## Fitting Kits
 

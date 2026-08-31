@@ -1,3 +1,11 @@
+## Version 1.5.1
+
+- Added actor-aware body-family filtering to Equipment, Outfits, and Kits. Female families are grouped as CBBE/3BA/3BBB, UNP/BHUNP, UBE, and Vanilla/fallback; male families are HIMBO, SAM, and Vanilla/fallback.
+- Explicitly conflicting families are hidden while unlabelled same-sex entries remain visible. Detection uses loaded form and selected-actor metadata only, without a BodySlide/NIF disk scan, periodic polling, or a nearby/global actor scan.
+- Actor changes invalidate only the visible catalog cache. Workbench rows, conditions, actual equipment, saved kits, Fitting Dye, virtual tokens, external strip/redress state, and DAVE/DAV/native ownership remain unchanged and actor-local.
+- Restored live RaceMenu BodyMorph synchronization for registered appearances on players, NPCs, and followers.
+- Limited Skyrim/other-mod input suppression to a real focused SFS text editor with an active caret, with immediate release when text focus ends. Intentional keybind capture keeps its separate lock.
+
 ## Version 1.5.0
 
 - Added actor-local Fitting Dye to registered-appearance cards in base and condition rows, available from the dedicated dye action and right-click context menu.

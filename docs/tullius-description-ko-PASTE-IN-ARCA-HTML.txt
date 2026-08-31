@@ -13,7 +13,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 </style>
 </head>
 <body>
-<h1>Skyrim Fitting System v1.5.0</h1>
+<h1>Skyrim Fitting System v1.5.1</h1>
 <figure><a href="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" alt="Skyrim Fitting System"></a><figcaption>Skyrim Fitting System</figcaption></figure>
 <p>실제 장비의 방어력&#183;인챈트&#183;효과는 유지하면서, 캐릭터에게 보이는 외형만 따로 구성하는 SKSE 기반 외형 시스템입니다. 기본 UI 단축키는 <strong>F6</strong>이며 옵션에서 바꿀 수 있습니다.</p>
 <p>플레이어&#183;NPC&#183;팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.</p>
@@ -28,6 +28,16 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li>등록 외형 카드의 염색 버튼&#183;우클릭 메뉴에서 여는 액터별&#183;외형별&#183;조각별 피팅 염색</li>
 <li>RaceMenu BodyMorph, SOS/TNG, DAVE&#183;DAV&#183;native 표시 환경 지원</li>
 <li>OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume&#183;Helmet Toggle 2 연동, 선택형 DFFMA OAR&#183;Dynamic Footprints 호환 패치</li>
+<li>선택 액터의 바디 계열에 맞는 장비&#183;의상&#183;키트 자동 필터</li>
+</ul>
+<hr>
+<h2>v1.5.1 주요 변경</h2>
+<ul>
+<li>작업대에서 선택한 액터에 따라 장비&#183;의상&#183;키트 목록을 자동 필터링합니다. 여성은 CBBE/3BA/3BBB, UNP/BHUNP, UBE, Vanilla/미확인, 남성은 HIMBO, SAM, Vanilla/미확인 계열로 묶습니다.</li>
+<li>명확히 다른 바디 계열만 숨기며 표식 없는 같은 성별 항목은 계속 표시합니다. 로드된 폼과 선택 액터 정보만 사용하고 BodySlide/NIF 디스크 스캔이나 주변 액터 폴링은 하지 않습니다.</li>
+<li>액터 전환은 목록만 갱신하며 등록 외형&#183;조건&#183;실제 장비&#183;키트&#183;피팅 염색&#183;가상토큰&#183;탈의 연동과 DAVE/DAV/native 상태는 변경하지 않습니다.</li>
+<li>플레이어&#183;NPC&#183;팔로워 등록 외형의 RaceMenu 실시간 BodyMorph 동기화를 복원했습니다.</li>
+<li>실제 텍스트 입력칸에 편집 커서가 있을 때만 다른 입력을 잠그고 포커스가 벗어나면 즉시 해제하도록 수정했습니다.</li>
 </ul>
 <hr>
 <h2>v1.5.0 주요 변경</h2>
@@ -44,7 +54,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li>개인 키트가 있다면 <code>Interface/SkyrimFittingSystem/user</code>를 백업합니다.</li>
 <li>이전 SFS 모드 폴더를 완전히 삭제합니다.</li>
 <li>이전 독립형 <strong>SFS Kit Generator</strong>, 기존 <strong>SFS Helmet Toggle 2 호환 패치</strong>, v1.4.4 <strong>SFS Grid Inventory Costume Compatibility Patch</strong>가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.</li>
-<li>v1.5.0 본체 ZIP을 새 모드로 설치하고 <code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다.</li>
+<li>v1.5.1 본체 ZIP을 새 모드로 설치하고 <code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다.</li>
 <li>필요하면 백업한 개인 키트만 복원합니다.</li>
 <li>Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 <strong>별도 SFS 호환 패치만</strong> 원본 모드 뒤에 설치합니다.</li>
 </ol>

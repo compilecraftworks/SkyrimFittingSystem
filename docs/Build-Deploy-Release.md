@@ -1,10 +1,10 @@
 # Build, Deploy, And Release
 
-This document describes the WSL-based workflow for:
+This document describes the v1.5.1 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
-- dist package creation with `scripts/build-package.sh`
+- curated runtime/source package creation with `scripts/package-release.ps1`
 - tag-based GitHub releases with `gh`
 
 ## Prerequisites
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.5.0/windows/x64/<mode>/SFSCore.dll`
-- SE/AE PDB when present: `build/v1.5.0/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.5.1/windows/x64/<mode>/SFSCore.dll`
+- SE/AE PDB when present: `build/v1.5.1/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -100,7 +100,36 @@ Notes:
   settings, and optional compatibility patches are not cleanup targets.
 - The script will fail if the destination file is locked by Skyrim, MO2, or another process.
 
-## Build Dist Package
+## Build Release And Source Packages
+
+From Windows PowerShell, use the pinned xmake v3.1.0 build and the curated
+packager:
+
+```powershell
+.\scripts\package-release.ps1
+```
+
+After a separately verified build, packaging can reuse it with
+`-SkipBuild`. The normal release should use the default `releasedbg` mode.
+
+Outputs:
+
+- `Release/Skyrim Fitting System v1.5.1 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.5.1 Source.zip`
+- matching copies under `dist/`
+- `Release/SHA256SUMS-v1.5.1.txt`
+
+The runtime archive has a flat MO2-installable root. It contains the main DLL
+and PDB, VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;
+it does not contain a `Data` wrapper or optional compatibility patches.
+
+The source archive contains the minimal complete corresponding source, pinned
+CommonLibSSE-NG and required Dear ImGui files, tests, build scripts, licenses,
+and current technical documentation. It rejects DLL, PDB, PEX, ESL, and nested
+archive files and excludes build output, MO2 copies, private experiments,
+historical replacement patches, media, and workspace temporary data.
+
+## Legacy WSL Dist Package
 
 `build-package.sh` creates the release zip under `dist/`.
 
@@ -113,7 +142,7 @@ Output:
 
 - `dist/Skyrim Fitting System v<version>.zip`
 
-The package contains:
+The legacy WSL package contains:
 
 - a single `Data/` wrapper containing the repo runtime payload
 - the freshly built SE/AE plugin under `Data/SKSE/Plugins/`

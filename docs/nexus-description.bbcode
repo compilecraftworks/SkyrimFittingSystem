@@ -1,3 +1,5 @@
+[center][url=https://ko-fi.com/M1P225QD23][img]https://ko-fi.com/img/githubbutton_sm.svg[/img][/url][/center]
+
 [center]
 [size=6][b][color=#42ACC8]Skyrim Fitting System[/color][/b][/size]
 [/center]
@@ -27,7 +29,45 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 [*]Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, and per-slot Direct Editing exceptions[/*]
 [*]Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation[/*]
 [*]Actor-local Fitting Dye for individual rendered components of a registered appearance, available from its dye button or right-click context menu[/*]
+[*]Actor-aware Equipment, Outfits, and Kits filtering for CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM, and same-sex Vanilla/fallback content[/*]
 [*]Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges[/*]
+[/list]
+
+
+[center][img]https://i.ibb.co/4bb432f/image.gif[/img][/center]
+[b]Hiding Actual Equipment[/b]
+
+[center][img]https://i.ibb.co/mrfbJX7S/image.gif[/img][/center]
+[b]Appearance Preview (Character Positioned on the Left or Right)[/b]
+
+[center][img]https://i.ibb.co/TpxyZnR/image.gif[/img][/center]
+[b]Per-Actor Appearance Registration (Nearby Detection and Actor-Specific View)[/b]
+
+[center][img]https://i.ibb.co/Kj4RNjs3/image.gif[/img][/center]
+[b]Condition Setup (Preset/Custom) – Action Setup (Show/Hide Equipment and Appearances)[/b]
+
+[center][img]https://i.ibb.co/RpgXkxYN/image.gif[/img][/center]
+[b]Kit Generator (Automatically Generate Kits from a Selected ESP)[/b]
+
+[center][img]https://i.ibb.co/Rf3djws/image.gif[/img][/center]
+[b]Appearance Dye System (Select and Dye Individual Outfit Components)[/b]
+
+[center][img]https://i.ibb.co/DDBX4WJH/image.gif[/img][/center]
+[b]External Mod Strip/Redress Integration (Follows Each Mod’s MCM-Configured Slots, Including SexLab)[/b]
+
+[center][img]https://i.ibb.co/S4JHn3DT/2.gif[/img][/center]
+[b]Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)[/b]
+
+[line]
+[size=4][b][color=#42ACC8]Version 1.5.1 Update Summary[/color][/b][/size]
+
+
+[list]
+[*]Equipment, Outfits, and Kits now filter automatically for the body family of the actor selected in the workbench. Female groups are CBBE/3BA/3BBB, UNP/UNPB/UUNP/BHUNP, UBE, and Vanilla/fallback; male groups are HIMBO, SAM, and Vanilla/fallback.[/*]
+[*]Explicitly conflicting body families are hidden while unlabelled same-sex Vanilla/fallback entries remain visible. The filter uses loaded form and selected-actor metadata only, with no BodySlide/NIF disk scan, nearby-actor polling, or global actor scan.[/*]
+[*]Changing actors rebuilds only the visible catalog cache. Registered appearances, conditions, actual equipment, kits, Fitting Dye, virtual tokens, external strip/redress state, and DAVE/DAV/native ownership are not changed.[/*]
+[*]Restored live RaceMenu BodyMorph synchronization for registered appearances on the player, NPCs, and followers.[/*]
+[*]Skyrim and other-mod input is now suppressed only while a real SFS text editor owns focus and shows its caret, and is released immediately when focus leaves that editor. Intentional keybind capture remains separately locked.[/*]
 [/list]
 
 
@@ -51,25 +91,31 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 [size=4][b][color=#42ACC8]Requirements[/color][/b][/size]
 
 
-Required:
+Required: (Required base mod)
 
 [list]
 [*]SKSE64 matching the installed Skyrim SE/AE runtime[/*]
 [*]Address Library for SKSE Plugins[/*]
-[*]The included [font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font] enabled[/*]
 [/list]
 
 
-Optional:
+Optional: (Required optional patch file)
+
+[list]
+[*]Wet Function Redux with the separate SFS compatibility patch[/*]
+[*]Dynamic Footprints SKSE BASE v3 only with its matching separate SFS patch[/*]
+[*]Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR with the separate DFFMA configuration patch[/*]
+[/list]
+
+
+Built-in: (Not required any patch file)
 
 [list]
 [*]RaceMenu for live BodyMorph synchronization on registered appearances[/*]
 [*]DAVE or DAV; SFS automatically uses the installed display environment[/*]
 [*]SOS or TNG for genital conceal/reveal compatibility[/*]
-[*]Wet Function Redux with the separate SFS compatibility patch[/*]
-[*]Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR for the separate DFFMA configuration patch[/*]
-[*]Grid Inventory v1.4.1+ for built-in Costume synchronization; Helmet Toggle 2 for built-in actor-local headgear linking; Dynamic Footprints SKSE BASE v3 only with its matching separate SFS patch[/*]
-[*]SexLab, Soulgem Oven, Private Needs, Bathing in Skyrim, Devious Devices, Pama Prison Alternative, or other supported external-strip mods[/*]
+[*]Helmet Toggle 2 for built-in actor-local registered-appearance headgear hiding; SFS does not interfere with Helmet Toggle 2's actual equipment control[/*]
+[*]Grid Inventory v1.4.1[/*]
 [/list]
 
 
@@ -82,7 +128,7 @@ Optional:
 [*]Completely delete the previous SFS mod folder.[/*]
 [*]Completely delete any older [b]SFS Helmet Toggle 2 Compatibility Patch[/b] and the [b]v1.4.4 SFS Grid Inventory Costume Compatibility Patch[/b]. Do not delete their original mods.[/*]
 [*]If an old standalone test [b]SFS Kit Generator[/b] folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.[/*]
-[*]Install the v1.5.0 distribution ZIP as a new mod.[/*]
+[*]Install the v1.5.1 distribution ZIP as a new mod.[/*]
 [*]Enable [font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font].[/*]
 [*]Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.[/*]
 [/list]
@@ -335,37 +381,54 @@ The mod names below are [b]representative examples[/b], not a restricted support
 [td][b]Verification[/b][/td]
 [/tr]
 [tr]
-[td]SexLab strip/redress[br][font=Courier New]StripActor[/font] · [font=Courier New]GetWornForm[/font][br][font=Courier New]UnequipItemEx[/font] · [font=Courier New]EquipItemEx[/font][/td]
+[td]SexLab strip/redress
+[font=Courier New]StripActor[/font] · [font=Courier New]GetWornForm[/font]
+[font=Courier New]UnequipItemEx[/font] · [font=Courier New]EquipItemEx[/font][/td]
 [td]SexLab Framework SE · SexLab Utility Plus · Soulgem Oven / SGO4 Integration Fork · Fill Her Up Baka Edition · SexLab Defeat Bane · BaboDialogue · Bimbos of Skyrim · Balazar’s Bitch · Sexy Adventures · SexLab Approach Redux · SexLab Aroused Creatures · SexLab Dialogues · SexLab Solutions · SexLab Romance · SexLab Body Search[/td]
 [td]Generic[/td]
 [td]SexLab and SGO verified[/td]
 [/tr]
 [tr]
-[td]Slot filters and individual equip changes[br][font=Courier New]AddAllEquippedItemsToArray[/font][br][font=Courier New]GetWornForm[/font][br][font=Courier New]UnequipItem/Slot/Ex[/font][br][font=Courier New]EquipItem/ByID[/font][/td]
+[td]Slot filters and individual equip changes
+[font=Courier New]AddAllEquippedItemsToArray[/font]
+[font=Courier New]GetWornForm[/font]
+[font=Courier New]UnequipItem/Slot/Ex[/font]
+[font=Courier New]EquipItem/ByID[/font][/td]
 [td]Private Needs – Orgasm · Bathing in Skyrim – Renewed · Licenses – Player Oppression · SLHH Expansion · Trap Needs to Be Real Trap / TNTR · Simple Player Prostitution · Death Trap Chest · Soul Resurrection[/td]
 [td]Generic[/td]
 [td]PNO and Bathing verified[/td]
 [/tr]
 [tr]
-[td]DD devices and Hider[br][font=Courier New]GetWornForm[/font][br][font=Courier New]EquipItem*[/font] · [font=Courier New]UnequipItem*[/font][br][font=Courier New]zadNativeFunctions.SyncSetting[/font][/td]
+[td]DD devices and Hider
+[font=Courier New]GetWornForm[/font]
+[font=Courier New]EquipItem*[/font] · [font=Courier New]UnequipItem*[/font]
+[font=Courier New]zadNativeFunctions.SyncSetting[/font][/td]
 [td]Devious Devices SE/NG · Devious Helpless Redux · Devious Interests · Devious Cidhna · Devious Curses NG · Unforgiving Devices · Laura’s Bondage Shop[/td]
 [td]DD-specific[/td]
 [td]DD equip/removal verified[/td]
 [/tr]
 [tr]
-[td]Prison, confiscation, and detention[br][font=Courier New]RemoveAllItems[/font] · [font=Courier New]RemoveItem[/font][br][font=Courier New]SetOutfit[/font][br][font=Courier New]EquipItem/UnequipItem[/font][/td]
+[td]Prison, confiscation, and detention
+[font=Courier New]RemoveAllItems[/font] · [font=Courier New]RemoveItem[/font]
+[font=Courier New]SetOutfit[/font]
+[font=Courier New]EquipItem/UnequipItem[/font][/td]
 [td]Pama Prison Alternative · Pama Orkish Bounty Hunters · Pama Punishment · Pama Bad Ends · Pama Sovngarde · Pama Deadly Furniture · Captured by the Thalmor · Captive Player · Dark Arena · Bandit Paradise · Follower Slavery Mod[/td]
 [td]Generic[/td]
 [td]Pama verified[/td]
 [/tr]
 [tr]
-[td]Slavery and forced wardrobe replacement[br][font=Courier New]StripActor[/font] · [font=Courier New]UnequipAll[/font][br][font=Courier New]RemoveAllItems[/font] · [font=Courier New]SetOutfit[/font][br][font=Courier New]EquipItem*[/font][/td]
+[td]Slavery and forced wardrobe replacement
+[font=Courier New]StripActor[/font] · [font=Courier New]UnequipAll[/font]
+[font=Courier New]RemoveAllItems[/font] · [font=Courier New]SetOutfit[/font]
+[font=Courier New]EquipItem*[/font][/td]
 [td]Public Whore · Sanguine Debauchery / SD+ · Simple Slavery Plus Plus / Rebuild · S.L.U.T.S. Resume · Submissive Lola · Dress Up Lover’s NPC Outfit Changer[/td]
 [td]Generic[/td]
 [td]More per-mod testing needed[/td]
 [/tr]
 [tr]
-[td]Alternate-start and quest wardrobe replacement[br][font=Courier New]UnequipAll[/font] · [font=Courier New]RemoveAllItems[/font][br][font=Courier New]SetOutfit[/font] · [font=Courier New]EquipItem[/font][/td]
+[td]Alternate-start and quest wardrobe replacement
+[font=Courier New]UnequipAll[/font] · [font=Courier New]RemoveAllItems[/font]
+[font=Courier New]SetOutfit[/font] · [font=Courier New]EquipItem[/font][/td]
 [td]Alternate Perspective · Deviant Start · Kidnapped Start · Adventurer’s Start · The Adventurer’s Guild[/td]
 [td]Generic[/td]
 [td]More per-mod testing needed[/td]
@@ -493,3 +556,5 @@ Only the DLL lookup name changed. The four C export names and function signature
 Skyrim Fitting System is licensed under [url=https://www.gnu.org/licenses/gpl-3.0.html]GNU GPLv3[/url]. The source code is available on [url=https://github.com/compilecraftworks/SkyrimFittingSystem]GitHub[/url]. This project contains modified work derived from [url=https://www.nexusmods.com/skyrimspecialedition/mods/175182]Skyrim Vanity System[/url] and [url=https://www.nexusmods.com/skyrimspecialedition/mods/42162]Skyrim Outfit System SE Revived[/url].
 
 Credits to the authors of CommonLibSSE-NG, Dear ImGui, SKSE, and Address Library for SKSE Plugins. All respective rights belong to their original authors.
+
+[center][url=https://ko-fi.com/M1P225QD23][img]https://ko-fi.com/img/githubbutton_sm.svg[/img][/url][/center]

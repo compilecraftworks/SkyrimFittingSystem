@@ -239,7 +239,7 @@ private:
   void NormalizeSelectedLocaleId();
   void NormalizeSelectedFontPath();
   void RebuildFontAtlas();
-  void SyncAllowTextInput();
+  void SyncAllowTextInput(bool a_afterWidgetDraw);
   void UpdateVisibilityAnimation(float a_deltaTime);
   void QueueHideMessage();
   void ApplySmoothScroll();
@@ -324,9 +324,15 @@ private:
   [[nodiscard]] bool MatchesSelectedSlotsAnd(std::uint64_t a_slotMask) const;
   [[nodiscard]] std::string BuildSelectedSlotPreview() const;
 
-  [[nodiscard]] bool MatchesGearFilters(const GearEntry &a_entry) const;
-  [[nodiscard]] bool MatchesOutfitFilters(const OutfitEntry &a_entry) const;
-  [[nodiscard]] bool MatchesKitFilters(const KitEntry &a_entry) const;
+  [[nodiscard]] bool
+  MatchesGearFilters(const GearEntry &a_entry,
+                     body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] bool
+  MatchesOutfitFilters(const OutfitEntry &a_entry,
+                       body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] bool
+  MatchesKitFilters(const KitEntry &a_entry,
+                    body_family::Mask a_actorBodyFamily) const;
   [[nodiscard]] std::optional<KitEntry::Layout>
   BuildSlotFallbackLayoutFromArmorForms(
       const std::vector<RE::FormID> &a_formIDs) const;
@@ -392,9 +398,14 @@ private:
   [[nodiscard]] std::size_t CountCatalogConditions() const;
   [[nodiscard]] bool IsWorkbenchSelectableCondition(
       const ui::conditions::Definition &a_condition) const;
-  [[nodiscard]] std::vector<const GearEntry *> BuildFilteredGear() const;
-  [[nodiscard]] std::vector<const OutfitEntry *> BuildFilteredOutfits() const;
-  [[nodiscard]] std::vector<const KitEntry *> BuildFilteredKits() const;
+  [[nodiscard]] std::vector<const GearEntry *>
+  BuildFilteredGear(body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] std::vector<const OutfitEntry *>
+  BuildFilteredOutfits(body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] std::vector<const KitEntry *>
+  BuildFilteredKits(body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] body_family::Mask
+  ResolveCatalogActorBodyFamily(RE::FormID &a_actorFormID);
   void SortGearRows(std::vector<const GearEntry *> &a_rows,
                     ImGuiTableSortSpecs *a_sortSpecs) const;
   void SortOutfitRows(std::vector<const OutfitEntry *> &a_rows,
@@ -587,5 +598,11 @@ private:
   };
   WorkbenchDerivedState workbenchDerived_;
   ui::catalog::DerivedState catalogDerived_;
+  struct CatalogActorBodyState {
+    bool initialized{false};
+    RE::FormID actorFormID{0};
+    body_family::Mask family{0};
+  };
+  CatalogActorBodyState catalogActorBodyState_;
 };
 } // namespace sfs

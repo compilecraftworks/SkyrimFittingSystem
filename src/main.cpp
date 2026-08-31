@@ -5,6 +5,7 @@
 #include "Serialization.h"
 #include "kit_generator/Generator.h"
 #include "native/ArmorSkinning.h"
+#include "catalog/BodyFamily.h"
 #include "native/DaveIntegration.h"
 #include "native/DisplayedBodyCondition.h"
 #include "native/FittingDye.h"
@@ -47,6 +48,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::native::racemenu::InitializeBodyMorphInterface();
     break;
   case SKSE::MessagingInterface::kPreLoadGame:
+    sfs::body_family::ResetRuntimeCaches();
     sfs::native::dye::ClearWorldTint();
     sfs::native::dye::RevertSavedWorldTints();
     sfs::Menu::GetSingleton()->SetGameDataLoaded(false);

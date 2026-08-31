@@ -1,3 +1,16 @@
+[size=4][b][color=#42ACC8]Version 1.5.1[/color][/b][/size]
+
+
+[list]
+[*]Added actor-aware body-family filtering to Equipment, Outfits, and Kits. Female families are grouped as CBBE/3BA/3BBB, UNP/BHUNP, UBE, and Vanilla/fallback; male families are HIMBO, SAM, and Vanilla/fallback.[/*]
+[*]Explicitly conflicting families are hidden while unlabelled same-sex entries remain visible. Detection uses loaded form and selected-actor metadata only, without a BodySlide/NIF disk scan, periodic polling, or a nearby/global actor scan.[/*]
+[*]Actor changes invalidate only the visible catalog cache. Workbench rows, conditions, actual equipment, saved kits, Fitting Dye, virtual tokens, external strip/redress state, and DAVE/DAV/native ownership remain unchanged and actor-local.[/*]
+[*]Restored live RaceMenu BodyMorph synchronization for registered appearances on players, NPCs, and followers.[/*]
+[*]Limited Skyrim/other-mod input suppression to a real focused SFS text editor with an active caret, with immediate release when text focus ends. Intentional keybind capture keeps its separate lock.[/*]
+[/list]
+
+
+[line]
 [size=4][b][color=#42ACC8]Version 1.5.0[/color][/b][/size]
 
 
@@ -6,6 +19,7 @@
 [*]Dye targets an exact rendered component, provides a brief world-space identification pulse, and can restore the component's original color.[/*]
 [*]Colors are saved by actor FormID, registered appearance ARMO, and exact component identity. Shared meshes or diffuse textures on another actor or appearance are not recolored, and ambiguous matches fail closed.[/*]
 [*]Tinting uses a private geometry-scoped renderer texture without changing source DDS/NIF files, actual equipment, inventory, workbench rows, conditions, kits, virtual tokens, external strip/redress state, or DAVE/DAV/native ownership.[/*]
+[*]Fixed an SFSCore CTD when switching the workbench from the player to a new NPC with HT2 installed. NPC/follower ownership now relies only on resolved HT2 monitor spells, exact headgear AddSpell/RemoveSpell signals, and the actor-local FormID cache; the redundant active-effect-list fallback was removed.[/*]
 [*]Replaced the separate Helmet Toggle 2 PEX patch with built-in SFSCore integration. SFS observes only HT2's exact player global and actor-local NPC/follower spell transitions, without replacing HT2 scripts or polling actors.[/*]
 [*]SFS reads every real helmet's full ARMO slot mask instead of relying on the array position retained after HT2 deduplication.[/*]
 [*]Fixed bald actors when HT2 hides a still-equipped real 31+42 helmet. SFS releases only that actor's real Hair 31 bit from the skinning worn mask; the actual ARMO, inventory, HT2/DAVE variant, and keywords remain untouched.[/*]

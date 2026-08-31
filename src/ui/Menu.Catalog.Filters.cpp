@@ -42,7 +42,9 @@ std::string ReadFilterInputText(const ImGuiTextFilter &a_filter) {
 }
 } // namespace
 
-bool Menu::MatchesGearFilters(const GearEntry &a_entry) const {
+bool Menu::MatchesGearFilters(
+    const GearEntry &a_entry,
+    const body_family::Mask a_actorBodyFamily) const {
   const auto &browser = CatalogBrowserState();
   if (browser.favoritesOnly &&
       !IsFavorite(ui::catalog::BrowserTab::Gear, a_entry.id)) {
@@ -59,11 +61,14 @@ bool Menu::MatchesGearFilters(const GearEntry &a_entry) const {
     return false;
   }
 
-  return MatchesSelectedSlotsOr(a_entry.slots) &&
+  return body_family::Matches(a_entry.bodyFamilies, a_actorBodyFamily) &&
+         MatchesSelectedSlotsOr(a_entry.slots) &&
          browser.gearSearch.PassFilter(a_entry.searchText.c_str());
 }
 
-bool Menu::MatchesOutfitFilters(const OutfitEntry &a_entry) const {
+bool Menu::MatchesOutfitFilters(
+    const OutfitEntry &a_entry,
+    const body_family::Mask a_actorBodyFamily) const {
   const auto &browser = CatalogBrowserState();
   if (browser.favoritesOnly &&
       !IsFavorite(ui::catalog::BrowserTab::Outfits, a_entry.id)) {
@@ -77,11 +82,14 @@ bool Menu::MatchesOutfitFilters(const OutfitEntry &a_entry) const {
     return false;
   }
 
-  return MatchesSelectedSlotsAnd(a_entry.GetSlotMask()) &&
+  return body_family::Matches(a_entry.bodyFamilies, a_actorBodyFamily) &&
+         MatchesSelectedSlotsAnd(a_entry.GetSlotMask()) &&
          browser.outfitSearch.PassFilter(a_entry.searchText.c_str());
 }
 
-bool Menu::MatchesKitFilters(const KitEntry &a_entry) const {
+bool Menu::MatchesKitFilters(
+    const KitEntry &a_entry,
+    const body_family::Mask a_actorBodyFamily) const {
   const auto &browser = CatalogBrowserState();
   if (browser.favoritesOnly &&
       !IsFavorite(ui::catalog::BrowserTab::Kits, a_entry.id)) {
@@ -95,7 +103,8 @@ bool Menu::MatchesKitFilters(const KitEntry &a_entry) const {
     return false;
   }
 
-  return MatchesSelectedSlotsAnd(a_entry.GetSlotMask()) &&
+  return body_family::Matches(a_entry.bodyFamilies, a_actorBodyFamily) &&
+         MatchesSelectedSlotsAnd(a_entry.GetSlotMask()) &&
          browser.kitSearch.PassFilter(a_entry.searchText.c_str());
 }
 
@@ -187,7 +196,8 @@ std::string Menu::BuildSelectedSlotPreview() const {
       std::make_format_args(selectedCount));
 }
 
-std::vector<const GearEntry *> Menu::BuildFilteredGear() const {
+std::vector<const GearEntry *> Menu::BuildFilteredGear(
+    const body_family::Mask a_actorBodyFamily) const {
   std::vector<const GearEntry *> rows;
   rows.reserve(EquipmentCatalog::Get().GetGear().size());
   const auto &browser = CatalogBrowserState();
@@ -196,7 +206,7 @@ std::vector<const GearEntry *> Menu::BuildFilteredGear() const {
                             : std::unordered_set<RE::FormID>{};
 
   for (const auto &entry : EquipmentCatalog::Get().GetGear()) {
-    if (MatchesGearFilters(entry) &&
+    if (MatchesGearFilters(entry, a_actorBodyFamily) &&
         (!browser.inventoryOnly || inventoryFormIDs.contains(entry.formID))) {
       rows.push_back(std::addressof(entry));
     }
@@ -204,22 +214,24 @@ std::vector<const GearEntry *> Menu::BuildFilteredGear() const {
   return rows;
 }
 
-std::vector<const OutfitEntry *> Menu::BuildFilteredOutfits() const {
+std::vector<const OutfitEntry *> Menu::BuildFilteredOutfits(
+    const body_family::Mask a_actorBodyFamily) const {
   std::vector<const OutfitEntry *> rows;
   rows.reserve(EquipmentCatalog::Get().GetOutfits().size());
   for (const auto &entry : EquipmentCatalog::Get().GetOutfits()) {
-    if (MatchesOutfitFilters(entry)) {
+    if (MatchesOutfitFilters(entry, a_actorBodyFamily)) {
       rows.push_back(std::addressof(entry));
     }
   }
   return rows;
 }
 
-std::vector<const KitEntry *> Menu::BuildFilteredKits() const {
+std::vector<const KitEntry *> Menu::BuildFilteredKits(
+    const body_family::Mask a_actorBodyFamily) const {
   std::vector<const KitEntry *> rows;
   rows.reserve(EquipmentCatalog::Get().GetKits().size());
   for (const auto &entry : EquipmentCatalog::Get().GetKits()) {
-    if (MatchesKitFilters(entry)) {
+    if (MatchesKitFilters(entry, a_actorBodyFamily)) {
       rows.push_back(std::addressof(entry));
     }
   }
@@ -233,11 +245,38 @@ void Menu::InvalidateCatalogDerivedState() {
   catalogDerived_.kits = {};
 }
 
+body_family::Mask
+Menu::ResolveCatalogActorBodyFamily(RE::FormID &a_actorFormID) {
+  auto *actor = ResolveWorkbenchPreviewActor();
+  a_actorFormID = actor ? actor->GetFormID() : 0;
+  const auto family = body_family::ResolveActor(actor);
+
+  if (!catalogActorBodyState_.initialized ||
+      catalogActorBodyState_.actorFormID != a_actorFormID ||
+      catalogActorBodyState_.family != family) {
+    const bool changedSelectionContext = catalogActorBodyState_.initialized;
+    catalogActorBodyState_ = {
+        .initialized = true,
+        .actorFormID = a_actorFormID,
+        .family = family,
+    };
+    InvalidateCatalogDerivedState();
+    if (changedSelectionContext) {
+      ClearCatalogSelection();
+    }
+  }
+  return family;
+}
+
 const std::vector<const GearEntry *> &Menu::GetFilteredGearRows() {
   const auto &browser = CatalogBrowserState();
+  RE::FormID actorFormID = 0;
+  const auto actorBodyFamily = ResolveCatalogActorBodyFamily(actorFormID);
   ui::catalog::GearFilterState currentState{
       .catalogRevision = std::string(EquipmentCatalog::Get().GetRevision()),
       .favoritesRevision = catalogDerived_.favoritesRevision,
+      .actorFormID = actorFormID,
+      .actorBodyFamily = actorBodyFamily,
       .favoritesOnly = browser.favoritesOnly,
       .inventoryOnly = browser.inventoryOnly,
       .hideUnnamedGear = browser.hideUnnamedGear,
@@ -248,7 +287,7 @@ const std::vector<const GearEntry *> &Menu::GetFilteredGearRows() {
 
   auto &cache = catalogDerived_.gear;
   if (!cache.filterInitialized || !(cache.filterState == currentState)) {
-    cache.filteredRows = BuildFilteredGear();
+    cache.filteredRows = BuildFilteredGear(actorBodyFamily);
     cache.filterState = std::move(currentState);
     cache.filterInitialized = true;
     cache.filteredRevision = catalogDerived_.nextFilteredRevision++;
@@ -260,9 +299,13 @@ const std::vector<const GearEntry *> &Menu::GetFilteredGearRows() {
 
 const std::vector<const OutfitEntry *> &Menu::GetFilteredOutfitRows() {
   const auto &browser = CatalogBrowserState();
+  RE::FormID actorFormID = 0;
+  const auto actorBodyFamily = ResolveCatalogActorBodyFamily(actorFormID);
   ui::catalog::OutfitFilterState currentState{
       .catalogRevision = std::string(EquipmentCatalog::Get().GetRevision()),
       .favoritesRevision = catalogDerived_.favoritesRevision,
+      .actorFormID = actorFormID,
+      .actorBodyFamily = actorBodyFamily,
       .favoritesOnly = browser.favoritesOnly,
       .pluginIndex = browser.outfitPluginIndex,
       .selectedSlotFilters = browser.selectedSlotFilters,
@@ -271,7 +314,7 @@ const std::vector<const OutfitEntry *> &Menu::GetFilteredOutfitRows() {
 
   auto &cache = catalogDerived_.outfits;
   if (!cache.filterInitialized || !(cache.filterState == currentState)) {
-    cache.filteredRows = BuildFilteredOutfits();
+    cache.filteredRows = BuildFilteredOutfits(actorBodyFamily);
     cache.filterState = std::move(currentState);
     cache.filterInitialized = true;
     cache.filteredRevision = catalogDerived_.nextFilteredRevision++;
@@ -283,9 +326,13 @@ const std::vector<const OutfitEntry *> &Menu::GetFilteredOutfitRows() {
 
 const std::vector<const KitEntry *> &Menu::GetFilteredKitRows() {
   const auto &browser = CatalogBrowserState();
+  RE::FormID actorFormID = 0;
+  const auto actorBodyFamily = ResolveCatalogActorBodyFamily(actorFormID);
   ui::catalog::KitFilterState currentState{
       .catalogRevision = std::string(EquipmentCatalog::Get().GetRevision()),
       .favoritesRevision = catalogDerived_.favoritesRevision,
+      .actorFormID = actorFormID,
+      .actorBodyFamily = actorBodyFamily,
       .favoritesOnly = browser.favoritesOnly,
       .collectionIndex = browser.kitCollectionIndex,
       .selectedSlotFilters = browser.selectedSlotFilters,
@@ -294,7 +341,7 @@ const std::vector<const KitEntry *> &Menu::GetFilteredKitRows() {
 
   auto &cache = catalogDerived_.kits;
   if (!cache.filterInitialized || !(cache.filterState == currentState)) {
-    cache.filteredRows = BuildFilteredKits();
+    cache.filteredRows = BuildFilteredKits(actorBodyFamily);
     cache.filterState = std::move(currentState);
     cache.filterInitialized = true;
     cache.filteredRevision = catalogDerived_.nextFilteredRevision++;

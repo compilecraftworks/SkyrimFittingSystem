@@ -23,6 +23,19 @@ Sources/
 output/
 diagnostics/
 ghidra_work/
+tmp/
+private/
+optional/
+GIF/
+MO2/
+.inspection/
+.tools/
+$inspectRoot/
+docs/media/
+docs/nexus-assets/
+docs/arca-assets/
+third_party/RaceMenu-official/
+third_party/common/
 lib/commonlibsse-ng/
 lib/v110-compare/
 compat/**/backup-original-scripts/
@@ -31,4 +44,7 @@ tools/**/obj/
 
 # files
 *.zip
+*.obj
+*.log
+tmp_*.ps1
 compile_commands.json

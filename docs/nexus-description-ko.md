@@ -12,7 +12,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
-## v1.5.0 주요 기능
+## v1.5.1 주요 기능
 
 - 실제 장비의 능력치와 효과를 유지하는 등록 외형
 - 액터별 기본 외형과 여러 조건 외형
@@ -39,6 +39,15 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 - 3인칭 SFS 메뉴의 캐릭터 좌우 배치와 우클릭 드래그 플레이어 회전
 - 액터별 최종 표시 장비를 읽는 OAR용 읽기 전용 조건
 - 내장 Grid Inventory Costume·Helmet Toggle 2 연동과 DFFMA OAR·Dynamic Footprints v3 선택형 호환 패치
+- 선택 액터의 바디 계열에 맞춰 장비·의상·키트 목록을 자동 필터링하는 카탈로그
+
+## v1.5.1 업데이트 요약
+
+- 장비·의상·키트 목록이 작업대에서 선택한 액터의 바디 계열을 자동으로 따릅니다. 여성은 CBBE/3BA/3BBB, UNP/UNPB/UUNP/BHUNP, UBE, Vanilla/미확인으로, 남성은 HIMBO, SAM, Vanilla/미확인으로 묶습니다.
+- 명확히 충돌하는 계열만 숨기고 표식 없는 같은 성별 Vanilla/미확인 항목은 유지합니다. 이미 로드된 폼과 선택 액터 정보만 사용하며 BodySlide·NIF 디스크 스캔, 주변 액터 폴링과 전역 액터 스캔은 없습니다.
+- 액터 전환은 표시 목록 캐시만 다시 계산합니다. 등록 외형·조건·실제 장비·키트·피팅 염색·가상토큰·외부 탈의/재착의·DAVE/DAV/native 소유 상태를 변경하지 않습니다.
+- 플레이어·NPC·팔로워 등록 외형의 RaceMenu 실시간 BodyMorph 동기화를 복원했습니다.
+- 실제 SFS 텍스트 입력칸에 편집 커서가 있고 포커스를 가진 동안만 Skyrim과 다른 모드 입력을 잠그고, 포커스가 벗어나면 즉시 해제합니다. 단축키 캡처의 의도된 잠금은 별도로 유지합니다.
 
 ## v1.5.0 업데이트 요약
 
@@ -89,7 +98,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 기존의 모든 **SFS Helmet Toggle 2 호환 패치**를 완전히 삭제합니다. Helmet Toggle 2 본체를 삭제하는 것은 아닙니다.
 4. 이전 독립형 시험용 **SFS Kit Generator** 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.
-5. v1.5.0 배포 ZIP을 새 모드로 설치합니다.
+5. v1.5.1 배포 ZIP을 새 모드로 설치합니다.
 6. `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 7. 필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.
 

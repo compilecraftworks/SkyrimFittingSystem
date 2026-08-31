@@ -41,7 +41,6 @@ std::mutex g_shortcutFilterMutex;
 std::unordered_set<std::uint32_t> g_downKeyboardButtons;
 std::unordered_set<std::uint32_t> g_preSuppressionButtons;
 std::unordered_set<std::uint32_t> g_swallowedUntilReleaseButtons;
-std::unordered_set<std::uint32_t> g_releaseMustPassButtons;
 std::unordered_set<std::uint32_t> g_downGamepadButtons;
 std::unordered_set<std::uint32_t> g_swallowedGamepadUntilReleaseButtons;
 bool g_shortcutSuppressionWasActive{false};
@@ -51,7 +50,6 @@ void ResetShortcutFilterState() {
   g_downKeyboardButtons.clear();
   g_preSuppressionButtons.clear();
   g_swallowedUntilReleaseButtons.clear();
-  g_releaseMustPassButtons.clear();
   g_downGamepadButtons.clear();
   g_swallowedGamepadUntilReleaseButtons.clear();
   g_shortcutSuppressionWasActive = false;
@@ -71,7 +69,6 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
     g_downKeyboardButtons.clear();
     g_preSuppressionButtons.clear();
     g_swallowedUntilReleaseButtons.clear();
-    g_releaseMustPassButtons.clear();
     g_downGamepadButtons.clear();
     g_swallowedGamepadUntilReleaseButtons.clear();
     g_shortcutSuppressionWasActive = false;
@@ -87,6 +84,9 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
       menuEnabled &&
       (sfs::InputManager::GetSingleton()->IsShortcutSuppressionActive() ||
        toggleCaptureActive);
+  // Merely having the SFS menu open must not consume Tab or another mod's
+  // shortcuts. Suppress keyboard events only for an active editable text
+  // cursor (reported by InputManager) or the explicit hotkey-capture dialog.
   const auto toggleKey = menu->GetToggleKey();
   const auto toggleModifier = menu->GetToggleModifier();
   const bool gamepadBinding = sfs::keycode::IsGamepadKey(toggleKey);
@@ -96,11 +96,6 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
       g_preSuppressionButtons.erase(scanCode);
     }
   } else if (!shortcutSuppressionActive && g_shortcutSuppressionWasActive) {
-    for (const auto scanCode : g_preSuppressionButtons) {
-      if (g_downKeyboardButtons.contains(scanCode)) {
-        g_releaseMustPassButtons.insert(scanCode);
-      }
-    }
     g_preSuppressionButtons.clear();
   }
   g_shortcutSuppressionWasActive = shortcutSuppressionActive;
@@ -116,10 +111,6 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
       if (buttonEvent != nullptr) {
         const auto scanCode = buttonEvent->GetIDCode();
         const bool isRelease = buttonEvent->IsUp();
-        const bool releaseMustPass =
-            g_releaseMustPassButtons.contains(scanCode);
-        const bool preSuppressionRelease =
-            isRelease && g_preSuppressionButtons.contains(scanCode);
 
         if (shortcutSuppressionActive) {
           if (g_swallowedUntilReleaseButtons.contains(scanCode)) {
@@ -145,14 +136,8 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
           }
         }
 
-        if (menuEnabled && scanCode == sfs::keycode::kTabScanCode &&
-            !releaseMustPass && !preSuppressionRelease) {
-          blockEvent = true;
-        }
-
         if (isRelease) {
           g_downKeyboardButtons.erase(scanCode);
-          g_releaseMustPassButtons.erase(scanCode);
         } else if (buttonEvent->IsPressed()) {
           g_downKeyboardButtons.insert(scanCode);
         }

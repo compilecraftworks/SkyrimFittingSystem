@@ -1,0 +1,35 @@
+[center]
+[size=6][b][color=#42ACC8]Skyrim Fitting System v1.5.1[/color][/b][/size]
+[/center]
+
+
+[line]
+[size=4][b][color=#42ACC8]Actor-aware catalog filtering[/color][/b][/size]
+
+
+[list]
+[*]Equipment, Outfits, and Kits now follow the body family resolved for the actor selected in the workbench. Changing actors rebuilds only the visible catalog filters; it does not change registrations, conditions, kits, actual equipment, or saved appearance state.[/*]
+[*]Female families are grouped as CBBE/3BA/3BBB, UNP/UNPB/UUNP/BHUNP, UBE, and Vanilla/fallback. Male families are grouped as HIMBO, SAM, and Vanilla/fallback. Explicitly conflicting families are hidden, while unlabelled Vanilla/fallback entries remain available for the same sex.[/*]
+[*]Classification uses already-loaded plugin, ARMO, keyword, ARMA model, Skin, and selected-actor scene metadata. It does not scan BodySlide projects or NIF files on disk, poll nearby actors, or maintain a global actor scan.[/*]
+[*]The actor cache is keyed by FormID and the actor's Skin/Race/3D signature and is cleared across save transitions. DAVE, DAV, native display, external strip/redress, virtual tokens, Helmet Toggle 2, Grid Inventory, Fitting Dye, and OAR state remain outside the filter.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Regression fixes[/color][/b][/size]
+
+
+[list]
+[*]Restored live RaceMenu BodyMorph synchronization for registered appearances on the player, NPCs, and followers. The actor-local attachment and deferred [font=Courier New]UpdateModelWeight[/font] paths remain active across DAVE, DAV, and native display backends without polling or a surrounding-actor scan.[/*]
+[*]Text input now suppresses Skyrim and other-mod input only while a real SFS text field owns keyboard focus and shows its editing caret. Suppression is released immediately when focus leaves the text field; keybind capture keeps its separate, intentional input lock.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Compatibility boundary[/color][/b][/size]
+
+
+[list]
+[*]The new catalog filter is display-only. It does not equip or unequip armor, refresh actor 3D, apply BodyMorphs, change workbench rows or condition data, or serialize a new gameplay state.[/*]
+[*]Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, Direct Slot Editing, manual eye controls, DD/Pama/external equipment transactions, and actor-local DAVE/DAV/native ownership retain their v1.5.0 behavior.[/*]
+[/list]

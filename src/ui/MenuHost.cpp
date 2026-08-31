@@ -114,7 +114,8 @@ void OnKeyEvent(const RE::GFxEvent *a_event, bool a_down) {
 void OnCharEvent(const RE::GFxEvent *a_event) {
   const auto *charEvent = reinterpret_cast<const RE::GFxCharEvent *>(a_event);
   auto &io = ImGui::GetIO();
-  if (io.WantTextInput && IsTextInputCharacter(charEvent->wcharCode)) {
+  if (sfs::Menu::GetSingleton()->WantsTextInput() &&
+      IsTextInputCharacter(charEvent->wcharCode)) {
     io.AddInputCharacter(charEvent->wcharCode);
   }
 }
