@@ -12,7 +12,7 @@
 
 namespace {
 constexpr std::uint32_t kSerializationType = 'ROWS';
-constexpr std::uint32_t kSerializationVersion = 11;
+constexpr std::uint32_t kSerializationVersion = 12;
 constexpr int kActorOwnershipSchemaVersion = 2;
 
 std::string BuildRowKey(const std::string_view a_sourceKey,
@@ -265,6 +265,7 @@ nlohmann::json VariantWorkbench::SerializeState() const {
         }
 
         const bool serializeHidden = overrideItem.hidden;
+        const bool serializeLocked = overrideItem.locked;
         const bool serializeAutomaticBinding =
             overrideItem.automaticEquipmentBindingMode ==
                 static_cast<std::uint8_t>(
@@ -272,7 +273,8 @@ nlohmann::json VariantWorkbench::SerializeState() const {
             overrideItem.automaticEquipmentBindingMode ==
                 static_cast<std::uint8_t>(
                     AutomaticEquipmentVisibilityMode::ModdingSlots);
-        if (!serializeHidden && !serializeAutomaticBinding) {
+        if (!serializeHidden && !serializeLocked &&
+            !serializeAutomaticBinding) {
           serializedRow["overrides"].push_back(identifier);
           continue;
         }
@@ -280,6 +282,9 @@ nlohmann::json VariantWorkbench::SerializeState() const {
         nlohmann::json serializedOverride{{"id", identifier}};
         if (serializeHidden) {
           serializedOverride["hidden"] = true;
+        }
+        if (serializeLocked) {
+          serializedOverride["locked"] = true;
         }
         if (overrideItem.automaticEquipmentBindingMode ==
                 static_cast<std::uint8_t>(
@@ -427,6 +432,7 @@ bool VariantWorkbench::DeserializeState(
 
         overrideItem.hidden = hidden;
         if (overrideValue.is_object()) {
+          overrideItem.locked = overrideValue.value("locked", false);
           const auto automaticIt = overrideValue.find("automaticEquipment");
           if (automaticIt != overrideValue.end() && automaticIt->is_object()) {
             const auto mode = automaticIt->value("mode", std::string{});
@@ -628,6 +634,7 @@ bool VariantWorkbench::MigrateLegacyConditionAssignments(
           target.overrides.push_back(std::move(overrideItem));
         } else {
           duplicate->hidden = duplicate->hidden && overrideItem.hidden;
+          duplicate->locked = duplicate->locked || overrideItem.locked;
         }
       }
       ++mergedRowCount;
@@ -702,7 +709,7 @@ std::uint32_t VariantWorkbench::Deserialize(
 
   if (version != 2 && version != 3 && version != 4 && version != 5 &&
       version != 6 && version != 7 && version != 8 && version != 9 &&
-      version != 10 && version != kSerializationVersion) {
+      version != 10 && version != 11 && version != kSerializationVersion) {
     logger::warn("Skipping SFS serialized rows from unsupported version {}",
                  version);
     return 0;

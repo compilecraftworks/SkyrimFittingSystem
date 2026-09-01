@@ -3663,6 +3663,8 @@ void UpdateVirtualWornTokenCache() {
       // protected bits and accidentally publish the remainder as a token.
       if (!active || !active->armor || slotMask == 0 ||
           (slotMask & protectedMask) != 0 ||
+          menu->GetWorkbench().IsRegisteredAppearanceLockedForActor(
+              actorID, active->armor->GetFormID(), slotMask) ||
           !sfs::workbench::IsExternalModStripLinkAppearanceEnabled(
               slotMask)) {
         continue;

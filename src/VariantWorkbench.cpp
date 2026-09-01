@@ -797,6 +797,33 @@ std::vector<int> VariantWorkbench::BuildCandidateRowIndices(
   return indices;
 }
 
+std::uint64_t VariantWorkbench::GetLockedAppearanceSlotMaskForCandidateRows(
+    const std::vector<int> *a_candidateRowIndices) const {
+  std::unordered_set<RE::FormID> ownerActorFormIDs;
+  if (a_candidateRowIndices != nullptr) {
+    for (const auto rowIndex : *a_candidateRowIndices) {
+      if (IsValidRowIndex(rowIndex, rows_.size())) {
+        ownerActorFormIDs.insert(
+            rows_[static_cast<std::size_t>(rowIndex)].ownerActorFormID);
+      }
+    }
+  }
+
+  std::uint64_t lockedSlotMask = 0;
+  for (const auto &row : rows_) {
+    if (a_candidateRowIndices != nullptr &&
+        !ownerActorFormIDs.contains(row.ownerActorFormID)) {
+      continue;
+    }
+    for (const auto &item : row.overrides) {
+      if (item.locked) {
+        lockedSlotMask |= row.GetOverrideDisplaySlotMask(item);
+      }
+    }
+  }
+  return lockedSlotMask;
+}
+
 int VariantWorkbench::FindBestCatalogTargetRowIndex(
     const EquipmentWidgetItem &a_item, bool a_requireAcceptable,
     const std::vector<PlannedCatalogAssignment> *a_pendingAssignments,
@@ -901,9 +928,13 @@ bool VariantWorkbench::PlanCatalogAssignments(
     return false;
   }
 
+  const auto lockedSlotMask =
+      GetLockedAppearanceSlotMaskForCandidateRows(a_candidateRowIndices);
+
   for (const auto *armor : armors) {
     EquipmentWidgetItem item{};
-    if (!armor || !workbench::BuildCatalogItem(armor->GetFormID(), item)) {
+    if (!armor || !workbench::BuildCatalogItem(armor->GetFormID(), item) ||
+        (armor::GetArmorDisplaySlotMask(armor) & lockedSlotMask) != 0) {
       continue;
     }
 
@@ -948,6 +979,7 @@ bool VariantWorkbench::NormalizeOverrideRowsForActor(
         a_target.overrides.push_back(overrideItem);
       } else {
         duplicate->hidden = duplicate->hidden && overrideItem.hidden;
+        duplicate->locked = duplicate->locked || overrideItem.locked;
         duplicate->automaticEquipmentUserVisible =
             duplicate->automaticEquipmentUserVisible ||
             overrideItem.automaticEquipmentUserVisible;
@@ -1065,6 +1097,7 @@ bool VariantWorkbench::NormalizeOverrideRowsForActor(
       targetOverrides.push_back(std::move(pendingOverride.item));
     } else {
       duplicate->hidden = duplicate->hidden && pendingOverride.item.hidden;
+      duplicate->locked = duplicate->locked || pendingOverride.item.locked;
       duplicate->automaticEquipmentUserVisible =
           duplicate->automaticEquipmentUserVisible ||
           pendingOverride.item.automaticEquipmentUserVisible;
@@ -1076,6 +1109,18 @@ bool VariantWorkbench::NormalizeOverrideRowsForActor(
   // armor slot owns the whole item and later overlaps are discarded. This
   // does not merge or compare different condition layers.
   std::unordered_map<std::string, std::uint64_t> claimedSlotsByCondition;
+  for (const auto &row : rows_) {
+    if (row.ownerActorFormID != a_ownerActorFormID) {
+      continue;
+    }
+    auto &claimedSlotMask =
+        claimedSlotsByCondition[row.conditionId.value_or(std::string{})];
+    for (const auto &item : row.overrides) {
+      if (item.locked) {
+        claimedSlotMask |= row.GetOverrideDisplaySlotMask(item);
+      }
+    }
+  }
   for (auto &row : rows_) {
     if (row.ownerActorFormID != a_ownerActorFormID) {
       continue;
@@ -1085,6 +1130,9 @@ bool VariantWorkbench::NormalizeOverrideRowsForActor(
     std::erase_if(row.overrides, [&](const EquipmentWidgetItem &a_item) {
       const auto displaySlotMask = row.GetOverrideDisplaySlotMask(a_item);
       if (displaySlotMask == 0) {
+        return false;
+      }
+      if (a_item.locked) {
         return false;
       }
       if ((displaySlotMask & claimedSlotMask) != 0) {
@@ -1433,12 +1481,59 @@ std::uint64_t VariantWorkbench::GetActualEquipmentLinkedSlotMaskForActor(
       continue;
     }
     for (const auto &item : row.overrides) {
-      if (!row.IsProtectedAppearance(item)) {
+      if (!item.locked && !row.IsProtectedAppearance(item)) {
         linkedSlotMask |= item.automaticEquipmentAnchorSlotMask;
       }
     }
   }
   return linkedSlotMask;
+}
+
+std::uint64_t VariantWorkbench::GetLockedAppearanceSlotMaskForActor(
+    const RE::FormID a_actorFormID) const {
+  auto stateLock = AcquireStateLock();
+  if (a_actorFormID == 0) {
+    return 0;
+  }
+  const auto *player = RE::PlayerCharacter::GetSingleton();
+  const bool resolvingPlayer =
+      player != nullptr && player->GetFormID() == a_actorFormID;
+  std::uint64_t lockedSlotMask = 0;
+  for (const auto &row : rows_) {
+    if (row.ownerActorFormID != a_actorFormID &&
+        !(resolvingPlayer && row.ownerActorFormID == 0)) {
+      continue;
+    }
+    for (const auto &item : row.overrides) {
+      if (item.locked) {
+        lockedSlotMask |= row.GetOverrideDisplaySlotMask(item);
+      }
+    }
+  }
+  return lockedSlotMask;
+}
+
+bool VariantWorkbench::IsRegisteredAppearanceLockedForActor(
+    const RE::FormID a_actorFormID, const RE::FormID a_appearanceFormID,
+    const std::uint64_t a_visualSlotMask) const {
+  auto stateLock = AcquireStateLock();
+  if (a_actorFormID == 0 || a_appearanceFormID == 0) {
+    return false;
+  }
+  const auto *player = RE::PlayerCharacter::GetSingleton();
+  const bool resolvingPlayer =
+      player != nullptr && player->GetFormID() == a_actorFormID;
+  return std::ranges::any_of(rows_, [&](const auto &row) {
+    if (row.ownerActorFormID != a_actorFormID &&
+        !(resolvingPlayer && row.ownerActorFormID == 0)) {
+      return false;
+    }
+    return std::ranges::any_of(row.overrides, [&](const auto &item) {
+      return item.locked && item.formID == a_appearanceFormID &&
+             (a_visualSlotMask == 0 ||
+              (row.GetOverrideDisplaySlotMask(item) & a_visualSlotMask) != 0);
+    });
+  });
 }
 
 std::uint32_t VariantWorkbench::GetHeadgearToggleFittingSlotMaskForActor(
@@ -1469,6 +1564,9 @@ std::uint32_t VariantWorkbench::GetHeadgearToggleFittingSlotMaskForActor(
       continue;
     }
     for (const auto &item : row.overrides) {
+      if (item.locked) {
+        continue;
+      }
       const auto visualSlotMask = static_cast<std::uint32_t>(
           row.GetOverrideVisualSlotMask(item));
       if (visualSlotMask == 0 ||
@@ -1569,6 +1667,29 @@ bool VariantWorkbench::CanAcceptOverride(int a_targetRowIndex,
     return false;
   }
 
+  std::uint64_t lockedSlotMask = 0;
+  for (int rowIndex = 0; rowIndex < static_cast<int>(rows_.size());
+       ++rowIndex) {
+    const auto &candidateRow = rows_[static_cast<std::size_t>(rowIndex)];
+    if (candidateRow.ownerActorFormID != row.ownerActorFormID) {
+      continue;
+    }
+    for (int itemIndex = 0;
+         itemIndex < static_cast<int>(candidateRow.overrides.size());
+         ++itemIndex) {
+      const auto &candidateItem =
+          candidateRow.overrides[static_cast<std::size_t>(itemIndex)];
+      if (!candidateItem.locked ||
+          (rowIndex == a_sourceRowIndex && itemIndex == a_sourceItemIndex)) {
+        continue;
+      }
+      lockedSlotMask |= candidateRow.GetOverrideDisplaySlotMask(candidateItem);
+    }
+  }
+  if ((appearanceSlotMask & lockedSlotMask) != 0) {
+    return false;
+  }
+
   for (int itemIndex = 0; itemIndex < static_cast<int>(row.overrides.size());
        ++itemIndex) {
     if (a_targetRowIndex == a_sourceRowIndex &&
@@ -1631,7 +1752,10 @@ bool VariantWorkbench::ReplaceCatalogSelectionInWorkbench(
 
   for (const auto rowIndex : targetRows) {
     auto &row = rows_[static_cast<std::size_t>(rowIndex)];
-    row.overrides.clear();
+    std::erase_if(row.overrides,
+                  [](const EquipmentWidgetItem &a_item) {
+                    return !a_item.locked;
+                  });
   }
 
   bool addedAny = false;
@@ -1662,7 +1786,8 @@ bool VariantWorkbench::RemoveOverridesOverlappingCatalogSelection(
   const auto removeOverlaps = [&](VariantWorkbenchRow &a_row) {
     const auto oldSize = a_row.overrides.size();
     std::erase_if(a_row.overrides, [&](const EquipmentWidgetItem &a_item) {
-      return (a_row.GetOverrideDisplaySlotMask(a_item) & incomingSlotMask) != 0;
+      return !a_item.locked &&
+             (a_row.GetOverrideDisplaySlotMask(a_item) & incomingSlotMask) != 0;
     });
     changed |= a_row.overrides.size() != oldSize;
   };
@@ -1741,9 +1866,25 @@ std::vector<VariantWorkbenchRow> VariantWorkbench::BuildCatalogRows(
     seenRowKeys.insert(row.key);
   }
 
+  std::uint64_t lockedSlotMask = 0;
+  for (const auto &row : rows_) {
+    if (row.ownerActorFormID != a_ownerActorFormID) {
+      continue;
+    }
+    for (const auto &item : row.overrides) {
+      if (item.locked) {
+        lockedSlotMask |= row.GetOverrideDisplaySlotMask(item);
+      }
+    }
+  }
+
   for (const auto *armor : armors) {
-    if (!armor || IsAppearanceRegistrationProtectedSlotMask(
-                      armor::GetArmorDisplaySlotMask(armor))) {
+    if (!armor) {
+      continue;
+    }
+    const auto displaySlotMask = armor::GetArmorDisplaySlotMask(armor);
+    if (IsAppearanceRegistrationProtectedSlotMask(displaySlotMask) ||
+        (displaySlotMask & lockedSlotMask) != 0) {
       continue;
     }
 
@@ -1864,6 +2005,22 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
     return false;
   }
 
+  std::uint64_t lockedSlotMask = 0;
+  for (const auto &candidateRow : rows_) {
+    if (candidateRow.ownerActorFormID != row.ownerActorFormID) {
+      continue;
+    }
+    for (const auto &candidateItem : candidateRow.overrides) {
+      if (candidateItem.locked) {
+        lockedSlotMask |=
+            candidateRow.GetOverrideDisplaySlotMask(candidateItem);
+      }
+    }
+  }
+  if ((appearanceSlotMask & lockedSlotMask) != 0) {
+    return false;
+  }
+
   const auto newSourceKey = BuildSlotKey(representativeSlotMask);
   const auto newRowKey =
       BuildRowKey(newSourceKey, row.conditionId, row.ownerActorFormID);
@@ -1876,7 +2033,10 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
     // so the drop fills the row the user actually targeted.
     duplicate->uiIdentity = row.uiIdentity;
     duplicate->registrationOrder = row.registrationOrder;
-    duplicate->overrides.clear();
+    std::erase_if(duplicate->overrides,
+                  [](const EquipmentWidgetItem &a_item) {
+                    return !a_item.locked;
+                  });
     item.hidden = false;
     duplicate->overrides.push_back(std::move(item));
     const auto sourceIndex = static_cast<std::size_t>(a_targetRowIndex);
@@ -1887,6 +2047,9 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
   }
 
   for (const auto &oldItem : row.overrides) {
+    if (oldItem.locked) {
+      continue;
+    }
     sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
         row.ownerActorFormID, oldItem.formID,
         static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(oldItem)),
@@ -1901,7 +2064,9 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
     return false;
   }
   row.isEquipped = false;
-  row.overrides.clear();
+  std::erase_if(row.overrides, [](const EquipmentWidgetItem &a_item) {
+    return !a_item.locked;
+  });
   row.overrides.push_back(std::move(item));
   UpdateRowIdentity(row);
   RebuildRowOrder();
@@ -1932,6 +2097,37 @@ bool VariantWorkbench::SetOverrideHidden(int a_rowIndex, int a_itemIndex,
   }
 
   overrideItem.hidden = a_hidden;
+  MarkChanged();
+  return true;
+}
+
+bool VariantWorkbench::SetOverrideLocked(const int a_rowIndex,
+                                         const int a_itemIndex,
+                                         const bool a_locked) {
+  auto stateLock = AcquireStateLock();
+  if (!IsValidRowIndex(a_rowIndex, rows_.size())) {
+    return false;
+  }
+  auto &row = rows_[static_cast<std::size_t>(a_rowIndex)];
+  if (!IsValidRowIndex(a_itemIndex, row.overrides.size())) {
+    return false;
+  }
+
+  auto &item = row.overrides[static_cast<std::size_t>(a_itemIndex)];
+  if (item.locked == a_locked) {
+    return false;
+  }
+
+  if (a_locked) {
+    // Release only this appearance's current automation tickets/latches. The
+    // actor transaction and every other appearance remain untouched.
+    sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
+        row.ownerActorFormID, item.formID,
+        static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(item)),
+        false);
+    item.automaticEquipmentUserVisible = false;
+  }
+  item.locked = a_locked;
   MarkChanged();
   return true;
 }
@@ -1971,7 +2167,7 @@ bool VariantWorkbench::PersistOverrideHiddenFromExternalSuppression(
     return false;
   }
   auto &overrideItem = overrides[static_cast<std::size_t>(a_itemIndex)];
-  if (overrideItem.hidden) {
+  if (overrideItem.locked || overrideItem.hidden) {
     return false;
   }
   overrideItem.hidden = true;
@@ -2090,6 +2286,7 @@ bool VariantWorkbench::SetOverrideConditionId(
     target->overrides.push_back(std::move(overrideItem));
   } else {
     duplicate->hidden = duplicate->hidden && overrideItem.hidden;
+    duplicate->locked = duplicate->locked || overrideItem.locked;
   }
 
   static_cast<void>(NormalizeOverrideRowsForActor(ownerActorFormID));
@@ -2327,8 +2524,12 @@ bool VariantWorkbench::ResetAllRows(
     }
 
     auto &row = rows_[static_cast<std::size_t>(rowIndex)];
-    if (!row.overrides.empty()) {
-      row.overrides.clear();
+    const auto oldSize = row.overrides.size();
+    std::erase_if(row.overrides,
+                  [](const EquipmentWidgetItem &a_item) {
+                    return !a_item.locked;
+                  });
+    if (row.overrides.size() != oldSize) {
       changed = true;
     }
   }

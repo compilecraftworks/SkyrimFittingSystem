@@ -42,6 +42,8 @@ constexpr std::string_view kWorkbenchActualSlotIcon =
     "\xee\x85\x9b"; // ICON_LC_SHIELD
 constexpr std::string_view kWorkbenchFittingSlotIcon =
     "\xee\x87\x89"; // ICON_LC_SHIRT
+constexpr std::string_view kWorkbenchLockIcon =
+    "\xee\x84\x8e"; // ICON_LC_LOCK (U+E10E)
 
 ImU32 ConditionSurfaceColor(const int a_red, const int a_green,
                             const int a_blue, const int a_alpha = 255) {
@@ -1824,6 +1826,13 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
       };
       std::optional<PendingCardConditionAssignment>
           pendingCardConditionAssignment;
+      struct PendingAppearanceLockChange {
+        std::uint64_t targetUiIdentity{0};
+        RE::FormID appearanceFormID{0};
+        bool locked{false};
+      };
+      std::optional<PendingAppearanceLockChange>
+          pendingAppearanceLockChange;
       struct PendingConditionalFittingReplacement {
         int rowIndex{-1};
         std::uint64_t targetUiIdentity{0};
@@ -2691,21 +2700,22 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 (!isConditionalFitting && globallyHideFittingOverrides) ||
                 manuallyHidden;
             const bool virtualTokenAppearanceSuppressed =
-                previewActor != nullptr &&
+                !overrideItem.locked && previewActor != nullptr &&
                 (overrideSlotMask &
                  virtualTokenSuppressedFittingSlotMask) == 0 &&
                 sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
                     previewActor->GetFormID(), overrideItem.formID,
                     static_cast<std::uint32_t>(overrideSlotMask));
             const bool virtualTokenHidden =
-                virtualTokenAppearanceSuppressed ||
+                !overrideItem.locked &&
+                (virtualTokenAppearanceSuppressed ||
                 (overrideSlotMask &
-                 virtualTokenSuppressedFittingSlotMask) != 0;
+                 virtualTokenSuppressedFittingSlotMask) != 0);
             const bool ddHiderHidden =
-                (overrideSlotMask &
+                !overrideItem.locked && (overrideSlotMask &
                  deviousDevicesHiderSuppressedFittingSlotMask) != 0;
             const bool headgearToggleHidden =
-                (overrideSlotMask &
+                !overrideItem.locked && (overrideSlotMask &
                  headgearToggleSuppressedFittingSlotMask) != 0;
             const bool automaticallyHidden =
                 overrideRow.IsOverrideAutomaticallySuppressed(overrideItem) ||
@@ -2812,6 +2822,12 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                          : std::optional<ImVec4>{ThemeConfig::GetSingleton()
                                                      ->GetColor(
                                                          "TEXT_DISABLED")},
+                 .nameTailText = overrideItem.locked
+                                     ? kWorkbenchLockIcon.data()
+                                     : nullptr,
+                 .nameTailScale = 0.68f,
+                 .nameTailColor = std::optional<ImVec4>{
+                     ThemeConfig::GetSingleton()->GetColor("SECONDARY")},
                  .slotIconText = kWorkbenchFittingSlotIcon.data(),
                  .slotIconScale = 0.72f,
                  .accentColor = overrideConditionState.color,
@@ -2821,7 +2837,23 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                          : ui::components::EquipmentWidgetConflictStyle::None,
                  .drawTooltipExtras = std::move(overrideTooltipExtras),
                  .drawContextMenuEntries =
-                     [&, overrideRowIndex, overrideIndex]() {
+                     [&, overrideRowIndex, overrideIndex,
+                      overrideLocked = overrideItem.locked,
+                      overrideFormID = overrideItem.formID,
+                      overrideUiIdentity = overrideRow.uiIdentity]() {
+                       const auto lockLabel =
+                           std::string(kWorkbenchLockIcon) + " " +
+                           std::string(localization->Get(
+                               overrideLocked
+                                   ? "workbench.appearance_unlock"
+                                   : "workbench.appearance_lock"));
+                       if (ImGui::MenuItem(lockLabel.c_str())) {
+                         pendingAppearanceLockChange =
+                             PendingAppearanceLockChange{
+                                 overrideUiIdentity, overrideFormID,
+                                 !overrideLocked};
+                       }
+                       ImGui::Separator();
                        drawConditionAssignmentMenu(overrideRowIndex,
                                                    overrideIndex);
                      }});
@@ -4035,6 +4067,29 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                     action.ruleIndex, rule.targetKind, 0);
           if (changed) {
             refreshNativeAfterTable = true;
+          }
+        }
+      }
+
+      if (pendingAppearanceLockChange.has_value()) {
+        const auto action = *pendingAppearanceLockChange;
+        const auto targetRowIndex =
+            findRowIndexByUiIdentity(action.targetUiIdentity);
+        const auto &currentRows = workbench_.GetRows();
+        if (targetRowIndex >= 0 &&
+            targetRowIndex < static_cast<int>(currentRows.size())) {
+          const auto &targetRow =
+              currentRows[static_cast<std::size_t>(targetRowIndex)];
+          const auto itemIt = std::ranges::find(
+              targetRow.overrides, action.appearanceFormID,
+              &workbench::EquipmentWidgetItem::formID);
+          if (itemIt != targetRow.overrides.end()) {
+            const auto itemIndex = static_cast<int>(
+                std::distance(targetRow.overrides.begin(), itemIt));
+            if (workbench_.SetOverrideLocked(targetRowIndex, itemIndex,
+                                             action.locked)) {
+              refreshNativeAfterTable = true;
+            }
           }
         }
       }

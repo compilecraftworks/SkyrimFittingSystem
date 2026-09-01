@@ -22,6 +22,8 @@ Skyrim Outfit System Revived was also consulted while implementing parts of the 
 - UTF-8 SFS/Modex kit loading and creation from equipped gear or active overrides
 - Built-in fitting-kit generator with plugin scanning, candidate editing, preview, and direct kit creation
 - Actor-local Fitting Dye for exact rendered components of registered appearances, opened from the workbench dye action or card context menu
+- Actor-local registered-appearance locks that survive catalog previews and applications while remaining independent from manual eye and condition state
+- RaceMenu `HH_OFFSET` synchronization for registered high-heel appearances across DAVE, DAV, and native display backends
 - Stable generated-kit SFW/NSFW labels that change only through the result-list toggle, not when candidate selection changes
 - Display-only workbench sorting and optional selected-actor third-person menu placement with right-drag rotation
 - Actor-local live BodyMorph synchronization without polling or a global actor scan
@@ -43,7 +45,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.1)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.2)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -61,7 +63,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.5.1/windows/x64/<mode>/` in the project root.
+`build/v1.5.2/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -69,7 +71,9 @@ From WSL, to build and deploy directly into the local test mod folder:
 ./scripts/build-deploy.sh
 ```
 
-By default this uses `releasedbg`, so the deploy includes a `.pdb` alongside the DLL for better crash logs.
+By default this uses `releasedbg`, but deploys only the runtime DLL. The generated
+`.pdb` remains in the local build directory for opt-in crash analysis and is not
+copied into MO2.
 
 For a full clean rebuild:
 
@@ -93,8 +97,9 @@ For the full local build, deploy, and packaging workflow, see
 
 This writes the MO2-installable flat runtime ZIP to `Release/`, the minimal
 complete corresponding-source ZIP to `Sources/`, matching copies to `dist/`,
-and a SHA-256 manifest to `Release/`. Packaging uses `releasedbg`, so the
-runtime archive includes a `.pdb` next to the DLL.
+and a SHA-256 manifest to `Release/`. Packaging uses `releasedbg`, but the
+runtime archive deliberately excludes the generated `.pdb` to keep the user
+download small. Debug symbols remain available only in the local build tree.
 
 ## Settings And Data
 - Runtime settings are stored under:
@@ -108,14 +113,14 @@ runtime archive includes a `.pdb` next to the DLL.
 
 ## Runtime Menu API
 
-SFS v1.5.1 exports a stable menu API for external hotkey and menu-management
+SFS v1.5.2 exports a stable menu API for external hotkey and menu-management
 mods. Managers may temporarily disable the native F6 or user-defined shortcut
 without changing its saved binding; this runtime-only state defaults to enabled
 on every game launch. Open, Close, and IsMenuOpen remain independent. See
 `docs/SkyrimFittingSystem-Menu-API.md` and `extras/SkyrimFittingSystemAPI.h`.
-The v1.5.1 module name is `SFSCore.dll`; the four C export names are unchanged.
+The v1.5.2 module name is `SFSCore.dll`; the four C export names are unchanged.
 
-SFS v1.5.1 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
+SFS v1.5.2 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
 selected outfit plugins, builds and edits candidate combinations, previews the
 selection on the character and in the workbench, and writes finished kits
 directly to the SFS user-kit folder. Only this temporary generator preview may
@@ -148,7 +153,7 @@ for Dynamic Feminine Female Modesty Animations OAR 4.30, Wet Function Redux,
 and Dynamic Footprints SKSE BASE v3. These use narrow, versioned integration
 boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.5.1.md` for the current release scope.
+state. See `docs/RELEASE-NOTES-v1.5.2.md` for the current release scope.
 
 ## Fitting Kits
 

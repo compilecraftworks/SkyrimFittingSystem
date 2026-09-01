@@ -1598,6 +1598,34 @@ BuildDisplaySet(RE::Actor *a_actor,
         std::stable_partition(
             orderedRows.begin(), orderedRows.end(),
             [](const auto *row) { return row->HasCondition(); });
+        std::uint32_t activeLockedSlotMask = 0;
+        for (const auto *rowPtr : orderedRows) {
+          const auto &row = *rowPtr;
+          if (!row.IsOwnedByActor(a_actor) ||
+              (!a_ignoreConditions && !IsRowActiveForActor(row, a_actor))) {
+            continue;
+          }
+          for (const auto &item : row.overrides) {
+            if (!item.locked) {
+              continue;
+            }
+            const auto visualSlotMask = static_cast<std::uint32_t>(
+                row.GetOverrideVisualSlotMask(item));
+            const auto conditionalFitting =
+                conditionalVisibility.fitting.find(item.formID);
+            const bool userHidden =
+                !allowRestrictedPreview &&
+                (row.IsProtectedAppearance(item) ||
+                 (row.HasCondition()
+                      ? item.hidden
+                      : conditionalFitting != conditionalVisibility.fitting.end()
+                            ? !conditionalFitting->second
+                            : (hideFittingOverrides || item.hidden)));
+            if (!userHidden) {
+              activeLockedSlotMask |= visualSlotMask;
+            }
+          }
+        }
         for (const auto *rowPtr : orderedRows) {
           const auto &row = *rowPtr;
           if (!row.IsOwnedByActor(a_actor) ||
@@ -1641,6 +1669,10 @@ BuildDisplaySet(RE::Actor *a_actor,
                 row.IsProtectedAppearance(overrideItem);
             const auto conditionalFitting =
                 conditionalVisibility.fitting.find(overrideItem.formID);
+            if (!overrideItem.locked &&
+                (overrideVisualSlotMask & activeLockedSlotMask) != 0) {
+              continue;
+            }
             const bool overrideHidden =
                 !allowRestrictedPreview &&
                 (protectedAppearance ||
@@ -1667,7 +1699,7 @@ BuildDisplaySet(RE::Actor *a_actor,
             }
 
             const bool appearanceTicketSuppressed =
-                !allowRestrictedPreview &&
+                !overrideItem.locked && !allowRestrictedPreview &&
                 a_applyTemporarySuppression &&
                 (overrideVisualSlotMask & suppressedFittingSlots) == 0 &&
                 sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
@@ -1679,7 +1711,7 @@ BuildDisplaySet(RE::Actor *a_actor,
             auto slotMask = overrideVisualSlotMask != 0 ? overrideVisualSlotMask
                                                         : skinningSlotMask;
             if (slotMask == 0 || appearanceTicketSuppressed ||
-                (!allowRestrictedPreview &&
+                (!overrideItem.locked && !allowRestrictedPreview &&
                  (slotMask & suppressedFittingSlots) != 0) ||
                 (slotMask & occupiedDisplaySlots) != 0) {
               continue;
@@ -2527,6 +2559,34 @@ CollectActiveFittingArmors(
         std::stable_partition(
             orderedRows.begin(), orderedRows.end(),
             [](const auto *row) { return row->HasCondition(); });
+        std::uint32_t activeLockedSlotMask = 0;
+        for (const auto *rowPtr : orderedRows) {
+          const auto &row = *rowPtr;
+          if (!row.IsOwnedByActor(a_actor) ||
+              (!a_ignoreConditions && !IsRowActiveForActor(row, a_actor))) {
+            continue;
+          }
+          for (const auto &item : row.overrides) {
+            if (!item.locked) {
+              continue;
+            }
+            const auto visualSlotMask = static_cast<std::uint32_t>(
+                row.GetOverrideVisualSlotMask(item));
+            const auto conditionalFitting =
+                conditionalVisibility.fitting.find(item.formID);
+            const bool userHidden =
+                !allowRestrictedPreview &&
+                (row.IsProtectedAppearance(item) ||
+                 (row.HasCondition()
+                      ? item.hidden
+                      : conditionalFitting != conditionalVisibility.fitting.end()
+                            ? !conditionalFitting->second
+                            : (hideBaseFittingOverrides || item.hidden)));
+            if (!userHidden) {
+              activeLockedSlotMask |= visualSlotMask;
+            }
+          }
+        }
         for (const auto *rowPtr : orderedRows) {
           const auto &row = *rowPtr;
           if (!row.IsOwnedByActor(a_actor) ||
@@ -2540,8 +2600,12 @@ CollectActiveFittingArmors(
             const bool protectedAppearance =
                 !allowRestrictedPreview &&
                 row.IsProtectedAppearance(overrideItem);
+            if (!overrideItem.locked &&
+                (overrideVisualSlotMask & activeLockedSlotMask) != 0) {
+              continue;
+            }
             const bool automaticallySuppressed =
-                !allowRestrictedPreview &&
+                !overrideItem.locked && !allowRestrictedPreview &&
                 (usesActualEquipmentLinks
                     ? overrideItem.automaticEquipmentAnchorSlotMask != 0 &&
                           !overrideItem.automaticEquipmentUserVisible &&
@@ -2576,13 +2640,13 @@ CollectActiveFittingArmors(
 
             const auto slotMask = overrideVisualSlotMask;
             const bool appearanceTicketSuppressed =
-                !allowRestrictedPreview &&
+                !overrideItem.locked && !allowRestrictedPreview &&
                 !a_ignoreVirtualTokenSuppression &&
                 (slotMask & suppressedFittingSlots) == 0 &&
                 sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
                     a_actor->GetFormID(), armor->GetFormID(), slotMask);
             if (slotMask == 0 || appearanceTicketSuppressed ||
-                (!allowRestrictedPreview &&
+                (!overrideItem.locked && !allowRestrictedPreview &&
                  (slotMask & suppressedFittingSlots) != 0)) {
               continue;
             }
@@ -2929,6 +2993,7 @@ void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
     sfs::native::racemenu::MorphNewRegisteredAppearanceNodes(
         a_actor, attachmentScene, armor->GetFormID());
   }
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
 
 void ApplyDisplaySkinning(RE::Actor *a_actor,
@@ -3138,6 +3203,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
       re::Update3D(a_actor);
       QueuePausedReplacementPreviewPoseSync(a_actor);
       dye::QueueSavedWorldTintRestore(a_actor);
+      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
       return;
     }
     logger::debug("Refreshing actor {:08X} with DAVE API for {}",
@@ -3148,6 +3214,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
     } else {
       QueuePausedReplacementPreviewPoseSync(a_actor);
       dye::QueueSavedWorldTintRestore(a_actor);
+      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
     }
     return;
   }
@@ -3166,6 +3233,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
       re::Update3D(a_actor);
       QueuePausedReplacementPreviewPoseSync(a_actor);
       dye::QueueSavedWorldTintRestore(a_actor);
+      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
     }
     return;
   }
@@ -3177,6 +3245,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
     re::Update3D(a_actor);
     QueuePausedReplacementPreviewPoseSync(a_actor);
     dye::QueueSavedWorldTintRestore(a_actor);
+    sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
     return;
   }
 
@@ -3189,6 +3258,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
   re::UpdateEquipment(process, a_actor);
   QueuePausedReplacementPreviewPoseSync(a_actor);
   dye::QueueSavedWorldTintRestore(a_actor);
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
 
 void RefreshPlayerArmor() {

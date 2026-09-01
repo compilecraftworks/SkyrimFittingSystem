@@ -20,7 +20,6 @@ if (-not (Test-Path -LiteralPath $xmake -PathType Leaf)) {
 
 $buildDirectory = Join-Path $repoRoot "build\v$version\windows\x64\$Mode"
 $dllPath = Join-Path $buildDirectory 'SFSCore.dll'
-$pdbPath = Join-Path $buildDirectory 'SFSCore.pdb'
 
 if (-not $SkipBuild) {
     $previousBuildVersion = $env:SFS_BUILD_VERSION
@@ -91,8 +90,10 @@ Copy-RequiredFile (Join-Path $repoRoot 'data\SkyrimFittingSystem-VirtualTokens.e
 Copy-RequiredDirectory (Join-Path $repoRoot 'data\Interface') (Join-Path $runtimeStage 'Interface')
 Copy-RequiredDirectory (Join-Path $repoRoot 'data\Scripts') (Join-Path $runtimeStage 'Scripts')
 Copy-RequiredFile $dllPath (Join-Path $runtimeStage 'SKSE\Plugins\SFSCore.dll')
-if (Test-Path -LiteralPath $pdbPath -PathType Leaf) {
-    Copy-RequiredFile $pdbPath (Join-Path $runtimeStage 'SKSE\Plugins\SFSCore.pdb')
+
+$runtimePdbFiles = Get-ChildItem -LiteralPath $runtimeStage -Recurse -File -Filter '*.pdb'
+if ($runtimePdbFiles) {
+    throw "Debug symbols entered the runtime stage: $($runtimePdbFiles.FullName -join ', ')"
 }
 
 # Minimal complete corresponding source. Build products, private experiments,
@@ -118,7 +119,8 @@ $sourceDocs = @(
     'Build-Deploy-Release.md', 'EXTERNAL-MOD-STRIP-LINK-MODES-KO.md',
     'OpenAnimationReplacer-Conditions.md', 'SkyrimFittingSystem-Menu-API.md',
     'RELEASE-NOTES-v1.5.0.md', 'RELEASE-NOTES-v1.5.0-ko.md',
-    'RELEASE-NOTES-v1.5.1.md', 'RELEASE-NOTES-v1.5.1-ko.md'
+    'RELEASE-NOTES-v1.5.1.md', 'RELEASE-NOTES-v1.5.1-ko.md',
+    'RELEASE-NOTES-v1.5.2.md', 'RELEASE-NOTES-v1.5.2-ko.md'
 )
 foreach ($name in $sourceDocs) {
     Copy-RequiredFile (Join-Path $repoRoot "docs\$name") (Join-Path $sourceStage "docs\$name")

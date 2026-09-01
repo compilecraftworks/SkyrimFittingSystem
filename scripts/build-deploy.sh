@@ -44,7 +44,6 @@ copy_file() {
 BUILD_ROOT="${REPO_ROOT}/build"
 BUILD_DIR="${BUILD_ROOT}/v${SFS_BUILD_VERSION}/windows/x64/${MODE}"
 PLUGIN_SRC="${BUILD_DIR}/${PLUGIN_NAME}.dll"
-PDB_SRC="${BUILD_DIR}/${PLUGIN_NAME}.pdb"
 PLUGIN_DST_DIR="${MOD_DIR}/SKSE/Plugins"
 DATA_SRC_DIR="${REPO_ROOT}/data"
 LEGACY_MAIN_FILES=(
@@ -103,16 +102,11 @@ done
 # Copy the freshly built runtime last so a repository-local data artifact can
 # never overwrite it during deployment.
 copy_file "$PLUGIN_SRC" "${PLUGIN_DST_DIR}/${PLUGIN_NAME}.dll"
-
-if [[ -f "$PDB_SRC" ]]; then
-    copy_file "$PDB_SRC" "${PLUGIN_DST_DIR}/${PLUGIN_NAME}.pdb"
-else
-    rm -f "${PLUGIN_DST_DIR}/${PLUGIN_NAME}.pdb"
-fi
+# Runtime installations intentionally exclude debug symbols. A PDB remains in
+# the local build directory for crash analysis and can be copied manually when
+# a developer explicitly needs it.
+rm -f "${PLUGIN_DST_DIR}/${PLUGIN_NAME}.pdb"
 
 echo "Built ${PLUGIN_NAME} (${MODE})"
 echo "Version ${SFS_BUILD_VERSION_STRING}"
 echo "Deployed plugin to ${PLUGIN_DST_DIR}/${PLUGIN_NAME}.dll"
-if [[ -f "${PLUGIN_DST_DIR}/${PLUGIN_NAME}.pdb" ]]; then
-    echo "Deployed symbols to ${PLUGIN_DST_DIR}/${PLUGIN_NAME}.pdb"
-fi

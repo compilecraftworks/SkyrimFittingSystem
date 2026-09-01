@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -19,6 +20,7 @@
 #include <vector>
 
 #include <Windows.h>
+#include <nlohmann/json.hpp>
 
 #ifdef max
 #undef max
@@ -114,6 +116,79 @@ public:
   virtual std::size_t ClearMorphCache() = 0;
 };
 
+class INiTransformInterface : public IPluginInterface {
+public:
+  struct Position {
+    float x{0.0F};
+    float y{0.0F};
+    float z{0.0F};
+  };
+
+  struct Rotation {
+    float heading{0.0F};
+    float attitude{0.0F};
+    float bank{0.0F};
+  };
+
+  class NodeVisitor {
+  public:
+    virtual bool VisitPosition(const char *, const char *, Position &) = 0;
+    virtual bool VisitRotation(const char *, const char *, Rotation &) = 0;
+    virtual bool VisitScale(const char *, const char *, float) = 0;
+    virtual bool VisitScaleMode(const char *, const char *, std::uint32_t) = 0;
+  };
+
+  // Keep the complete public v3 ABI in declaration order. SFS uses only the
+  // position and update methods, but omitting an earlier virtual would shift
+  // every later call into the wrong RaceMenu slot.
+  virtual bool HasNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
+                                        const char *, const char *) = 0;
+  virtual bool HasNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
+                                        const char *, const char *) = 0;
+  virtual bool HasNodeTransformScale(RE::TESObjectREFR *, bool, bool,
+                                     const char *, const char *) = 0;
+  virtual bool HasNodeTransformScaleMode(RE::TESObjectREFR *, bool, bool,
+                                         const char *, const char *) = 0;
+  virtual void AddNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
+                                        const char *, const char *,
+                                        Position &) = 0;
+  virtual void AddNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
+                                        const char *, const char *,
+                                        Rotation &) = 0;
+  virtual void AddNodeTransformScale(RE::TESObjectREFR *, bool, bool,
+                                     const char *, const char *, float) = 0;
+  virtual void AddNodeTransformScaleMode(RE::TESObjectREFR *, bool, bool,
+                                         const char *, const char *,
+                                         std::uint32_t) = 0;
+  virtual Position GetNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
+                                            const char *, const char *) = 0;
+  virtual Rotation GetNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
+                                            const char *, const char *) = 0;
+  virtual float GetNodeTransformScale(RE::TESObjectREFR *, bool, bool,
+                                      const char *, const char *) = 0;
+  virtual std::uint32_t GetNodeTransformScaleMode(RE::TESObjectREFR *, bool,
+                                                  bool, const char *,
+                                                  const char *) = 0;
+  virtual bool RemoveNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
+                                           const char *, const char *) = 0;
+  virtual bool RemoveNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
+                                           const char *, const char *) = 0;
+  virtual bool RemoveNodeTransformScale(RE::TESObjectREFR *, bool, bool,
+                                        const char *, const char *) = 0;
+  virtual bool RemoveNodeTransformScaleMode(RE::TESObjectREFR *, bool, bool,
+                                            const char *, const char *) = 0;
+  virtual bool RemoveNodeTransform(RE::TESObjectREFR *, bool, bool,
+                                   const char *, const char *) = 0;
+  virtual void RemoveAllReferenceTransforms(RE::TESObjectREFR *) = 0;
+  virtual bool GetOverrideNodeTransform(RE::TESObjectREFR *, bool, bool,
+                                        const char *, const char *,
+                                        std::uint16_t, RE::NiTransform *) = 0;
+  virtual void UpdateNodeAllTransforms(RE::TESObjectREFR *) = 0;
+  virtual void VisitNodes(RE::TESObjectREFR *, bool, bool, NodeVisitor &) = 0;
+  virtual void UpdateNodeTransforms(RE::TESObjectREFR *, bool, bool,
+                                    const char *) = 0;
+};
+
 class IActorUpdateManager : public IPluginInterface {
 public:
   // RaceMenu 0.4.16's public ActorUpdateManager ABI exposes these three
@@ -142,12 +217,26 @@ struct RegisteredAppearanceNode {
   }
 };
 
+struct RegisteredAppearanceAttachmentRoot {
+  RE::NiPointer<RE::NiAVObject> object;
+  RE::FormID armorFormID{0};
+  bool firstPerson{false};
+
+  [[nodiscard]] bool
+  operator==(const RegisteredAppearanceAttachmentRoot &a_other) const {
+    return object.get() == a_other.object.get() &&
+           armorFormID == a_other.armorFormID &&
+           firstPerson == a_other.firstPerson;
+  }
+};
+
 constexpr std::size_t kApplyBodyMorphsVtableIndex = 13;
 using ApplyBodyMorphsFn = void (*)(skee::IBodyMorphInterface *,
                                    RE::TESObjectREFR *, bool);
 using UpdateModelWeightTaskRunFn = void (*)(void *);
 
 std::atomic<skee::IBodyMorphInterface *> g_bodyMorphInterface{nullptr};
+std::atomic<skee::INiTransformInterface *> g_transformInterface{nullptr};
 std::atomic<ApplyBodyMorphsFn> g_originalApplyBodyMorphs{nullptr};
 std::atomic<UpdateModelWeightTaskRunFn>
     g_originalUpdateModelWeightTaskRun{nullptr};
@@ -160,9 +249,16 @@ std::mutex g_initializeMutex;
 std::mutex g_nodeMutex;
 std::unordered_map<RE::FormID, std::vector<RegisteredAppearanceNode>>
     g_registeredAppearanceNodes;
+std::unordered_map<RE::FormID,
+                   std::vector<RegisteredAppearanceAttachmentRoot>>
+    g_registeredAppearanceAttachmentRoots;
 std::unordered_set<RE::FormID> g_activeRegisteredAppearanceActors;
+std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
 std::unordered_set<RE::FormID> g_observedModelWeightMorphActors;
 std::unordered_set<RE::FormID> g_observedEmptyModelWeightMorphActors;
+std::mutex g_highHeelQueueMutex;
+std::unordered_set<RE::FormID> g_queuedHighHeelSyncs;
+std::atomic<std::uint64_t> g_highHeelQueueGeneration{0};
 thread_local std::uint32_t g_updateModelWeightTaskDepth{0};
 
 class ScopedUpdateModelWeightTask final {
@@ -433,6 +529,102 @@ void CollectSceneObjects(RE::NiAVObject *a_object,
   }
 }
 
+[[nodiscard]] bool IsAttachedToActorRoot(RE::Actor *a_actor,
+                                         RE::NiAVObject *a_object,
+                                         const bool a_firstPerson) {
+  if (!a_actor || !a_object) {
+    return false;
+  }
+  auto *root = a_actor->Get3D(a_firstPerson);
+  for (auto *current = a_object; current; current = current->parent) {
+    if (current == root) {
+      return true;
+    }
+  }
+  return false;
+}
+
+[[nodiscard]] std::optional<float>
+FindLastHighHeelOffset(RE::NiAVObject *a_object) {
+  if (!a_object) {
+    return std::nullopt;
+  }
+
+  std::optional<float> result;
+  static const RE::BSFixedString highHeelOffsetName{"HH_OFFSET"};
+  if (const auto *extra = netimmerse_cast<RE::NiFloatExtraData *>(
+          a_object->GetExtraData(highHeelOffsetName));
+      extra && std::isfinite(extra->value)) {
+    result = extra->value;
+  }
+
+  if (auto *node = a_object->AsNode()) {
+    for (const auto &child : node->GetChildren()) {
+      if (const auto childOffset = FindLastHighHeelOffset(child.get())) {
+        result = childOffset;
+      }
+    }
+  }
+  return result;
+}
+
+[[nodiscard]] bool SdtaHasNpcPosition(const char *a_value) {
+  if (!a_value || *a_value == '\0') {
+    return false;
+  }
+  const auto json = nlohmann::json::parse(a_value, nullptr, false, true);
+  if (!json.is_array()) {
+    return false;
+  }
+  try {
+    for (const auto &entry : json) {
+      if (!entry.is_object() || entry.value("name", std::string{}) != "NPC") {
+        continue;
+      }
+      const auto position = entry.find("pos");
+      if (position == entry.end() || !position->is_array() ||
+          position->size() != 3) {
+        continue;
+      }
+      bool valid = true;
+      for (const auto &component : *position) {
+        valid = valid && component.is_number() &&
+                std::isfinite(component.get<double>());
+      }
+      if (valid) {
+        return true;
+      }
+    }
+  } catch (...) {
+    return false;
+  }
+  return false;
+}
+
+[[nodiscard]] bool SceneHasNpcPositionSource(RE::NiAVObject *a_object) {
+  if (!a_object) {
+    return false;
+  }
+  static const RE::BSFixedString highHeelOffsetName{"HH_OFFSET"};
+  static const RE::BSFixedString transformDataName{"SDTA"};
+  if (const auto *extra = netimmerse_cast<RE::NiFloatExtraData *>(
+          a_object->GetExtraData(highHeelOffsetName));
+      extra && std::isfinite(extra->value)) {
+    return true;
+  }
+  if (const auto *extra = netimmerse_cast<RE::NiStringExtraData *>(
+          a_object->GetExtraData(transformDataName));
+      extra && SdtaHasNpcPosition(extra->value)) {
+    return true;
+  }
+  if (auto *node = a_object->AsNode()) {
+    return std::ranges::any_of(node->GetChildren(), [](const auto &a_child) {
+      return SceneHasNpcPositionSource(a_child.get());
+    });
+  }
+  return false;
+}
+
 [[nodiscard]] bool ContainsExtraData(RE::NiAVObject *a_object,
                                      const RE::BSFixedString &a_name) {
   if (!a_object) {
@@ -454,19 +646,224 @@ void CollectSceneObjects(RE::NiAVObject *a_object,
 FindNewAttachmentRoots(
     RE::NiAVObject *a_root,
     const std::unordered_set<RE::NiAVObject *> &a_beforeObjects) {
-  std::unordered_set<RE::NiAVObject *> afterObjects;
-  CollectSceneObjects(a_root, afterObjects);
-
   std::vector<RE::NiPointer<RE::NiAVObject>> roots;
-  for (auto *object : afterObjects) {
-    if (!object || a_beforeObjects.contains(object)) {
+  const auto collect = [&](auto &&a_self, RE::NiAVObject *a_object) -> void {
+    if (!a_object) {
+      return;
+    }
+    if (!a_beforeObjects.contains(a_object)) {
+      // Preserve scene-child order so multiple registered appearances follow
+      // RaceMenu's own deterministic traversal order. Descendants belong to
+      // this same newly attached branch and are not separate attachment roots.
+      roots.emplace_back(a_object);
+      return;
+    }
+    if (auto *node = a_object->AsNode()) {
+      for (const auto &child : node->GetChildren()) {
+        a_self(a_self, child.get());
+      }
+    }
+  };
+  collect(collect, a_root);
+  return roots;
+}
+
+[[nodiscard]] bool RememberHighHeelAttachmentRoots(
+    RE::Actor *a_actor,
+    const std::vector<RE::NiPointer<RE::NiAVObject>> &a_nodes,
+    const RE::FormID a_armorFormID, const bool a_firstPerson) {
+  if (!a_actor || a_firstPerson || a_nodes.empty()) {
+    return false;
+  }
+  bool foundHighHeelRoot = false;
+  std::lock_guard lock(g_nodeMutex);
+  auto &registered =
+      g_registeredAppearanceAttachmentRoots[a_actor->GetFormID()];
+  for (const auto &node : a_nodes) {
+    if (!node || !FindLastHighHeelOffset(node.get()).has_value()) {
       continue;
     }
-    if (!object->parent || a_beforeObjects.contains(object->parent)) {
-      roots.emplace_back(object);
+    foundHighHeelRoot = true;
+    RegisteredAppearanceAttachmentRoot entry{.object = node,
+                                              .armorFormID = a_armorFormID,
+                                              .firstPerson = false};
+    if (std::ranges::find(registered, entry) == registered.end()) {
+      registered.push_back(std::move(entry));
     }
   }
-  return roots;
+  if (registered.empty()) {
+    g_registeredAppearanceAttachmentRoots.erase(a_actor->GetFormID());
+  }
+  return foundHighHeelRoot;
+}
+
+struct RegisteredHighHeelState {
+  std::optional<float> offset;
+  bool staleAttachmentStillPresent{false};
+  bool previouslyActive{false};
+};
+
+[[nodiscard]] RegisteredHighHeelState
+ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
+  RegisteredHighHeelState state;
+  if (!a_actor) {
+    return state;
+  }
+
+  const auto actorFormID = a_actor->GetFormID();
+  std::vector<RegisteredAppearanceAttachmentRoot> roots;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    state.previouslyActive =
+        g_registeredAppearanceHighHeelActors.contains(actorFormID);
+    const auto rootsIt =
+        g_registeredAppearanceAttachmentRoots.find(actorFormID);
+    if (rootsIt != g_registeredAppearanceAttachmentRoots.end()) {
+      roots = rootsIt->second;
+    }
+  }
+
+  std::erase_if(roots, [&](const RegisteredAppearanceAttachmentRoot &a_entry) {
+    return !a_entry.object ||
+           !IsAttachedToActorRoot(a_actor, a_entry.object.get(),
+                                  a_entry.firstPerson);
+  });
+  for (const auto &entry : roots) {
+    const auto *armor =
+        RE::TESForm::LookupByID<RE::TESObjectARMO>(entry.armorFormID);
+    if (armor && sfs::native::IsDisplayedFittingArmor(a_actor, armor)) {
+      if (const auto offset = FindLastHighHeelOffset(entry.object.get())) {
+        state.offset = offset;
+      }
+    } else {
+      // DAVE may finish rebuilding on a later task. Do not lower the actor
+      // while its old high-heel branch is still visibly attached.
+      state.staleAttachmentStillPresent = true;
+    }
+  }
+  {
+    std::lock_guard lock(g_nodeMutex);
+    const auto rootsIt =
+        g_registeredAppearanceAttachmentRoots.find(actorFormID);
+    if (rootsIt != g_registeredAppearanceAttachmentRoots.end()) {
+      std::erase_if(rootsIt->second,
+                    [&](const RegisteredAppearanceAttachmentRoot &a_entry) {
+                      return !a_entry.object ||
+                             !IsAttachedToActorRoot(a_actor,
+                                                    a_entry.object.get(),
+                                                    a_entry.firstPerson);
+                    });
+      if (rootsIt->second.empty()) {
+        g_registeredAppearanceAttachmentRoots.erase(rootsIt);
+      }
+    }
+  }
+  return state;
+}
+
+[[nodiscard]] bool SynchronizeRegisteredAppearanceHighHeel(RE::Actor *a_actor) {
+  auto *transform = g_transformInterface.load(std::memory_order_acquire);
+  if (!a_actor || !transform || !a_actor->Is3DLoaded()) {
+    return false;
+  }
+
+  const auto state = ResolveRegisteredHighHeelState(a_actor);
+  if (!state.offset.has_value() && !state.previouslyActive) {
+    return false;
+  }
+  if (!state.offset.has_value() && state.staleAttachmentStillPresent) {
+    return true;
+  }
+
+  auto *actorBase = a_actor->GetActorBase();
+  if (!actorBase) {
+    return false;
+  }
+  const bool isFemale = actorBase->IsFemale();
+  constexpr const char *nodeName = "NPC";
+  constexpr const char *temporaryKey = "SFS_HH_SYNC";
+  constexpr const char *raceMenuInternalKey = "internal";
+
+  // RaceMenu's UpdateNodeAllTransforms only scans HH_OFFSET/SDTA after the
+  // actor has transform storage. A temporary zero-valued source creates that
+  // storage without contributing an offset and is removed immediately after
+  // the official scan. No SFS transform is retained or serialized.
+  skee::INiTransformInterface::Position neutral{};
+  transform->AddNodeTransformPosition(a_actor, false, isFemale, nodeName,
+                                      temporaryKey, neutral);
+  transform->UpdateNodeAllTransforms(a_actor);
+  transform->RemoveNodeTransformPosition(a_actor, false, isFemale, nodeName,
+                                         temporaryKey);
+
+  const auto actorFormID = a_actor->GetFormID();
+  if (state.offset.has_value()) {
+    {
+      std::lock_guard lock(g_nodeMutex);
+      g_registeredAppearanceHighHeelActors.insert(actorFormID);
+    }
+    logger::debug(
+        "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
+        actorFormID, *state.offset);
+    return false;
+  }
+
+  // RaceMenu's incremental attachment path normally removes its internal
+  // offset. If SFS's synthetic branch was the only source and its attachment
+  // bypassed that callback, remove only RaceMenu's reserved automatic NPC
+  // position component. Preserve every named user/mod transform and preserve
+  // current actual-equipment HH_OFFSET/SDTA sources.
+  if (!SceneHasNpcPositionSource(a_actor->Get3D(false))) {
+    transform->RemoveNodeTransformPosition(a_actor, false, isFemale, nodeName,
+                                           raceMenuInternalKey);
+    transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
+  }
+  {
+    std::lock_guard lock(g_nodeMutex);
+    g_registeredAppearanceHighHeelActors.erase(actorFormID);
+  }
+  logger::debug("Cleared registered-appearance HH_OFFSET for SFS actor {:08X}",
+                actorFormID);
+  return false;
+}
+
+void FinishQueuedHighHeelSync(const RE::FormID a_actorFormID,
+                              const std::uint64_t a_generation) {
+  std::lock_guard lock(g_highHeelQueueMutex);
+  if (g_highHeelQueueGeneration.load(std::memory_order_acquire) ==
+      a_generation) {
+    g_queuedHighHeelSyncs.erase(a_actorFormID);
+  }
+}
+
+void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
+                           const std::uint64_t a_generation,
+                           const std::uint8_t a_remainingFrames) {
+  if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
+      a_generation) {
+    return;
+  }
+  auto *taskInterface = SKSE::GetTaskInterface();
+  if (!taskInterface) {
+    FinishQueuedHighHeelSync(a_actorFormID, a_generation);
+    return;
+  }
+  taskInterface->AddTask(
+      [a_actorFormID, a_generation, a_remainingFrames]() {
+        if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
+            a_generation) {
+          return;
+        }
+        auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
+        const bool retry = actor && actor->Is3DLoaded() &&
+                           SynchronizeRegisteredAppearanceHighHeel(actor);
+        if ((retry || !actor || !actor->Is3DLoaded()) &&
+            a_remainingFrames > 0) {
+          QueueHighHeelSyncTask(a_actorFormID, a_generation,
+                                a_remainingFrames - 1);
+          return;
+        }
+        FinishQueuedHighHeelSync(a_actorFormID, a_generation);
+      });
 }
 
 void RememberAndMorphNewNodes(
@@ -525,6 +922,20 @@ public:
         !IsRegisteredAppearanceDisplayActive(actor->GetFormID()) ||
         !sfs::native::IsDisplayedFittingArmor(actor, a_armor)) {
       return;
+    }
+
+    // DAVE can own the attachment pass, so the native before/after scene
+    // snapshot is not guaranteed to observe every registered appearance.
+    // Record the same actor-local third-person heel root from RaceMenu's
+    // official attachment callback as well. The helper ignores first-person
+    // roots and non-HH_OFFSET branches, and de-duplicates native captures.
+    if (RememberHighHeelAttachmentRoots(
+            actor, {RE::NiPointer<RE::NiAVObject>{a_object}},
+            a_armor->GetFormID(), a_firstPerson)) {
+      // DAVE may complete the attachment after RefreshActor returns. Queue
+      // from the event as well so that late asynchronous attachments cannot
+      // miss the bounded actor-local synchronization window.
+      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(actor);
     }
 
     RegisteredAppearanceNode node{
@@ -867,6 +1278,20 @@ void InitializeBodyMorphInterface() {
   auto *bodyMorph = exchange->bodyMorph;
   g_bodyMorphInterface.store(bodyMorph);
 
+  auto *transform = static_cast<skee::INiTransformInterface *>(
+      exchange->interfaceMap->QueryInterface("NiTransform"));
+  const auto transformVersion = transform ? transform->GetVersion() : 0;
+  if (transform && transformVersion >= 3) {
+    g_transformInterface.store(transform, std::memory_order_release);
+    logger::info(
+        "Connected to RaceMenu NiTransform interface version {} for registered-appearance HH_OFFSET synchronization",
+        transformVersion);
+  } else {
+    logger::warn(
+        "RaceMenu NiTransform v3 interface is unavailable (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
+        transformVersion);
+  }
+
   const bool publicHookInstalled = InstallApplyBodyMorphsHook(bodyMorph);
   if (!publicHookInstalled) {
     logger::warn(
@@ -903,7 +1328,7 @@ bool IsBodyMorphInterfaceReady() {
 
 AttachmentSceneSnapshot CaptureAttachmentScene(RE::Actor *a_actor) {
   AttachmentSceneSnapshot snapshot;
-  if (!a_actor || !IsBodyMorphInterfaceReady()) {
+  if (!a_actor) {
     return snapshot;
   }
   auto *thirdPersonRoot = a_actor->Get3D(false);
@@ -918,30 +1343,66 @@ AttachmentSceneSnapshot CaptureAttachmentScene(RE::Actor *a_actor) {
 void MorphNewRegisteredAppearanceNodes(
     RE::Actor *a_actor, const AttachmentSceneSnapshot &a_before,
     const RE::FormID a_armorFormID) {
+  if (!a_actor) {
+    return;
+  }
+
+  auto *thirdPersonRoot = a_actor->Get3D(false);
+  auto *firstPersonRoot = a_actor->Get3D(true);
+  const auto newThirdPersonRoots =
+      FindNewAttachmentRoots(thirdPersonRoot, a_before.thirdPersonObjects);
+  static_cast<void>(RememberHighHeelAttachmentRoots(
+      a_actor, newThirdPersonRoots, a_armorFormID, false));
+  std::vector<RE::NiPointer<RE::NiAVObject>> newFirstPersonRoots;
+  if (firstPersonRoot != thirdPersonRoot) {
+    newFirstPersonRoots =
+        FindNewAttachmentRoots(firstPersonRoot, a_before.firstPersonObjects);
+    static_cast<void>(RememberHighHeelAttachmentRoots(
+        a_actor, newFirstPersonRoots, a_armorFormID, true));
+  }
+
   auto *bodyMorph = g_bodyMorphInterface.load();
   // Replacing kit previews are deliberately left to RaceMenu's official
   // OnAttach callback. Tracking the same short-lived attachment here would
   // make the later SFS synchronization reset its vertex buffer a second time
   // during the same skinning pass. Saved appearances remain tracked so they
   // continue to receive explicit RaceMenu body-morph updates.
-  if (!bodyMorph || !a_actor || !IsBodyMorphInterfaceReady() ||
+  if (!bodyMorph || !IsBodyMorphInterfaceReady() ||
       !IsRegisteredAppearanceDisplayActive(a_actor->GetFormID())) {
     return;
   }
 
-  auto *thirdPersonRoot = a_actor->Get3D(false);
-  auto *firstPersonRoot = a_actor->Get3D(true);
-  RememberAndMorphNewNodes(
-      bodyMorph, a_actor,
-      FindNewAttachmentRoots(thirdPersonRoot, a_before.thirdPersonObjects),
-      a_armorFormID, false);
+  RememberAndMorphNewNodes(bodyMorph, a_actor, newThirdPersonRoots,
+                           a_armorFormID, false);
   if (firstPersonRoot != thirdPersonRoot) {
-    RememberAndMorphNewNodes(
-        bodyMorph, a_actor,
-        FindNewAttachmentRoots(firstPersonRoot,
-                               a_before.firstPersonObjects),
-        a_armorFormID, true);
+    RememberAndMorphNewNodes(bodyMorph, a_actor, newFirstPersonRoots,
+                             a_armorFormID, true);
   }
+}
+
+void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
+  if (!a_actor || !g_transformInterface.load(std::memory_order_acquire)) {
+    return;
+  }
+  const auto actorFormID = a_actor->GetFormID();
+  if (actorFormID == 0) {
+    return;
+  }
+  const auto generation =
+      g_highHeelQueueGeneration.load(std::memory_order_acquire);
+  {
+    std::lock_guard lock(g_highHeelQueueMutex);
+    if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
+        generation) {
+      return;
+    }
+    if (!g_queuedHighHeelSyncs.insert(actorFormID).second) {
+      return;
+    }
+  }
+  // Two actor-local task frames cover DAVE/DAV/native rebuild handoff without
+  // persistent polling or scanning any actor other than the refresh target.
+  QueueHighHeelSyncTask(actorFormID, generation, 2);
 }
 
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
@@ -970,10 +1431,43 @@ void ForgetRegisteredAppearanceNodes(RE::Actor *a_actor) {
 }
 
 void ForgetAllRegisteredAppearanceNodes() {
-  std::lock_guard lock(g_nodeMutex);
-  g_registeredAppearanceNodes.clear();
-  g_activeRegisteredAppearanceActors.clear();
-  g_observedModelWeightMorphActors.clear();
-  g_observedEmptyModelWeightMorphActors.clear();
+  g_highHeelQueueGeneration.fetch_add(1, std::memory_order_acq_rel);
+  {
+    std::lock_guard queueLock(g_highHeelQueueMutex);
+    g_queuedHighHeelSyncs.clear();
+  }
+
+  std::vector<RE::FormID> highHeelActors;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    highHeelActors.assign(g_registeredAppearanceHighHeelActors.begin(),
+                          g_registeredAppearanceHighHeelActors.end());
+    g_registeredAppearanceNodes.clear();
+    g_registeredAppearanceAttachmentRoots.clear();
+    g_activeRegisteredAppearanceActors.clear();
+    g_registeredAppearanceHighHeelActors.clear();
+    g_observedModelWeightMorphActors.clear();
+    g_observedEmptyModelWeightMorphActors.clear();
+  }
+
+  // Remove only SFS's temporary zero-valued bootstrap if a task was
+  // interrupted. RaceMenu owns the reserved "internal" transform; clearing
+  // it here could momentarily lower real equipped heels during a load/revert.
+  // RaceMenu's own lifecycle and the next actor rebuild reconcile that key.
+  auto *transform = g_transformInterface.load(std::memory_order_acquire);
+  if (!transform) {
+    return;
+  }
+  for (const auto actorFormID : highHeelActors) {
+    auto *actor = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
+    auto *actorBase = actor ? actor->GetActorBase() : nullptr;
+    if (!actor || !actorBase) {
+      continue;
+    }
+    const bool isFemale = actorBase->IsFemale();
+    transform->RemoveNodeTransformPosition(actor, false, isFemale, "NPC",
+                                           "SFS_HH_SYNC");
+    transform->UpdateNodeTransforms(actor, false, isFemale, "NPC");
+  }
 }
 } // namespace sfs::native::racemenu

@@ -429,6 +429,21 @@ DrawEquipmentWidget(const char *a_id,
       ImVec2(contentStartX, namePos.y),
       ImVec2(contentMaxX, namePos.y + lineHeight), true);
   drawList->AddText(namePos, nameColor, a_item.name.c_str());
+  if (a_options.nameTailText != nullptr &&
+      a_options.nameTailText[0] != '\0') {
+    const auto tailFontSize = ImGui::GetFontSize() *
+                              std::clamp(a_options.nameTailScale, 0.5f, 1.0f);
+    const auto nameWidth = ImGui::CalcTextSize(a_item.name.c_str()).x;
+    const auto tailPosition =
+        ImVec2(namePos.x + nameWidth + 6.0f,
+               namePos.y + (ImGui::GetFontSize() - tailFontSize));
+    drawList->AddText(
+        ImGui::GetFont(), tailFontSize, tailPosition,
+        a_options.nameTailColor.has_value()
+            ? ImGui::GetColorU32(*a_options.nameTailColor)
+            : theme->GetColorU32("SECONDARY"),
+        a_options.nameTailText);
+  }
   drawList->PopClipRect();
 
   drawList->PushClipRect(

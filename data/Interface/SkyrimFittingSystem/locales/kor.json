@@ -144,6 +144,8 @@
     "workbench.overrides": "등록 외형",
     "workbench.hide": "숨김",
     "workbench.show": "표시",
+    "workbench.appearance_lock": "외형 잠금",
+    "workbench.appearance_unlock": "외형 잠금 해제",
     "workbench.hide.tooltip": "이 등록 외형을 삭제하지 않고 숨깁니다.",
     "workbench.tooltip.condition": "조건",
     "workbench.equipped_delete_locked_tooltip": "실제 장착 장비는 여기서 삭제할 수 없습니다. 인벤토리나 다른 모드에서 변경하세요.",

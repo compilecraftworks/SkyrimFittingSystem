@@ -140,7 +140,16 @@ VariantWorkbench::KitLayoutProjection VariantWorkbench::ProjectKitLayoutRows(
   std::unordered_map<int, std::size_t> projectedIndexByTargetRow;
   std::unordered_map<std::uint64_t, std::size_t> fallbackIndexBySlotMask;
   std::size_t projectedFallbackCount = 0;
-  std::uint64_t claimedOverrideDisplaySlotMask = 0;
+  auto lockedAppearanceSlotMask =
+      GetLockedAppearanceSlotMaskForCandidateRows(a_candidateRowIndices);
+  if (a_fallbackOwnerActorFormID != 0) {
+    lockedAppearanceSlotMask |=
+        GetLockedAppearanceSlotMaskForActor(a_fallbackOwnerActorFormID);
+  }
+  // Locked appearances claim their complete ARMO display mask before any new
+  // kit/outfit item is considered. Multi-slot cards remain atomic: an
+  // incoming item with even one overlapping slot is omitted in full.
+  std::uint64_t claimedOverrideDisplaySlotMask = lockedAppearanceSlotMask;
 
   const auto canFallbackToSlot =
       [&](const std::uint64_t a_slotMask) {
@@ -160,7 +169,10 @@ VariantWorkbench::KitLayoutProjection VariantWorkbench::ProjectKitLayoutRows(
     if (inserted) {
       auto row = rows_[static_cast<std::size_t>(a_targetRowIndex)];
       if (a_replaceExisting) {
-        row.overrides.clear();
+        std::erase_if(row.overrides,
+                      [](const EquipmentWidgetItem &a_item) {
+                        return !a_item.locked;
+                      });
         row.hideEquipped = false;
       }
       projection.rows.push_back(
@@ -228,7 +240,10 @@ VariantWorkbench::KitLayoutProjection VariantWorkbench::ProjectKitLayoutRows(
       }
 
       if (a_replaceExisting) {
-        row->overrides.clear();
+        std::erase_if(row->overrides,
+                      [](const EquipmentWidgetItem &a_item) {
+                        return !a_item.locked;
+                      });
         row->hideEquipped = false;
       }
       const auto projectedIndex = projection.rows.size();
@@ -297,7 +312,10 @@ VariantWorkbench::KitLayoutProjection VariantWorkbench::ProjectKitLayoutRows(
         }
 
         if (a_replaceExisting) {
-          row->overrides.clear();
+          std::erase_if(row->overrides,
+                        [](const EquipmentWidgetItem &a_item) {
+                          return !a_item.locked;
+                        });
           row->hideEquipped = false;
         }
         const auto projectedIndex = projection.rows.size();

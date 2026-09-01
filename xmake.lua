@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.1"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.2"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -37,8 +37,9 @@ target("SkyrimFittingSystem")
     set_encodings("utf-8")
     set_basename("SFSCore")
 
-    -- Always put the deployable DLL/PDB on the canonical release path even if
-    -- a developer previously configured a separate PoC object directory.
+    -- Always put the runtime DLL and local debugging PDB on the canonical
+    -- build path even if a developer previously configured a separate PoC
+    -- object directory. Packaging and MO2 deployment intentionally omit PDBs.
     set_targetdir("build/v" .. build_version .. "/windows/x64/$(mode)")
 
     add_deps("commonlibsse-ng")
@@ -105,6 +106,25 @@ target("BodyFamilyLogicTests")
         "tests/BodyFamilyLogicTests.cpp",
         "src/catalog/BodyFamilyRules.cpp"
     )
+    add_includedirs("src")
+
+target("FittingDyeRulesTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files(
+        "tests/FittingDyeRulesTests.cpp",
+        "src/native/FittingDyeRules.cpp"
+    )
+    add_includedirs("src")
+
+target("KitListNavigationTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/KitListNavigationTests.cpp")
     add_includedirs("src")
 
 -- The private personal-completion experiment is intentionally not part of the

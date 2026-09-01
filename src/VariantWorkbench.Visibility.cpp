@@ -86,6 +86,15 @@ bool VariantWorkbench::ConvertConditionalVisibilityRuleToFittingRow(
       IsAppearanceRegistrationProtectedSlotMask(appearanceSlotMask)) {
     return false;
   }
+  const auto ownerActorFormID = preservedRule.ownerActorFormID;
+  if ((appearanceSlotMask &
+       GetLockedAppearanceSlotMaskForActor(ownerActorFormID)) != 0) {
+    // Converting a visibility-only action into a registered fitting action is
+    // still an appearance assignment.  Apply the same actor-local, atomic
+    // locked-slot rule as Gear/Outfits/Kits: an incoming multi-slot armor is
+    // rejected as a whole when any displayed slot overlaps a locked card.
+    return false;
+  }
 
   // Use the same workbench representative-slot rule as ordinary appearance
   // registration. The row model still retains every original occupied slot on
@@ -125,7 +134,10 @@ bool VariantWorkbench::ConvertConditionalVisibilityRuleToFittingRow(
     item.hidden = false;
     existing->uiIdentity = preservedRule.uiIdentity;
     existing->registrationOrder = preservedRule.registrationOrder;
-    existing->overrides.clear();
+    std::erase_if(existing->overrides,
+                  [](const EquipmentWidgetItem &a_item) {
+                    return !a_item.locked;
+                  });
     existing->overrides.push_back(std::move(item));
     conditionalVisibilityRules_.erase(conditionalVisibilityRules_.begin() +
                                       static_cast<std::ptrdiff_t>(a_ruleIndex));

@@ -99,7 +99,7 @@ struct VariantWorkbenchRow {
 
   [[nodiscard]] bool
   IsOverrideAutomaticallySuppressed(const EquipmentWidgetItem &a_item) const {
-    return a_item.automaticEquipmentSuppressed &&
+    return !a_item.locked && a_item.automaticEquipmentSuppressed &&
            !a_item.automaticEquipmentUserVisible;
   }
 
@@ -247,6 +247,10 @@ public:
   bool DeleteOverride(int a_rowIndex, int a_itemIndex);
   // NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
   bool SetOverrideHidden(int a_rowIndex, int a_itemIndex, bool a_hidden);
+  // Locks one registered appearance against catalog/outfit/kit replacement
+  // and automatic external suppression without changing its manual eye or
+  // condition state.
+  bool SetOverrideLocked(int a_rowIndex, int a_itemIndex, bool a_locked);
   // Applies only the temporary manual-show exception while Helmet Toggle 2
   // owns this card's runtime visibility.  The saved eye state is untouched.
   bool SetOverrideHeadgearToggleManualVisible(int a_rowIndex, int a_itemIndex,
@@ -406,6 +410,11 @@ public:
   HasActualEquipmentLinkedAppearancesForActor(RE::FormID a_actorFormID) const;
   [[nodiscard]] std::uint64_t
   GetActualEquipmentLinkedSlotMaskForActor(RE::FormID a_actorFormID) const;
+  [[nodiscard]] std::uint64_t
+  GetLockedAppearanceSlotMaskForActor(RE::FormID a_actorFormID) const;
+  [[nodiscard]] bool IsRegisteredAppearanceLockedForActor(
+      RE::FormID a_actorFormID, RE::FormID a_appearanceFormID,
+      std::uint64_t a_visualSlotMask = 0) const;
   // Resolves an external headgear controller's real equipment slots to the
   // registered-appearance slots that currently follow them.  This keeps
   // compatibility overlays (Helmet Toggle 2) on the same per-card policy as
@@ -500,6 +509,8 @@ private:
                                 bool a_requireAcceptable) const;
   [[nodiscard]] bool
   NormalizeOverrideRowsForActor(RE::FormID a_ownerActorFormID);
+  [[nodiscard]] std::uint64_t GetLockedAppearanceSlotMaskForCandidateRows(
+      const std::vector<int> *a_candidateRowIndices) const;
   [[nodiscard]] std::optional<bool>
   GetEquippedHiddenForActor(RE::FormID a_actorFormID,
                             std::string_view a_rowKey) const;

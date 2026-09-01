@@ -28,6 +28,11 @@ struct EquipmentWidgetOptions {
   float minimumHeight{0.0f};
   const char *statusText{nullptr};
   std::optional<ImVec4> statusColor;
+  // Compact marker drawn immediately after the item name (for example, the
+  // registered-appearance lock state).
+  const char *nameTailText{nullptr};
+  float nameTailScale{0.72f};
+  std::optional<ImVec4> nameTailColor;
   const char *slotIconText{nullptr};
   float slotIconScale{1.0f};
   const char *slotAccentText{nullptr};

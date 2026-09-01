@@ -5,6 +5,7 @@
 #include "native/DaveIntegration.h"
 #include "native/FittingSlotState.h"
 #include "native/HelmetToggle2Integration.h"
+#include "native/RaceMenuBodyMorph.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingDye.h"
 #include "poc/DeviousDevicesHiderPoC.h"
@@ -64,6 +65,7 @@ void RevertCallback([[maybe_unused]] SKSE::SerializationInterface *a_skse) {
   poc::ResetDeviousDevicesHider();
   poc::ResetVirtualWornTokenRuntimeState();
   native::helmet_toggle::ResetRuntimeState();
+  native::racemenu::ForgetAllRegisteredAppearanceNodes();
   native::ClearAllFittingSlotStates();
   native::InvalidateQueuedArmorRefreshes();
   native::RevertArmorClassificationMigrationState();

@@ -1,5 +1,6 @@
 #include "native/FittingDye.h"
 #include "ArmorUtils.h"
+#include "native/FittingDyeRules.h"
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 
@@ -101,34 +102,8 @@ bool IsDyeableAppearanceComponent(const RenderedShapeInfo &a_shape) {
     return false;
   }
 
-  const auto lowerAscii = [](std::string a_value) {
-    std::ranges::transform(a_value, a_value.begin(),
-                           [](const unsigned char a_character) {
-                             return static_cast<char>(
-                                 std::tolower(a_character));
-                           });
-    return a_value;
-  };
-  const auto normalizedShapeName = lowerAscii(a_shape.shapeName);
-  const auto separator = a_shape.diffuseTexture.find_last_of("\\/");
-  const auto normalizedDiffuseFilename = lowerAscii(
-      separator == std::string::npos
-          ? a_shape.diffuseTexture
-          : a_shape.diffuseTexture.substr(separator + 1));
-
-  const bool characterBaseGeometry =
-      normalizedShapeName.starts_with("3ba") ||
-      normalizedShapeName == "3bbb" ||
-      normalizedShapeName.starts_with("3bbb_") ||
-      normalizedShapeName.starts_with("cbbe") ||
-      normalizedShapeName.starts_with("virtual") ||
-      normalizedShapeName.find("collision") != std::string::npos ||
-      normalizedShapeName == "body" || normalizedShapeName == "hands" ||
-      normalizedShapeName == "feet" || normalizedShapeName == "face" ||
-      normalizedShapeName == "head";
-  const bool characterBaseDiffuse =
-      normalizedDiffuseFilename.starts_with("femalebody");
-  if (characterBaseGeometry || characterBaseDiffuse) {
+  if (rules::IsCharacterBaseComponent(a_shape.shapeName,
+                                      a_shape.diffuseTexture)) {
     return false;
   }
 

@@ -1,6 +1,6 @@
 # Build, Deploy, And Release
 
-This document describes the v1.5.1 build and release workflow for:
+This document describes the v1.5.2 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.5.1/windows/x64/<mode>/SFSCore.dll`
-- SE/AE PDB when present: `build/v1.5.1/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.5.2/windows/x64/<mode>/SFSCore.dll`
+- local-only SE/AE PDB when present: `build/v1.5.2/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -88,8 +88,10 @@ MOD_DIR="/mnt/f/games/skyrim/modlists/some_profile/mods/Skyrim Fitting System" \
 What gets deployed:
 
 - SE/AE `SFSCore.dll`
-- SE/AE `SFSCore.pdb` when present
 - the repo `data/` tree
+
+The generated PDB remains in the local build directory for opt-in debugging.
+MO2 deployment removes any stale `SFSCore.pdb` from the target mod.
 
 Notes:
 
@@ -114,14 +116,15 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.5.1 SE-AE.zip`
-- `Sources/Skyrim Fitting System v1.5.1 Source.zip`
+- `Release/Skyrim Fitting System v1.5.2 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.5.2 Source.zip`
 - matching copies under `dist/`
-- `Release/SHA256SUMS-v1.5.1.txt`
+- `Release/SHA256SUMS-v1.5.2.txt`
 
-The runtime archive has a flat MO2-installable root. It contains the main DLL
-and PDB, VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;
+The runtime archive has a flat MO2-installable root. It contains the main DLL,
+VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;
 it does not contain a `Data` wrapper or optional compatibility patches.
+Debug PDB files are deliberately excluded from the runtime archive.
 
 The source archive contains the minimal complete corresponding source, pinned
 CommonLibSSE-NG and required Dear ImGui files, tests, build scripts, licenses,
@@ -146,7 +149,7 @@ The legacy WSL package contains:
 
 - a single `Data/` wrapper containing the repo runtime payload
 - the freshly built SE/AE plugin under `Data/SKSE/Plugins/`
-- matching `.pdb` files when present
+- no `.pdb` files; debug symbols remain only in the local build tree
 
 For v1.3.0, the staged main payload must not contain the retired
 `SkyrimFittingSystem-SexLab.esp`, its SEQ file, or the removed SexLab, DD,

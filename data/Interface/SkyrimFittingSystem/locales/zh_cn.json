@@ -144,6 +144,8 @@
     "workbench.overrides": "已登记外观",
     "workbench.hide": "隐藏",
     "workbench.show": "显示",
+    "workbench.appearance_lock": "锁定外观",
+    "workbench.appearance_unlock": "解锁外观",
     "workbench.hide.tooltip": "隐藏此已登记外观，但不删除它。",
     "workbench.tooltip.condition": "条件",
     "workbench.equipped_delete_locked_tooltip": "已装备物品在此处只读。请从库存或其他模组更改。",

@@ -48,7 +48,6 @@ ARCHIVE_PATH="${DIST_DIR}/${ARCHIVE_NAME}"
 WIN_ARCHIVE_PATH="$(wslpath -w "${ARCHIVE_PATH}")"
 WIN_STAGE_DIR="$(wslpath -w "${STAGE_DIR}")"
 FLAT_PLUGIN_SRC="${BUILD_ROOT}/v${SFS_BUILD_VERSION}/windows/x64/${MODE}/${PLUGIN_NAME}.dll"
-FLAT_PDB_SRC="${BUILD_ROOT}/v${SFS_BUILD_VERSION}/windows/x64/${MODE}/${PLUGIN_NAME}.pdb"
 
 if ((CLEAN)); then
     rm -rf "${REPO_ROOT}/build" "${REPO_ROOT}/.xmake" "${DIST_DIR}"
@@ -84,8 +83,9 @@ if [[ ! -f "${FLAT_PLUGIN_SRC}" ]]; then
 fi
 mkdir -p "${STAGE_DATA_DIR}/SKSE/Plugins"
 cp "${FLAT_PLUGIN_SRC}" "${STAGE_DATA_DIR}/SKSE/Plugins/${PLUGIN_NAME}.dll"
-if [[ -f "${FLAT_PDB_SRC}" ]]; then
-    cp "${FLAT_PDB_SRC}" "${STAGE_DATA_DIR}/SKSE/Plugins/${PLUGIN_NAME}.pdb"
+if find "${STAGE_DATA_DIR}" -type f -iname '*.pdb' -print -quit | grep -q .; then
+    echo "Debug symbols must not enter the runtime archive." >&2
+    exit 1
 fi
 
 mkdir -p "${DIST_DIR}"

@@ -152,6 +152,8 @@
     "workbench.overrides": "Registered Appearances",
     "workbench.hide": "Hide",
     "workbench.show": "Show",
+    "workbench.appearance_lock": "Lock appearance",
+    "workbench.appearance_unlock": "Unlock appearance",
     "workbench.hide.tooltip": "Hide this registered appearance without deleting it.",
     "workbench.tooltip.condition": "Condition",
     "workbench.equipped_delete_locked_tooltip": "Equipped gear is read-only here. Change it from inventory or another mod.",

@@ -172,18 +172,19 @@ void Menu::DrawWorkbenchToolbar() {
       controllableOverrides.emplace_back(rowIndex, itemIndex);
       const auto overrideSlotMask = row.GetOverrideVisualSlotMask(overrideItem);
       const bool virtualTokenAppearanceSuppressed =
-          previewActor != nullptr &&
+          !overrideItem.locked && previewActor != nullptr &&
           (overrideSlotMask & virtualTokenSuppressedFittingSlotMask) == 0 &&
           sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
               previewActor->GetFormID(), overrideItem.formID,
               static_cast<std::uint32_t>(overrideSlotMask));
       const bool automaticallyHidden =
-          row.IsOverrideAutomaticallySuppressed(overrideItem) ||
-          virtualTokenAppearanceSuppressed ||
-          (overrideSlotMask & virtualTokenSuppressedFittingSlotMask) != 0 ||
-          (overrideSlotMask &
-           deviousDevicesHiderSuppressedFittingSlotMask) != 0 ||
-          (overrideSlotMask & headgearToggleSuppressedFittingSlotMask) != 0;
+          !overrideItem.locked &&
+          (row.IsOverrideAutomaticallySuppressed(overrideItem) ||
+           virtualTokenAppearanceSuppressed ||
+           (overrideSlotMask & virtualTokenSuppressedFittingSlotMask) != 0 ||
+           (overrideSlotMask &
+            deviousDevicesHiderSuppressedFittingSlotMask) != 0 ||
+           (overrideSlotMask & headgearToggleSuppressedFittingSlotMask) != 0);
       if (overrideItem.hidden || automaticallyHidden) {
         ++individuallyHiddenOverrideCount;
       }
@@ -432,6 +433,7 @@ void Menu::DrawWorkbenchToolbar() {
         const auto &item = row.overrides[static_cast<std::size_t>(itemIndex)];
         const auto overrideSlotMask = row.GetOverrideVisualSlotMask(item);
         const bool headgearToggleHidden =
+            !item.locked &&
             (overrideSlotMask & headgearToggleSuppressedFittingSlotMask) != 0;
         if (!hideFittingAppearances && headgearToggleHidden) {
           // A global show is a temporary user override for Helmet Toggle.

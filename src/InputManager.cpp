@@ -3,6 +3,7 @@
 #include "Keycode.h"
 #include "api/SkyrimFittingSystemAPI.h"
 #include "imgui.h"
+#include "input/KitListNavigation.h"
 #include "ui/InputSinkBridge.h"
 
 #include <SKSE/InputMap.h>
@@ -143,38 +144,31 @@ bool QueueGamepadKitListMove(const std::uint32_t a_scanCode) {
 }
 
 bool QueueKeyboardKitListMove(const std::uint32_t a_scanCode) {
-  if (!keycode::IsKeyModifier(a_scanCode)) {
-    switch (a_scanCode) {
-    case 0xC8: // Arrow Up
-      return ui::QueueKitListMove(-1);
-    case 0xD0: // Arrow Down
-      return ui::QueueKitListMove(1);
-    case 0xCB: // Arrow Left
-      return ui::QueueKitListBack();
-    case 0xCD: // Arrow Right
-      return ui::QueueKitListNextPane();
-    case 0x1C: // Enter
-    case 0x9C: // Numpad Enter
-      return ui::QueueKitListApply();
-    case 0x39: // Space
-      return ui::QueueKitListPreview();
-    default:
-      break;
-    }
+  if (keycode::IsKeyModifier(a_scanCode)) {
+    return false;
   }
 
+  switch (input::kit_list::FromScanCode(a_scanCode)) {
+  case input::kit_list::KeyboardCommand::MoveUp:
+    return ui::QueueKitListMove(-1);
+  case input::kit_list::KeyboardCommand::MoveDown:
+    return ui::QueueKitListMove(1);
+  case input::kit_list::KeyboardCommand::Back:
+    return ui::QueueKitListBack();
+  case input::kit_list::KeyboardCommand::NextPane:
+    return ui::QueueKitListNextPane();
+  case input::kit_list::KeyboardCommand::Apply:
+    return ui::QueueKitListApply();
+  case input::kit_list::KeyboardCommand::Preview:
+    return ui::QueueKitListPreview();
+  case input::kit_list::KeyboardCommand::None:
+    return false;
+  }
   return false;
 }
 
 [[nodiscard]] int KeyboardKitListMoveDelta(const std::uint32_t a_scanCode) {
-  switch (a_scanCode) {
-  case 0xC8:
-    return -1;
-  case 0xD0:
-    return 1;
-  default:
-    return 0;
-  }
+  return input::kit_list::MoveDelta(input::kit_list::FromScanCode(a_scanCode));
 }
 
 [[nodiscard]] int GamepadKitListMoveDelta(const std::uint32_t a_scanCode) {

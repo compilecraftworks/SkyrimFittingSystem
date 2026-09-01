@@ -51,7 +51,10 @@ bool VariantWorkbench::ApplyCatalogPreview(
         assignment.rowIndex, desiredRows.size());
     if (inserted) {
       auto previewRow = rows_[static_cast<std::size_t>(assignment.rowIndex)];
-      previewRow.overrides.clear();
+      std::erase_if(previewRow.overrides,
+                    [](const EquipmentWidgetItem &a_item) {
+                      return !a_item.locked;
+                    });
       previewRow.hideEquipped = false;
       desiredRows.push_back(std::move(previewRow));
     }
@@ -103,6 +106,42 @@ bool VariantWorkbench::PreviewKitLayout(
     auto previewRow = projectedRow.row;
     previewRow.hideEquipped = false;
     desiredRows.push_back(std::move(previewRow));
+  }
+
+
+  // A replacement preview is still a catalog/outfit/kit operation. Include
+  // every locked base-layer card for this actor even when the preview layout
+  // has no row targeting that slot, so merely browsing cannot make a locked
+  // hair/accessory disappear.
+  const auto candidateRowIndices =
+      BuildCandidateRowIndices(a_candidateRowIndices, rows_.size());
+  for (const auto rowIndex : candidateRowIndices) {
+    if (rowIndex < 0 || rowIndex >= static_cast<int>(rows_.size())) {
+      continue;
+    }
+    auto lockedRow = rows_[static_cast<std::size_t>(rowIndex)];
+    std::erase_if(lockedRow.overrides,
+                  [](const EquipmentWidgetItem &a_item) {
+                    return !a_item.locked;
+                  });
+    if (lockedRow.overrides.empty()) {
+      continue;
+    }
+    lockedRow.hideEquipped = false;
+    const auto existing = std::ranges::find(desiredRows, lockedRow.key,
+                                             &VariantWorkbenchRow::key);
+    if (existing == desiredRows.end()) {
+      desiredRows.push_back(std::move(lockedRow));
+      continue;
+    }
+    for (const auto &lockedItem : lockedRow.overrides) {
+      const auto duplicate =
+          std::ranges::find(existing->overrides, lockedItem.formID,
+                            &EquipmentWidgetItem::formID);
+      if (duplicate == existing->overrides.end()) {
+        existing->overrides.insert(existing->overrides.begin(), lockedItem);
+      }
+    }
   }
 
   if (desiredRows.empty()) {
