@@ -127,6 +127,14 @@ target("KitListNavigationTests")
     add_files("tests/KitListNavigationTests.cpp")
     add_includedirs("src")
 
+target("CoreBehaviorRegressionTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/CoreBehaviorRegressionTests.cpp")
+    add_includedirs("src")
+
 -- The private personal-completion experiment is intentionally not part of the
 -- public GPL source archive. Keep its optional local targets available for the
 -- maintainer without emitting missing-file warnings for public builders.

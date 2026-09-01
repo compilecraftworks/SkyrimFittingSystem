@@ -1,6 +1,7 @@
 #include "native/ExternalEquipmentTransactions.h"
 
 #include "ArmorUtils.h"
+#include "native/ExternalEquipmentTransactionRules.h"
 #include "native/HelmetToggle2Integration.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "runtime/RuntimeLayouts.h"
@@ -1121,36 +1122,17 @@ std::uint64_t GetSuppressedActualSlotMask(const RE::FormID a_actorFormID) {
   // registered appearance attachments for every real-item mutation.
   // A confirmed TESEquipEvent replaces the pending entry with the durable
   // ledger under this same mutex; a failed call removes its expectation.
-  std::unordered_map<RE::FormID, std::uint64_t> effectiveEquipment;
-  if (const auto actorState =
-          g_suppressedOriginalEquipment.find(a_actorFormID);
-      actorState != g_suppressedOriginalEquipment.end()) {
-    effectiveEquipment = actorState->second;
-  }
-
-  std::vector<const EventExpectation *> pending;
+  std::vector<rules::PendingEquipmentMutation> pending;
   pending.reserve(g_expectations.size());
   for (const auto &[_, expectation] : g_expectations) {
-    if (expectation.actorFormID == a_actorFormID &&
-        expectation.armorFormID != 0 && expectation.slotMask != 0) {
-      pending.push_back(std::addressof(expectation));
-    }
+    pending.push_back({.sequence = expectation.id,
+                       .actorFormID = expectation.actorFormID,
+                       .armorFormID = expectation.armorFormID,
+                       .slotMask = expectation.slotMask,
+                       .equipped = expectation.equipped});
   }
-  std::ranges::sort(pending, {}, &EventExpectation::id);
-  for (const auto *expectation : pending) {
-    if (expectation->equipped) {
-      effectiveEquipment.erase(expectation->armorFormID);
-    } else {
-      effectiveEquipment.insert_or_assign(expectation->armorFormID,
-                                          expectation->slotMask);
-    }
-  }
-
-  std::uint64_t slotMask = 0;
-  for (const auto &[_, armorSlotMask] : effectiveEquipment) {
-    slotMask |= armorSlotMask;
-  }
-  return slotMask;
+  return rules::ResolveSuppressedSlotMask(
+      a_actorFormID, g_suppressedOriginalEquipment, pending);
 }
 
 bool IsEventAddedActualEquipment(const RE::FormID a_actorFormID,

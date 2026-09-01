@@ -4,6 +4,7 @@
 #include "ConditionMaterializer.h"
 #include "conditions/Status.h"
 #include "native/ArmorSkinning.h"
+#include "native/ArmorRefreshRules.h"
 #include "native/DaveIntegration.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingDye.h"
@@ -11,6 +12,7 @@
 #include "native/GenitalArmorResolver.h"
 #include "native/HelmetToggle2Integration.h"
 #include "native/RaceMenuBodyMorph.h"
+#include "native/RegisteredAppearanceMorphRules.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "poc/VirtualWornTokenPoC.h"
 #include "ui/Menu.h"
@@ -1815,7 +1817,8 @@ BuildDisplaySet(RE::Actor *a_actor,
   // actor-local workbench lock so saved appearances are trackable before their
   // nodes attach, while replacement kit previews remain deliberately excluded.
   displaySet.trackRegisteredAppearanceMorphNodes =
-      !previewReplacesRows && displaySet.active && !displaySet.armors.empty();
+      sfs::native::racemenu::rules::ShouldTrackRegisteredAppearanceNodes(
+          previewReplacesRows, displaySet.active, displaySet.armors.size());
 
   const auto visibleRealArmors =
       CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
@@ -3188,77 +3191,85 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
       a_actor->GetFormID(), BuildEmptyEquipmentDisplaySignature(displaySet),
       !equippedArmors.empty(), equipmentChangeRefresh);
 
-  if (sfs::native::dave::IsApiReady()) {
+  const bool daveApiReady = sfs::native::dave::IsApiReady();
+  const bool davLoaded = !daveApiReady &&
+                         sfs::native::dave::IsDynamicArmorVariantsLoaded();
+  bool davFallback3DRefresh = false;
+  if (davLoaded) {
+    const auto signature =
+        BuildDavFallbackRefreshSignature(a_actor, displaySet);
+    davFallback3DRefresh = ShouldRunDavFallback3DRefresh(
+        a_actor->GetFormID(), signature, equipmentChangeRefresh);
+  }
+  auto *process = !daveApiReady && !davLoaded && !emptyEquipment3DRefresh
+                      ? a_actor->GetActorRuntimeData().currentProcess
+                      : nullptr;
+  const auto plan = refresh_rules::BuildPlan(
+      {.daveApiReady = daveApiReady,
+       .davLoaded = davLoaded,
+       .emptyEquipment3DRefresh = emptyEquipment3DRefresh,
+       .davFallback3DRefresh = davFallback3DRefresh,
+       .nativeProcessAvailable = process != nullptr});
+  const auto queueFollowups = [&]() {
+    if (plan.queuePoseSync) {
+      QueuePausedReplacementPreviewPoseSync(a_actor);
+    }
+    if (plan.queueDyeRestore) {
+      dye::QueueSavedWorldTintRestore(a_actor);
+    }
+    if (plan.queueHighHeelSync) {
+      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
+    }
+  };
+
+  switch (plan.backend) {
+  case refresh_rules::Backend::DaveEmptyEquipment3D:
+    // DAVE's public refresh remains authoritative for ordinary SFS rebuilds.
+    // With no worn ARMO, bootstrap only this actor's changed display signature.
+    logger::debug(
+        "Refreshing empty-equipment actor {:08X} with Actor::Update3D for DAVE registered-appearance bootstrap",
+        a_actor->GetFormID());
+    re::Update3D(a_actor);
+    queueFollowups();
+    return;
+  case refresh_rules::Backend::DaveApi: {
     const auto reason =
         equipmentChangeRefresh ? "equipment change" : "display state";
-    if (emptyEquipment3DRefresh) {
-      // DAVE's public refresh remains authoritative for ordinary SFS
-      // rebuilds. With no worn ARMO, however, some DAVE versions have no
-      // source item from which to enter Skyrim's worn-armor skinning pass.
-      // Bootstrap only an actor-local display-signature change, never an
-      // external equipment-transaction refresh.
-      logger::debug(
-          "Refreshing empty-equipment actor {:08X} with Actor::Update3D for DAVE registered-appearance bootstrap",
-          a_actor->GetFormID());
-      re::Update3D(a_actor);
-      QueuePausedReplacementPreviewPoseSync(a_actor);
-      dye::QueueSavedWorldTintRestore(a_actor);
-      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
-      return;
-    }
     logger::debug("Refreshing actor {:08X} with DAVE API for {}",
                   a_actor->GetFormID(), reason);
     if (!sfs::native::dave::RefreshActor(a_actor)) {
       logger::warn("DAVE {} refresh failed for actor {:08X}", reason,
                    a_actor->GetFormID());
     } else {
-      QueuePausedReplacementPreviewPoseSync(a_actor);
-      dye::QueueSavedWorldTintRestore(a_actor);
-      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
+      queueFollowups();
     }
     return;
   }
-
-  if (sfs::native::dave::IsDynamicArmorVariantsLoaded() &&
-      !sfs::native::dave::IsApiReady()) {
-    const auto signature =
-        BuildDavFallbackRefreshSignature(a_actor, displaySet);
-    if (ShouldRunDavFallback3DRefresh(a_actor->GetFormID(), signature,
-                                      equipmentChangeRefresh)) {
-      logger::debug("Refreshing actor {:08X} with Actor::Update3D for DAV "
-                    "native fallback reason={}",
-                    a_actor->GetFormID(),
-                     equipmentChangeRefresh ? "equipment-change"
-                                            : "display-state");
-      re::Update3D(a_actor);
-      QueuePausedReplacementPreviewPoseSync(a_actor);
-      dye::QueueSavedWorldTintRestore(a_actor);
-      sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
-    }
+  case refresh_rules::Backend::DavFallback3D:
+    logger::debug("Refreshing actor {:08X} with Actor::Update3D for DAV "
+                  "native fallback reason={}",
+                  a_actor->GetFormID(),
+                  equipmentChangeRefresh ? "equipment-change"
+                                         : "display-state");
+    re::Update3D(a_actor);
+    queueFollowups();
     return;
-  }
-
-  if (emptyEquipment3DRefresh) {
+  case refresh_rules::Backend::NativeEmptyEquipment3D:
     logger::debug(
         "Refreshing empty-equipment actor {:08X} with Actor::Update3D for native registered-appearance bootstrap",
         a_actor->GetFormID());
     re::Update3D(a_actor);
-    QueuePausedReplacementPreviewPoseSync(a_actor);
-    dye::QueueSavedWorldTintRestore(a_actor);
-    sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
+    queueFollowups();
+    return;
+  case refresh_rules::Backend::NativeEquipment:
+    re::SetEquipFlag(process, re::EquipFlag::kNeedsUpdate);
+    re::UpdateEquipment(process, a_actor);
+    queueFollowups();
+    return;
+  case refresh_rules::Backend::None:
+  default:
     return;
   }
-
-  auto *process = a_actor->GetActorRuntimeData().currentProcess;
-  if (!process) {
-    return;
-  }
-
-  re::SetEquipFlag(process, re::EquipFlag::kNeedsUpdate);
-  re::UpdateEquipment(process, a_actor);
-  QueuePausedReplacementPreviewPoseSync(a_actor);
-  dye::QueueSavedWorldTintRestore(a_actor);
-  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
 
 void RefreshPlayerArmor() {

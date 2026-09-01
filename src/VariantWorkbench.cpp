@@ -339,46 +339,16 @@ void ClearAutomaticEquipmentBinding(EquipmentWidgetItem &a_item) {
       sfs::native::external_equipment::GetSuppressedActualSlotMask(
           a_actor->GetFormID());
   const auto protectedSlotMask = GetEffectiveAppearanceProtectedSlotMask();
+  std::uint64_t wornSlotMask = 0;
+  for (const auto &worn : a_wornArmors) {
+    wornSlotMask |= worn.normalizedSlotMask;
+  }
   const auto resolveVanillaAnchorSlotMask =
       [&](const RE::TESObjectARMO *a_appearance) -> std::uint64_t {
     const auto priority = GetVanillaAnchorPriority(a_appearance);
-    if (priority.empty()) {
-      return 0;
-    }
-
-    std::uint64_t anchorSlotMask = 0;
-    for (std::size_t index = 0; index < priority.count; ++index) {
-      const auto candidateSlotMask = priority.slotMasks[index];
-      if ((candidateSlotMask & protectedSlotMask) == 0) {
-        anchorSlotMask = candidateSlotMask;
-        break;
-      }
-    }
-    if (anchorSlotMask == 0) {
-      return 0;
-    }
-
-    // A stripped eligible candidate wins over a still-worn fallback. Protected
-    // anchors never participate, even if an external mod unequipped them.
-    for (std::size_t index = 0; index < priority.count; ++index) {
-      const auto candidateSlotMask = priority.slotMasks[index];
-      if ((candidateSlotMask & protectedSlotMask) == 0 &&
-          (candidateSlotMask & externallySuppressedSlotMask) != 0) {
-        return candidateSlotMask;
-      }
-    }
-    for (std::size_t index = 0; index < priority.count; ++index) {
-      const auto candidateSlotMask = priority.slotMasks[index];
-      if ((candidateSlotMask & protectedSlotMask) != 0) {
-        continue;
-      }
-      if (std::ranges::any_of(a_wornArmors, [&](const auto &worn) {
-            return (worn.normalizedSlotMask & candidateSlotMask) != 0;
-          })) {
-        return candidateSlotMask;
-      }
-    }
-    return anchorSlotMask;
+    return ResolveVanillaAnchorSlotMask(
+        priority, protectedSlotMask, externallySuppressedSlotMask,
+        wornSlotMask);
   };
   bool changed = false;
   for (auto &row : a_rows) {

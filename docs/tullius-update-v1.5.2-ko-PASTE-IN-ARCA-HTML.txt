@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skyrim Fitting System - 아카라이브 게시용</title>
+<style>
+body{max-width:980px;margin:32px auto;padding:0 24px;background:#202124;color:#e8eaed;font-family:Arial,"Noto Sans KR",sans-serif;line-height:1.72}
+h1,h2,h3{color:#42acc8;line-height:1.35} h1{text-align:center;font-size:2.2rem} h2{font-size:1.55rem} h3{font-size:1.2rem}
+hr{border:0;border-top:1px solid #4b4d50;margin:32px 0 20px} a{color:#63d3ea} code{background:#303236;padding:2px 5px;border-radius:4px}
+figure{text-align:center;margin:24px auto} figure img{display:block;width:75%;height:auto;margin:auto;border-radius:5px} figcaption{margin-top:7px;color:#aeb4ba;font-size:.9rem}
+blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;background:#292b2f} li{margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Skyrim Fitting System v1.5.2</h1>
+<hr>
+<h2>등록 외형 잠금</h2>
+<ul>
+<li>등록 외형 카드 우클릭 메뉴에서 잠금&#183;잠금 해제를 할 수 있습니다. 액터별 상태는 SKSE 코세이브에 저장하고 작은 자물쇠 아이콘으로 표시합니다.</li>
+<li>잠긴 외형은 장비&#183;의상&#183;조건&#183;키트&#183;키트 생성기 미리보기와 적용에서 유지됩니다. 겹치는 멀티슬롯 카드는 원자적으로 제외합니다.</li>
+<li>모드 설정&#183;바닐라&#183;직접 편집 탈의 연동과 DD Hider&#183;Helmet Toggle 2 자동 억제가 잠긴 외형을 숨기지 않습니다. 수동 눈과 조건 동작은 기존대로 유지합니다.</li>
+<li>우클릭 메뉴의 잠금&#183;잠금 해제&#183;염색 문구를 한&#183;중&#183;영에서 일관되게 표시합니다.</li>
+</ul>
+<hr>
+<h2>등록 하이힐과 BodyMorph</h2>
+<ul>
+<li>등록 외형 메시의 <code>HH_OFFSET</code>을 RaceMenu 공개 NiTransform 인터페이스로 플레이어&#183;NPC&#183;팔로워에게 동기화합니다.</li>
+<li>DAVE&#183;DAV&#183;native 갱신과 늦은 DAVE 부착을 액터별 이벤트로 처리하며 프록시나 실제 장비를 변경하지 않습니다.</li>
+<li>표시 중인 등록 외형의 RaceMenu 실시간 BodyMorph를 DAVE&#183;DAV&#183;native 및 지연 <code>UpdateModelWeight</code> 경로에서 수정하고 액터 간 누수를 차단했습니다.</li>
+</ul>
+<hr>
+<h2>입력과 피팅 염색</h2>
+<ul>
+<li>키트 목록을 방향키와 함께 W/S로 탐색할 수 있습니다. 실제 SFS 텍스트 입력란에 편집 커서가 있는 동안에는 처리하지 않습니다.</li>
+<li>피팅 염색에서 CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM, 바닐라 계열 기본 몸체&#183;헬퍼를 제외하고 실제 의상 조각만 유지합니다.</li>
+</ul>
+<hr>
+<h2>메뉴 카메라와 SMP</h2>
+<ul>
+<li>일시정지 ON/OFF에서 캐릭터 구도와 FOV를 동일하게 적용합니다. SFS가 열린 동안만 FOV 70을 사용하고 종료 시 원래 카메라와 FOV를 복원합니다.</li>
+<li>SmoothCam 공개 API 경계에서 카메라 제어권을 요청하고 종료 시 반환합니다.</li>
+<li>일시정지 중 우클릭은 액터와 SMP 본을 움직이지 않고 카메라만 선회해 FSMP 의상이 배경으로 늘어나는 현상을 방지합니다. 일시정지 해제 상태에서는 기존 액터 회전과 SMP 추종을 유지합니다.</li>
+</ul>
+<hr>
+<h2>호환성과 배포</h2>
+<ul>
+<li>액터 소유권, DAVE/DAV/native 분리, 네 탈의 연동 정책, DD, Pama, Grid Inventory, OAR, Helmet Toggle 2, IED와 실제 장비 의미를 새 상태와 분리해 유지합니다.</li>
+<li>BodyMorph&#183;억제, 가상토큰&#183;실제 장비 트랜잭션, 네 탈의 정책과 DAVE&#183;DAV&#183;native 분기를 검증하는 빠른 회귀 테스트를 추가했습니다.</li>
+<li>런타임 ZIP과 MO2 배포에서 <code>SFSCore.pdb</code>를 제외합니다. 디버그 심볼은 로컬 빌드 폴더에만 남깁니다.</li>
+</ul>
+</body>
+</html>

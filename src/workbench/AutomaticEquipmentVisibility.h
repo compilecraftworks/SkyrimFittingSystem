@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workbench/ExternalStripLinkRules.h"
+
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 
@@ -11,18 +13,6 @@
 #include <vector>
 
 namespace sfs::workbench {
-// Global policy for reacting to equipment changes initiated by external
-// Papyrus mods. ModSettingsSlots uses the virtual worn-token lifecycle, while
-// VanillaSlots follows the automatically classified vanilla equipment anchor.
-enum class ExternalModStripLinkMode : std::uint8_t {
-  Disabled = 0,
-  ModSettingsSlots = 1,
-  VanillaSlots = 2,
-  Custom = 3,
-  // Internal custom-popup base. It is never exposed as a fifth global option.
-  DirectSlots = 4
-};
-
 [[nodiscard]] ExternalModStripLinkMode GetExternalModStripLinkMode();
 void SetExternalModStripLinkMode(ExternalModStripLinkMode a_mode);
 // Custom keeps one automatic policy while overlaying explicit per-slot
@@ -80,27 +70,6 @@ enum class AutomaticEquipmentVisibilityMode : std::uint8_t {
   CustomSlots = 3
 };
 
-inline constexpr std::uint32_t kAutomaticEquipmentFirstSlot = 30;
-inline constexpr std::uint32_t kAutomaticEquipmentLastSlot = 61;
-inline constexpr std::size_t kAutomaticEquipmentSlotCount =
-    kAutomaticEquipmentLastSlot - kAutomaticEquipmentFirstSlot + 1;
-// Every vanilla biped slot which can carry a distinct registered appearance is
-// available as an anchor. Multi-slot actual equipment retains every occupied
-// slot so head, hair, and circlet links follow the same rule as other slots.
-inline constexpr std::array<std::uint32_t, 11>
-    kAutomaticEquipmentVanillaAnchorSlots{30, 31, 32, 33, 34, 35,
-                                          36, 37, 38, 39, 42};
-
-// Index 0 represents appearance slot 30. Each value is either 0 (this
-// appearance slot does not participate) or an actual-equipment slot 30-61.
-using AutomaticEquipmentSlotMappings =
-    std::array<std::uint8_t, kAutomaticEquipmentSlotCount>;
-// A separate flag is required because mapping value 0 is an explicit custom
-// choice (Do Not Use), while an untouched slot must continue using vanilla
-// keyword classification.
-using AutomaticEquipmentSlotOverrides =
-    std::array<bool, kAutomaticEquipmentSlotCount>;
-
 // Legacy pre-release actor-scoped popup settings. They remain serializable so
 // existing development co-saves can be consumed safely, but the global
 // external-mod policy no longer reads them at runtime.
@@ -113,15 +82,6 @@ struct ActorAutomaticEquipmentVisibilitySettings {
 
 using AutomaticEquipmentVisibilitySettingsByActor =
     std::unordered_map<RE::FormID, ActorAutomaticEquipmentVisibilitySettings>;
-
-inline constexpr std::size_t kMaximumVanillaAnchorCandidates = 3;
-
-struct VanillaAnchorPriority {
-  std::array<std::uint64_t, kMaximumVanillaAnchorCandidates> slotMasks{};
-  std::size_t count{0};
-
-  [[nodiscard]] bool empty() const { return count == 0; }
-};
 
 struct AutomaticEquipmentStateOverride {
   RE::FormID armorFormID{0};

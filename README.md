@@ -25,7 +25,7 @@ Skyrim Outfit System Revived was also consulted while implementing parts of the 
 - Actor-local registered-appearance locks that survive catalog previews and applications while remaining independent from manual eye and condition state
 - RaceMenu `HH_OFFSET` synchronization for registered high-heel appearances across DAVE, DAV, and native display backends
 - Stable generated-kit SFW/NSFW labels that change only through the result-list toggle, not when candidate selection changes
-- Display-only workbench sorting and optional selected-actor third-person menu placement with right-drag rotation
+- Display-only workbench sorting and optional selected-actor third-person menu placement with FOV restoration and pause-safe right-drag rotation
 - Actor-local live BodyMorph synchronization without polling or a global actor scan
 - Actor-aware Equipment, Outfits, and Kits filtering for CBBE/3BA/3BBB,
   UNP/BHUNP, UBE, HIMBO, SAM, and same-sex Vanilla/fallback content
@@ -179,6 +179,20 @@ binary is a 32-bit build that crashes in this environment.
 `lint.sh` also passes `/Y-` to disable MSVC PCH use during linting. xmake's generated
 `compile_commands.json` points `clang-tidy` at a PCH path that does not exist, so disabling
 PCH is the reliable way to lint these translation units.
+
+## Fast Regression Tests
+
+Run the focused production-rule regression suite from PowerShell:
+
+```powershell
+.\tests\run-fast-regressions.ps1
+```
+
+It covers runtime layout boundaries, kit generation and navigation, body-family
+and dye rules, actor-local BodyMorph/suppression state, all four strip-link
+policies, virtual-token and actual-equipment transactions, paused character
+rotation isolation, and DAVE/DAV/native refresh dispatch. Skyrim runtime hooks
+and rendered 3D behavior still require the corresponding in-game smoke tests.
 
 ## Project Generation
 For Visual Studio:

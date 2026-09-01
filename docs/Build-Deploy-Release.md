@@ -61,6 +61,22 @@ Notes:
 - `build.sh` retries with `xmake -j 1` if a parallel MSVC build hits transient `D8000` / `UNKNOWN COMMAND-LINE ERROR`.
 - The current official package target is Skyrim SE/AE.
 
+## Fast Regression Suite
+
+Before deployment or packaging, run:
+
+```powershell
+.\tests\run-fast-regressions.ps1
+```
+
+The suite builds and runs RuntimeLayout, Kit Generator, BodyFamily, Fitting
+Dye, Kit navigation, and core behavior tests. Core behavior coverage shares
+the production decision rules for actor-local BodyMorph and suppression,
+Mod-Configured, Vanilla, Direct+ModSettings, Direct+Vanilla, virtual-token and
+actual-equipment transactions, paused character rotation isolation, and
+DAVE/DAV/native refresh dispatch. Runtime hooks and rendered 3D still require
+the corresponding in-game smoke checks.
+
 ## Build And Deploy
 
 `build-deploy.sh` builds the plugin and copies the flat runtime payload into a target mod folder.

@@ -1,5 +1,7 @@
 #include "runtime/RuntimeLayouts.h"
+#include "ui/MenuCameraProjection.h"
 
+#include <cmath>
 #include <iostream>
 
 namespace {
@@ -75,6 +77,37 @@ int main() {
          "D3D11 DrawIndexed COM vtable contract changed");
   Expect(sfs::runtime::kD3D11DeviceContextDrawVtableIndex == 0x0D,
          "D3D11 Draw COM vtable contract changed");
+
+  RE::NiFrustum perspective{-0.916331f, 0.916331f, 0.515436f,
+                            -0.515436f, 0.1f, 10000.0f, false};
+  const auto originalAspect = perspective.fTop / perspective.fRight;
+  Expect(sfs::ui::camera_projection::SetHorizontalFov(perspective, 70.0f),
+         "perspective menu camera FOV must be adjustable");
+  Expect(std::abs(perspective.fRight - 0.700208f) < 0.00001f &&
+             std::abs(perspective.fLeft + 0.700208f) < 0.00001f,
+         "menu camera frustum must encode horizontal FOV 70");
+  Expect(std::abs(perspective.fTop / perspective.fRight - originalAspect) <
+             0.00001f,
+         "menu camera FOV scaling must preserve viewport aspect ratio");
+  Expect(perspective.fNear == 0.1f && perspective.fFar == 10000.0f,
+         "menu camera FOV scaling must not change near or far planes");
+
+  const auto onceApplied = perspective;
+  Expect(sfs::ui::camera_projection::SetHorizontalFov(perspective, 70.0f) &&
+             std::abs(perspective.fRight - onceApplied.fRight) < 0.000001f &&
+             std::abs(perspective.fTop - onceApplied.fTop) < 0.000001f,
+         "reapplying menu camera FOV must be stable");
+
+  RE::NiFrustum orthographic{-1.0f, 1.0f, 1.0f, -1.0f,
+                             0.1f, 10000.0f, true};
+  Expect(!sfs::ui::camera_projection::SetHorizontalFov(orthographic, 70.0f) &&
+             orthographic.fRight == 1.0f,
+         "orthographic camera projection must fail closed");
+
+  RE::NiFrustum invalid{0.0f, 0.0f, 1.0f, -1.0f,
+                        0.1f, 10000.0f, false};
+  Expect(!sfs::ui::camera_projection::SetHorizontalFov(invalid, 70.0f),
+         "degenerate perspective frustum must fail closed");
 
   if (g_failures != 0) {
     std::cerr << g_failures << " runtime layout test(s) failed\n";

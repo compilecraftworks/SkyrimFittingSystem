@@ -252,11 +252,7 @@ void SetExternalModStripLinkMode(const ExternalModStripLinkMode a_mode) {
   // DirectSlots is an internal custom-editor base, never a global option.
   // Development builds briefly persisted it directly; consume that value as
   // Custom so existing settings continue to use their saved direct mappings.
-  const auto sanitized = a_mode == ExternalModStripLinkMode::DirectSlots
-                             ? ExternalModStripLinkMode::Custom
-                         : a_mode <= ExternalModStripLinkMode::Custom
-                             ? a_mode
-                             : ExternalModStripLinkMode::Disabled;
+  const auto sanitized = SanitizeExternalStripLinkMode(a_mode);
   g_externalModStripLinkMode.store(sanitized, std::memory_order_release);
 }
 
@@ -266,37 +262,31 @@ ExternalModStripLinkMode GetCustomExternalModStripLinkBaseMode() {
 
 void SetCustomExternalModStripLinkBaseMode(
     const ExternalModStripLinkMode a_mode) {
-  const auto sanitized =
-      a_mode == ExternalModStripLinkMode::ModSettingsSlots
-          ? ExternalModStripLinkMode::ModSettingsSlots
-      : a_mode == ExternalModStripLinkMode::DirectSlots
-          ? ExternalModStripLinkMode::DirectSlots
-          : ExternalModStripLinkMode::VanillaSlots;
+  const auto sanitized = SanitizeCustomStripLinkBaseMode(a_mode);
   g_customExternalModStripLinkBaseMode.store(sanitized,
                                               std::memory_order_release);
 }
 
 ExternalModStripLinkMode GetEffectiveExternalModStripLinkMode() {
-  const auto mode = GetExternalModStripLinkMode();
-  return mode == ExternalModStripLinkMode::Custom
-             ? GetCustomExternalModStripLinkBaseMode()
-             : mode;
+  return ResolveEffectiveStripLinkMode(
+      {.configuredMode = GetExternalModStripLinkMode(),
+       .customBaseMode = GetCustomExternalModStripLinkBaseMode()});
 }
 
 bool IsModSettingsStripLinkPolicyActive() {
-  const auto mode = GetEffectiveExternalModStripLinkMode();
-  return mode == ExternalModStripLinkMode::ModSettingsSlots ||
-         (mode == ExternalModStripLinkMode::DirectSlots &&
-          GetCustomDirectStripLinkAutomaticBaseMode() ==
-              ExternalModStripLinkMode::ModSettingsSlots);
+  return IsModSettingsPolicyActive(
+      {.configuredMode = GetExternalModStripLinkMode(),
+       .customBaseMode = GetCustomExternalModStripLinkBaseMode(),
+       .directAutomaticBaseMode =
+           GetCustomDirectStripLinkAutomaticBaseMode()});
 }
 
 bool IsActualEquipmentStripLinkPolicyActive() {
-  const auto mode = GetEffectiveExternalModStripLinkMode();
-  return mode == ExternalModStripLinkMode::VanillaSlots ||
-         (mode == ExternalModStripLinkMode::DirectSlots &&
-          GetCustomDirectStripLinkAutomaticBaseMode() ==
-              ExternalModStripLinkMode::VanillaSlots);
+  return IsActualEquipmentPolicyActive(
+      {.configuredMode = GetExternalModStripLinkMode(),
+       .customBaseMode = GetCustomExternalModStripLinkBaseMode(),
+       .directAutomaticBaseMode =
+           GetCustomDirectStripLinkAutomaticBaseMode()});
 }
 
 ExternalModStripLinkMode GetCustomDirectStripLinkAutomaticBaseMode() {
@@ -305,9 +295,7 @@ ExternalModStripLinkMode GetCustomDirectStripLinkAutomaticBaseMode() {
 
 void SetCustomDirectStripLinkAutomaticBaseMode(
     const ExternalModStripLinkMode a_mode) {
-  const auto sanitized = a_mode == ExternalModStripLinkMode::VanillaSlots
-                             ? ExternalModStripLinkMode::VanillaSlots
-                             : ExternalModStripLinkMode::ModSettingsSlots;
+  const auto sanitized = SanitizeDirectAutomaticBaseMode(a_mode);
   g_customDirectAutomaticBaseMode.store(sanitized,
                                         std::memory_order_release);
 }
@@ -334,17 +322,13 @@ bool IsExternalModStripLinkAppearanceEnabled(
   // can return when the user removes protection, but no protected appearance
   // may participate in either the actual-equipment or virtual-token pipeline
   // while protection is active.
-  if (IsAppearanceRegistrationProtectedSlotMask(a_appearanceSlotMask)) {
-    return false;
-  }
-  if (GetExternalModStripLinkMode() != ExternalModStripLinkMode::Custom ||
-      GetCustomExternalModStripLinkBaseMode() ==
-          ExternalModStripLinkMode::DirectSlots) {
-    return true;
-  }
-  return a_appearanceSlotMask == 0 ||
-         (a_appearanceSlotMask &
-         GetCustomStripLinkDisabledAppearanceSlotMask()) == 0;
+  return IsStripLinkedAppearanceEnabled(
+      {.configuredMode = GetExternalModStripLinkMode(),
+       .customBaseMode = GetCustomExternalModStripLinkBaseMode(),
+       .disabledAppearanceSlotMask =
+           GetCustomStripLinkDisabledAppearanceSlotMask()},
+      a_appearanceSlotMask,
+      IsAppearanceRegistrationProtectedSlotMask(a_appearanceSlotMask));
 }
 
 AutomaticEquipmentSlotMappings GetCustomDirectStripLinkMappings() {
@@ -378,102 +362,34 @@ void SetCustomDirectStripLinkOverrides(
 
 std::optional<std::uint64_t> ResolveCustomDirectStripLinkAnchorSlotMask(
     const std::uint64_t a_appearanceSlotMask) {
-  if (GetExternalModStripLinkMode() != ExternalModStripLinkMode::Custom) {
-    return std::nullopt;
-  }
-  AutomaticEquipmentSlotMappings mappings;
-  AutomaticEquipmentSlotOverrides overrides;
+  ExternalStripLinkPolicyState policy{
+      .configuredMode = GetExternalModStripLinkMode(),
+      .customBaseMode = GetCustomExternalModStripLinkBaseMode(),
+      .directAutomaticBaseMode =
+          GetCustomDirectStripLinkAutomaticBaseMode(),
+      .protectedAppearanceSlotMask = GetEffectiveAppearanceProtectedSlotMask()};
   {
     std::lock_guard lock(g_customDirectMappingsMutex);
-    mappings = g_customDirectMappings;
-    overrides = g_customDirectOverrides;
+    policy.directMappings = g_customDirectMappings;
+    policy.directOverrides = g_customDirectOverrides;
   }
-  const auto customBaseMode = GetCustomExternalModStripLinkBaseMode();
-  const auto protectedSlotMask = GetEffectiveAppearanceProtectedSlotMask();
-  for (std::uint32_t appearanceSlot = kAutomaticEquipmentFirstSlot;
-       appearanceSlot <= kAutomaticEquipmentLastSlot; ++appearanceSlot) {
-    if ((a_appearanceSlotMask & armor::GetArmorSlotMask(appearanceSlot)) == 0) {
-      continue;
-    }
-    const auto mappingIndex = appearanceSlot - kAutomaticEquipmentFirstSlot;
-    if (!overrides[mappingIndex] &&
-        customBaseMode != ExternalModStripLinkMode::DirectSlots) {
-      continue;
-    }
-    const auto mappedSlot =
-        overrides[mappingIndex]
-            ? mappings[mappingIndex]
-            : static_cast<std::uint8_t>(appearanceSlot);
-    if (mappedSlot < kAutomaticEquipmentFirstSlot ||
-        mappedSlot > kAutomaticEquipmentLastSlot) {
-      return std::uint64_t{0};
-    }
-    // A mod-settings target may be any supported slot. Whether that slot
-    // currently returns real worn armor or needs a virtual token is decided by
-    // the mod-settings transaction for each actor, not by the slot number.
-    // A vanilla automatic base exposes only classifier anchors. Fully direct
-    // editing is explicit and may observe any real slot, including extension
-    // slots, so it does not use that classifier restriction.
-    if (customBaseMode != ExternalModStripLinkMode::DirectSlots &&
-        GetCustomDirectStripLinkAutomaticBaseMode() ==
-            ExternalModStripLinkMode::VanillaSlots &&
-          std::ranges::find(kAutomaticEquipmentVanillaAnchorSlots,
-                            mappedSlot) ==
-              kAutomaticEquipmentVanillaAnchorSlots.end()) {
-      return std::uint64_t{0};
-    }
-    const auto mappedSlotMask = armor::GetArmorSlotMask(mappedSlot);
-    if ((mappedSlotMask & protectedSlotMask) == 0) {
-      return mappedSlotMask;
-    }
-    return std::uint64_t{0};
-  }
-  return std::nullopt;
+  return ResolveDirectSlotMask(policy, a_appearanceSlotMask, false);
 }
 
 std::optional<std::uint64_t> ResolveCustomDirectStripLinkTokenSlotMask(
     const std::uint64_t a_appearanceSlotMask) {
-  if (GetExternalModStripLinkMode() != ExternalModStripLinkMode::Custom ||
-      GetCustomDirectStripLinkAutomaticBaseMode() !=
-      ExternalModStripLinkMode::ModSettingsSlots) {
-    return std::nullopt;
-  }
-  AutomaticEquipmentSlotMappings mappings;
-  AutomaticEquipmentSlotOverrides overrides;
+  ExternalStripLinkPolicyState policy{
+      .configuredMode = GetExternalModStripLinkMode(),
+      .customBaseMode = GetCustomExternalModStripLinkBaseMode(),
+      .directAutomaticBaseMode =
+          GetCustomDirectStripLinkAutomaticBaseMode(),
+      .protectedAppearanceSlotMask = GetEffectiveAppearanceProtectedSlotMask()};
   {
     std::lock_guard lock(g_customDirectMappingsMutex);
-    mappings = g_customDirectMappings;
-    overrides = g_customDirectOverrides;
+    policy.directMappings = g_customDirectMappings;
+    policy.directOverrides = g_customDirectOverrides;
   }
-  const auto customBaseMode = GetCustomExternalModStripLinkBaseMode();
-  const auto protectedSlotMask = GetEffectiveAppearanceProtectedSlotMask();
-  for (std::uint32_t appearanceSlot = kAutomaticEquipmentFirstSlot;
-       appearanceSlot <= kAutomaticEquipmentLastSlot; ++appearanceSlot) {
-    if ((a_appearanceSlotMask & armor::GetArmorSlotMask(appearanceSlot)) == 0) {
-      continue;
-    }
-    const auto mappingIndex = appearanceSlot - kAutomaticEquipmentFirstSlot;
-    if (!overrides[mappingIndex] &&
-        customBaseMode != ExternalModStripLinkMode::DirectSlots) {
-      continue;
-    }
-    const auto mappedSlot =
-        overrides[mappingIndex]
-            ? mappings[mappingIndex]
-            : static_cast<std::uint8_t>(appearanceSlot);
-    // Zero is "Do Not Link". Every concrete 30-61 target stays in the
-    // mod-settings catalog: a real worn form wins when present, and a virtual
-    // token is offered only when that actor's target slot is empty.
-    if (mappedSlot < kAutomaticEquipmentFirstSlot ||
-        mappedSlot > kAutomaticEquipmentLastSlot) {
-      return std::uint64_t{0};
-    }
-    const auto mappedSlotMask = armor::GetArmorSlotMask(mappedSlot);
-    return (mappedSlotMask & protectedSlotMask) == 0
-               ? std::optional<std::uint64_t>{mappedSlotMask}
-               : std::optional<std::uint64_t>{0};
-  }
-  return std::nullopt;
+  return ResolveDirectSlotMask(policy, a_appearanceSlotMask, true);
 }
 
 ActorAutomaticEquipmentVisibilitySettings

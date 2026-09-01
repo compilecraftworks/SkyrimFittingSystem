@@ -1,6 +1,7 @@
 #include "native/RaceMenuBodyMorph.h"
 
 #include "native/ArmorSkinning.h"
+#include "native/RegisteredAppearanceMorphRules.h"
 
 #include <algorithm>
 #include <atomic>
@@ -252,10 +253,8 @@ std::unordered_map<RE::FormID, std::vector<RegisteredAppearanceNode>>
 std::unordered_map<RE::FormID,
                    std::vector<RegisteredAppearanceAttachmentRoot>>
     g_registeredAppearanceAttachmentRoots;
-std::unordered_set<RE::FormID> g_activeRegisteredAppearanceActors;
 std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
-std::unordered_set<RE::FormID> g_observedModelWeightMorphActors;
-std::unordered_set<RE::FormID> g_observedEmptyModelWeightMorphActors;
+sfs::native::racemenu::rules::ActorMorphActivity g_morphActivity;
 std::mutex g_highHeelQueueMutex;
 std::unordered_set<RE::FormID> g_queuedHighHeelSyncs;
 std::atomic<std::uint64_t> g_highHeelQueueGeneration{0};
@@ -462,7 +461,7 @@ GetLoadedModuleImage(const wchar_t *a_moduleName) {
 [[nodiscard]] bool IsRegisteredAppearanceDisplayActive(
     const RE::FormID a_actorFormID) {
   std::lock_guard lock(g_nodeMutex);
-  return g_activeRegisteredAppearanceActors.contains(a_actorFormID);
+  return g_morphActivity.IsActive(a_actorFormID);
 }
 
 [[nodiscard]] std::vector<RE::NiPointer<RE::NiAVObject>>
@@ -884,9 +883,12 @@ void RememberAndMorphNewNodes(
 
     // RaceMenu's own OnAttach path leaves SHAPEDATA on processed geometry. If
     // it already saw this attachment, record the node without adding the same
-    // vertex delta twice. Otherwise mirror OnAttach with attaching=true.
+    // vertex delta twice. Otherwise apply the current morphs while preserving
+    // the generated shape data. The public API's third argument is `erase`,
+    // not an attachment flag; passing true here removes the native fallback's
+    // morph state and leaves SFS-displayed armor at its unmorphed shape.
     if (!ContainsExtraData(node.get(), shapeDataName)) {
-      a_interface->ApplyVertexDiff(a_actor, node.get(), true);
+      a_interface->ApplyVertexDiff(a_actor, node.get(), false);
     }
 
     RegisteredAppearanceNode entry{.object = node,
@@ -987,14 +989,8 @@ void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
       bool firstObservedUpdate = false;
       {
         std::lock_guard lock(g_nodeMutex);
-        if (appliedCount != 0) {
-          firstObservedUpdate =
-              g_observedModelWeightMorphActors.insert(a_actorFormID).second;
-        } else {
-          firstObservedUpdate =
-              g_observedEmptyModelWeightMorphActors.insert(a_actorFormID)
-                  .second;
-        }
+        firstObservedUpdate =
+            g_morphActivity.MarkObserved(a_actorFormID, appliedCount != 0);
       }
       if (firstObservedUpdate) {
         logger::info(
@@ -1412,13 +1408,9 @@ void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
   }
   const auto actorFormID = a_actor->GetFormID();
   std::lock_guard lock(g_nodeMutex);
-  if (a_active) {
-    g_activeRegisteredAppearanceActors.insert(actorFormID);
-  } else {
-    g_activeRegisteredAppearanceActors.erase(actorFormID);
+  g_morphActivity.SetActive(actorFormID, a_active);
+  if (!a_active) {
     g_registeredAppearanceNodes.erase(actorFormID);
-    g_observedModelWeightMorphActors.erase(actorFormID);
-    g_observedEmptyModelWeightMorphActors.erase(actorFormID);
   }
 }
 
@@ -1444,10 +1436,8 @@ void ForgetAllRegisteredAppearanceNodes() {
                           g_registeredAppearanceHighHeelActors.end());
     g_registeredAppearanceNodes.clear();
     g_registeredAppearanceAttachmentRoots.clear();
-    g_activeRegisteredAppearanceActors.clear();
     g_registeredAppearanceHighHeelActors.clear();
-    g_observedModelWeightMorphActors.clear();
-    g_observedEmptyModelWeightMorphActors.clear();
+    g_morphActivity.Clear();
   }
 
   // Remove only SFS's temporary zero-valued bootstrap if a task was

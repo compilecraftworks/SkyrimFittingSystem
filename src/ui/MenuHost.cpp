@@ -151,15 +151,6 @@ void ProcessScaleformEvent(const RE::BSUIScaleformData *a_data) {
 } // namespace
 
 namespace sfs {
-namespace {
-// UI::numPausesGame is a count captured when menus are shown/hidden, not a
-// value recalculated from IMenu::menuFlags every frame.  Keep explicit track
-// of the one contribution that SFS temporarily removes for a character drag.
-// Leave the live menu's flags untouched: toggling kPausesGame itself makes
-// Skyrim rebuild menu pause state over several presentation frames.
-// This code runs on the menu/render thread only.
-bool g_characterRotationUnpauseActive = false;
-} // namespace
 
 void MenuHost::RegisterMenu() {
   static bool registered = false;
@@ -171,52 +162,6 @@ void MenuHost::RegisterMenu() {
     ui->Register(MENU_NAME, Creator);
     registered = true;
   }
-}
-
-bool MenuHost::BeginCharacterRotationUnpause() {
-  if (g_characterRotationUnpauseActive) {
-    return true;
-  }
-
-  auto *ui = RE::UI::GetSingleton();
-  if (ui == nullptr) {
-    return false;
-  }
-
-  auto menu = ui->GetMenu<MenuHost>();
-  if (!menu || !menu->menuFlags.all(RE::UI_MENU_FLAGS::kPausesGame)) {
-    // The user may have disabled SFS's pause option.  In that case there is
-    // no pause contribution to release and the caller can still rotate.
-    return false;
-  }
-  if (ui->numPausesGame == 0) {
-    logger::warn("SFS character rotation could not release an empty UI pause "
-                 "counter");
-    return false;
-  }
-
-  --ui->numPausesGame;
-  g_characterRotationUnpauseActive = true;
-  return true;
-}
-
-void MenuHost::EndCharacterRotationUnpause() {
-  if (!g_characterRotationUnpauseActive) {
-    return;
-  }
-
-  auto *ui = RE::UI::GetSingleton();
-  auto menu = ui != nullptr ? ui->GetMenu<MenuHost>() : RE::GPtr<MenuHost>{};
-  if (ui != nullptr && menu != nullptr) {
-    // Re-establish the original contribution before the normal hide path.
-    // The menu's kPausesGame flag stayed set, so the ordinary hide path will
-    // subsequently consume this count exactly once.
-    ++ui->numPausesGame;
-  }
-  // If the menu was already removed, it must not contribute a pause count
-  // any longer.  Clear only our bookkeeping; recreating a count here would
-  // leave Skyrim permanently paused.
-  g_characterRotationUnpauseActive = false;
 }
 
 void MenuHost::PostDisplay() {

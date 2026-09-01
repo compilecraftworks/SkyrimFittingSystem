@@ -29,6 +29,8 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 [*]Mod-Configured Slot Linking, Automatic Vanilla-Slot Linking, and per-slot Direct Editing exceptions[/*]
 [*]Built-in Kit Generator for ESP scanning, candidate editing, preview, and kit creation[/*]
 [*]Actor-local Fitting Dye for individual rendered components of a registered appearance, available from its dye button or right-click context menu[/*]
+[*]Actor-local registered-appearance locks that survive catalog previews and applications[/*]
+[*]RaceMenu high-heel [font=Courier New]HH_OFFSET[/font] and live BodyMorph synchronization across DAVE, DAV, and native display[/*]
 [*]Actor-aware Equipment, Outfits, and Kits filtering for CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM, and same-sex Vanilla/fallback content[/*]
 [*]Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges[/*]
 [/list]
@@ -57,6 +59,21 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 
 [center][img]https://i.ibb.co/S4JHn3DT/2.gif[/img][/center]
 [b]Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)[/b]
+
+[line]
+[size=4][b][color=#42ACC8]Version 1.5.2 Update Summary[/color][/b][/size]
+
+
+[list]
+[*]Added actor-local locks to registered-appearance context menus. Locked appearances remain through Gear, Outfits, Conditions, Kits, and Kit Generator preview/application and are excluded from automatic strip-link, DD Hider, and Helmet Toggle 2 suppression while manual eye and condition behavior remains unchanged.[/*]
+[*]Added RaceMenu [font=Courier New]HH_OFFSET[/font] synchronization for registered high heels on players, NPCs, and followers across DAVE, DAV, native refreshes, and late DAVE attachments without proxy equipment.[/*]
+[*]Fixed live RaceMenu BodyMorph on visible registered appearances across DAVE, DAV, native display, and deferred [font=Courier New]UpdateModelWeight[/font] processing.[/*]
+[*]Added W/S kit-list navigation outside active text editing and expanded Fitting Dye body/helper filtering for every supported female, male, and Vanilla body family.[/*]
+[*]Unified paused and unpaused character framing at FOV 70 with original-camera restoration. Paused right-drag now orbits the camera without moving actor/SMP roots, preventing FSMP garment stretching; unpaused live actor rotation remains unchanged.[/*]
+[*]Added fast production-rule regression coverage for actor-local state, all four strip-link policies, virtual-token and actual-equipment transactions, and DAVE/DAV/native refresh dispatch.[/*]
+[*]Removed [font=Courier New]SFSCore.pdb[/font] from runtime and MO2 packages; local builds retain debug symbols for optional diagnostics.[/*]
+[/list]
+
 
 [line]
 [size=4][b][color=#42ACC8]Version 1.5.1 Update Summary[/color][/b][/size]
@@ -128,7 +145,7 @@ Built-in: (Not required any patch file)
 [*]Completely delete the previous SFS mod folder.[/*]
 [*]Completely delete any older [b]SFS Helmet Toggle 2 Compatibility Patch[/b] and the [b]v1.4.4 SFS Grid Inventory Costume Compatibility Patch[/b]. Do not delete their original mods.[/*]
 [*]If an old standalone test [b]SFS Kit Generator[/b] folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.[/*]
-[*]Install the v1.5.1 distribution ZIP as a new mod.[/*]
+[*]Install the v1.5.2 distribution ZIP as a new mod.[/*]
 [*]Enable [font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font].[/*]
 [*]Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.[/*]
 [/list]

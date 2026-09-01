@@ -1,4 +1,4 @@
-# Skyrim Fitting System v1.5.1
+# Skyrim Fitting System v1.5.2
 
 ![Skyrim Fitting System](https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&key=wSK-nG9UwFePxIQ1PlXhgQ&type=orig)
 
@@ -14,9 +14,20 @@
 - 모드 설정 슬롯 연동, 바닐라 슬롯 자동 연동, 두 방식을 기반으로 한 직접 슬롯 편집
 - 외부 모드의 탈의·재착의·압수·복장 교체를 액터별로 관찰하는 범용 연동
 - 등록 외형 카드의 염색 버튼·우클릭 메뉴에서 여는 액터별·외형별·조각별 피팅 염색
-- RaceMenu BodyMorph, SOS/TNG, DAVE·DAV·native 표시 환경 지원
+- 미리보기·적용과 자동 탈의 억제에서 유지되는 액터별 등록 외형 잠금
+- RaceMenu BodyMorph·등록 하이힐 `HH_OFFSET`, SOS/TNG, DAVE·DAV·native 표시 환경 지원
 - OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume·Helmet Toggle 2 연동, 선택형 DFFMA OAR·Dynamic Footprints 호환 패치
 - 선택 액터의 바디 계열에 맞는 장비·의상·키트 자동 필터
+
+## v1.5.2 주요 변경
+
+- 등록 외형 카드 우클릭 메뉴에 액터별 잠금·잠금 해제를 추가했습니다. 잠긴 외형은 장비·의상·조건·키트·키트 생성기 미리보기와 적용에서 유지되며 자동 탈의 연동·DD Hider·Helmet Toggle 2 억제에서 제외됩니다.
+- 등록 외형 하이힐의 `HH_OFFSET`을 플레이어·NPC·팔로워에게 RaceMenu NiTransform으로 적용하며 DAVE·DAV·native와 늦은 DAVE 부착을 액터별로 처리합니다.
+- 표시 중인 등록 외형의 RaceMenu 실시간 BodyMorph를 DAVE·DAV·native 및 지연 `UpdateModelWeight` 경로에서 수정했습니다.
+- 실제 텍스트 편집 중을 제외한 W/S 키트 목록 이동과 모든 지원 바디 계열의 피팅 염색 기본 몸체·헬퍼 제외를 추가했습니다.
+- 일시정지 ON/OFF 메뉴 구도를 FOV 70으로 통일하고 종료 시 원래 카메라를 복원합니다. 일시정지 중에는 액터/SMP 본 대신 카메라만 선회해 FSMP 의상 늘어짐을 방지합니다.
+- 네 탈의 연동 정책, 액터별 BodyMorph·억제, 가상토큰·실제 장비 트랜잭션과 DAVE·DAV·native 분기를 검증하는 빠른 회귀 테스트를 추가했습니다.
+- 런타임·MO2 패키지에서 `SFSCore.pdb`를 제외했습니다.
 
 ## v1.5.1 주요 변경
 
@@ -39,7 +50,7 @@
 1. 개인 키트가 있다면 `Interface/SkyrimFittingSystem/user`를 백업합니다.
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 이전 독립형 **SFS Kit Generator**, 기존 **SFS Helmet Toggle 2 호환 패치**, v1.4.4 **SFS Grid Inventory Costume Compatibility Patch**가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.
-4. v1.5.1 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
+4. v1.5.2 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 5. 필요하면 백업한 개인 키트만 복원합니다.
 6. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 **별도 SFS 호환 패치만** 원본 모드 뒤에 설치합니다.
 

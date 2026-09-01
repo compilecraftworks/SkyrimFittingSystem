@@ -174,8 +174,8 @@ bool AcquireCameraControl() {
 
   g_controlOwned = true;
   g_denialLogged = false;
-  static_cast<void>(
-      g_interface->RequestInterpolatorUpdates(pluginHandle, true));
+  // RequestCameraControl already disables SmoothCam's interpolator updates.
+  // Do not override that API default while SFS owns the menu camera.
   return true;
 }
 
@@ -186,8 +186,8 @@ void ReleaseCameraControl() {
     return;
   }
 
-  static_cast<void>(
-      g_interface->ReleaseCameraControl(SKSE::GetPluginHandle()));
+  const auto pluginHandle = SKSE::GetPluginHandle();
+  static_cast<void>(g_interface->ReleaseCameraControl(pluginHandle));
   g_controlOwned = false;
 }
 

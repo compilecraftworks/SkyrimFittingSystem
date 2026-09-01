@@ -12,7 +12,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
-## v1.5.1 주요 기능
+## v1.5.2 주요 기능
 
 - 실제 장비의 능력치와 효과를 유지하는 등록 외형
 - 액터별 기본 외형과 여러 조건 외형
@@ -32,6 +32,8 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 - 외부 모드용 Open/Close/IsMenuOpen/SetHotkeyEnabled C API
 - SFSCore에 내장된 인게임 키트 생성기: ESP 스캔, 후보 생성·편집·미리보기와 키트 저장
 - 기본·조건 영역 등록 외형 카드의 염색 버튼과 우클릭 메뉴에서 여는 액터별·외형별·조각별 **피팅 염색**
+- 미리보기·적용과 자동 탈의 억제에서 유지되는 액터별 **등록 외형 잠금**
+- DAVE·DAV·native 공통 RaceMenu 등록 하이힐 `HH_OFFSET` 및 실시간 BodyMorph 동기화
 - 저장된 작업대 행·인벤토리·실제 장비를 바꾸지 않는 생성 후보 읽기 전용 미리보기
 - 일반 SFS 제한은 유지하면서 보호 슬롯과 SOS/TNG 성기 장비까지 보여주는 생성기 전용 후보 미리보기
 - 생성 키트 이름에 쓰이는 내부 SFW/NSFW 판정 유지(수동 UI 전환 없음)
@@ -40,6 +42,16 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 - 액터별 최종 표시 장비를 읽는 OAR용 읽기 전용 조건
 - 내장 Grid Inventory Costume·Helmet Toggle 2 연동과 DFFMA OAR·Dynamic Footprints v3 선택형 호환 패치
 - 선택 액터의 바디 계열에 맞춰 장비·의상·키트 목록을 자동 필터링하는 카탈로그
+
+## v1.5.2 업데이트 요약
+
+- 등록 외형 카드 우클릭 메뉴에 액터별 잠금·잠금 해제를 추가했습니다. 잠긴 외형은 장비·의상·조건·키트·키트 생성기 미리보기와 적용에서 유지되고 자동 탈의 연동·DD Hider·Helmet Toggle 2 억제에서 제외되며 수동 눈과 조건 동작은 유지합니다.
+- 플레이어·NPC·팔로워 등록 하이힐의 `HH_OFFSET`을 DAVE·DAV·native 갱신과 늦은 DAVE 부착에서 RaceMenu NiTransform으로 액터별 동기화하며 프록시 장비를 사용하지 않습니다.
+- 표시 중인 등록 외형의 RaceMenu 실시간 BodyMorph를 DAVE·DAV·native 및 지연 `UpdateModelWeight` 경로에서 수정했습니다.
+- 실제 텍스트 편집 중을 제외한 W/S 키트 목록 이동과 모든 지원 여성·남성·바닐라 계열의 피팅 염색 기본 몸체·헬퍼 제외를 추가했습니다.
+- 일시정지 ON/OFF 메뉴 구도를 FOV 70으로 통일하고 종료 시 원래 카메라를 복원합니다. 일시정지 중 우클릭은 액터/SMP 본 대신 카메라만 선회해 FSMP 의상 늘어짐을 방지하며 해제 상태의 실시간 회전은 유지합니다.
+- 액터별 상태, 네 탈의 연동 정책, 가상토큰·실제 장비 트랜잭션과 DAVE·DAV·native 분기를 검증하는 빠른 회귀 테스트를 추가했습니다.
+- 런타임·MO2 패키지에서 `SFSCore.pdb`를 제외하고 디버그 심볼은 로컬 빌드에만 유지합니다.
 
 ## v1.5.1 업데이트 요약
 
@@ -98,7 +110,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 기존의 모든 **SFS Helmet Toggle 2 호환 패치**를 완전히 삭제합니다. Helmet Toggle 2 본체를 삭제하는 것은 아닙니다.
 4. 이전 독립형 시험용 **SFS Kit Generator** 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.
-5. v1.5.1 배포 ZIP을 새 모드로 설치합니다.
+5. v1.5.2 배포 ZIP을 새 모드로 설치합니다.
 6. `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 7. 필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.
 

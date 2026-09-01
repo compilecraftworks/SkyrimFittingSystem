@@ -1,3 +1,18 @@
+[size=4][b][color=#42ACC8]Version 1.5.2[/color][/b][/size]
+
+
+[list]
+[*]Added actor-local registered-appearance locks from the card context menu. Locks survive Gear, Outfits, Conditions, Kits, and Kit Generator previews/applications and are excluded from automatic strip-link, DD Hider, and Helmet Toggle 2 suppression while retaining manual eye and condition behavior.[/*]
+[*]Added RaceMenu [font=Courier New]HH_OFFSET[/font] synchronization for registered high heels on players, NPCs, and followers across DAVE, DAV, native refreshes, and late DAVE attachments without proxy equipment.[/*]
+[*]Fixed live RaceMenu BodyMorph on visible registered appearances across DAVE, DAV, native display, and deferred [font=Courier New]UpdateModelWeight[/font] processing.[/*]
+[*]Added W/S kit-list navigation outside active text editing and expanded Fitting Dye base-body/helper filtering for all supported female, male, and Vanilla body families.[/*]
+[*]Unified paused and unpaused menu framing at FOV 70 with exact restoration on close. Paused right-drag now orbits the camera without moving actor/SMP roots, preventing FSMP garment stretching; unpaused live rotation remains unchanged.[/*]
+[*]Added fast production-rule regression coverage for actor-local state, all four strip-link policies, virtual-token and actual-equipment transactions, and DAVE/DAV/native refresh dispatch.[/*]
+[*]Removed [font=Courier New]SFSCore.pdb[/font] from runtime and MO2 packages; debug symbols remain in local builds only.[/*]
+[/list]
+
+
+[line]
 [size=4][b][color=#42ACC8]Version 1.5.1[/color][/b][/size]
 
 

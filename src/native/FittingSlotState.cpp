@@ -1,16 +1,15 @@
 #include "native/FittingSlotState.h"
 
+#include "native/FittingSlotStateRules.h"
+
 #include <SKSE/SKSE.h>
 
 #include <mutex>
 #include <unordered_map>
 
 namespace {
-struct ActorFittingSlotState {
-  std::uint32_t virtualTokenSuppressedSlotMask{0};
-  std::uint32_t headgearToggleSuppressedSlotMask{0};
-  std::uint32_t headgearToggleManualVisibleSlotMask{0};
-};
+using ActorFittingSlotState =
+    sfs::native::fitting_slot_rules::ActorFittingSlotState;
 
 constexpr std::uint32_t kFittingStateSerializationType = 'FSTS';
 constexpr std::uint32_t kFittingStateSerializationVersion = 2;
@@ -33,17 +32,6 @@ std::unordered_map<RE::FormID, ActorFittingSlotState> g_actorStates;
                                        : ActorFittingSlotState{};
 }
 
-[[nodiscard]] bool IsEmpty(const ActorFittingSlotState &a_state) {
-  return a_state.virtualTokenSuppressedSlotMask == 0 &&
-         a_state.headgearToggleSuppressedSlotMask == 0 &&
-         a_state.headgearToggleManualVisibleSlotMask == 0;
-}
-
-[[nodiscard]] std::uint32_t GetEffectiveHeadgearToggleSuppressedSlotMask(
-    const ActorFittingSlotState &a_state) {
-  return a_state.headgearToggleSuppressedSlotMask &
-         ~a_state.headgearToggleManualVisibleSlotMask;
-}
 } // namespace
 
 namespace sfs::native {
@@ -56,13 +44,10 @@ void SetVirtualTokenFittingSlotsSuppressed(RE::Actor *a_actor,
   }
   std::lock_guard lock(g_stateMutex);
   auto &state = g_actorStates[actorFormID];
-  if (a_suppressed) {
-    state.virtualTokenSuppressedSlotMask |= a_slotMask;
-  } else {
-    state.virtualTokenSuppressedSlotMask &= ~a_slotMask;
-    if (IsEmpty(state)) {
-      g_actorStates.erase(actorFormID);
-    }
+  fitting_slot_rules::SetVirtualTokenSuppressed(state, a_slotMask,
+                                                a_suppressed);
+  if (fitting_slot_rules::IsEmpty(state)) {
+    g_actorStates.erase(actorFormID);
   }
 }
 
@@ -75,20 +60,9 @@ void SetHeadgearToggleFittingSlotsSuppressed(
   }
   std::lock_guard lock(g_stateMutex);
   auto &state = g_actorStates[actorFormID];
-  if (a_suppressed) {
-    const auto newlySuppressed =
-        a_slotMask & ~state.headgearToggleSuppressedSlotMask;
-    state.headgearToggleSuppressedSlotMask |= a_slotMask;
-    // A new Helmet Toggle hide transition takes control again.  This leaves
-    // the user's saved card visibility intact while resetting only the
-    // temporary manual-show override from the preceding hide interval.
-    state.headgearToggleManualVisibleSlotMask &= ~newlySuppressed;
-  } else {
-    state.headgearToggleSuppressedSlotMask &= ~a_slotMask;
-    state.headgearToggleManualVisibleSlotMask &= ~a_slotMask;
-    if (IsEmpty(state)) {
-      g_actorStates.erase(actorFormID);
-    }
+  fitting_slot_rules::SetHeadgearSuppressed(state, a_slotMask, a_suppressed);
+  if (fitting_slot_rules::IsEmpty(state)) {
+    g_actorStates.erase(actorFormID);
   }
 }
 
@@ -109,17 +83,12 @@ bool ReplaceHeadgearToggleFittingSlotsSuppressed(
   }
 
   auto &state = stateIt->second;
-  const auto previousMask = GetEffectiveHeadgearToggleSuppressedSlotMask(state);
-  const auto newlySuppressed =
-      a_slotMask & ~state.headgearToggleSuppressedSlotMask;
-  state.headgearToggleSuppressedSlotMask = a_slotMask;
-  state.headgearToggleManualVisibleSlotMask &= a_slotMask;
-  state.headgearToggleManualVisibleSlotMask &= ~newlySuppressed;
-  const auto currentMask = GetEffectiveHeadgearToggleSuppressedSlotMask(state);
-  if (IsEmpty(state)) {
+  const bool changed =
+      fitting_slot_rules::ReplaceHeadgearSuppressed(state, a_slotMask);
+  if (fitting_slot_rules::IsEmpty(state)) {
     g_actorStates.erase(stateIt);
   }
-  return previousMask != currentMask;
+  return changed;
 }
 
 void ClearHeadgearToggleFittingSlotsSuppressed(RE::Actor *a_actor) {
@@ -134,7 +103,7 @@ void ClearHeadgearToggleFittingSlotsSuppressed(RE::Actor *a_actor) {
   }
   stateIt->second.headgearToggleSuppressedSlotMask = 0;
   stateIt->second.headgearToggleManualVisibleSlotMask = 0;
-  if (IsEmpty(stateIt->second)) {
+  if (fitting_slot_rules::IsEmpty(stateIt->second)) {
     g_actorStates.erase(stateIt);
   }
 }
@@ -144,7 +113,7 @@ void ClearAllHeadgearToggleFittingSlotStates() {
   for (auto stateIt = g_actorStates.begin(); stateIt != g_actorStates.end();) {
     stateIt->second.headgearToggleSuppressedSlotMask = 0;
     stateIt->second.headgearToggleManualVisibleSlotMask = 0;
-    if (IsEmpty(stateIt->second)) {
+    if (fitting_slot_rules::IsEmpty(stateIt->second)) {
       stateIt = g_actorStates.erase(stateIt);
     } else {
       ++stateIt;
@@ -167,16 +136,9 @@ bool SetHeadgearToggleFittingSlotsManualVisible(
   }
 
   auto &state = stateIt->second;
-  const auto previousMask = GetEffectiveHeadgearToggleSuppressedSlotMask(state);
-  if (a_visible) {
-    state.headgearToggleManualVisibleSlotMask |=
-        a_slotMask & state.headgearToggleSuppressedSlotMask;
-  } else {
-    state.headgearToggleManualVisibleSlotMask &= ~a_slotMask;
-  }
-  const auto currentMask = GetEffectiveHeadgearToggleSuppressedSlotMask(state);
-  const bool changed = previousMask != currentMask;
-  if (IsEmpty(state)) {
+  const bool changed = fitting_slot_rules::SetHeadgearManualVisible(
+      state, a_slotMask, a_visible);
+  if (fitting_slot_rules::IsEmpty(state)) {
     g_actorStates.erase(stateIt);
   }
   return changed;
@@ -261,7 +223,8 @@ GetVirtualTokenSuppressedFittingSlotMask(RE::Actor *a_actor) {
 
 std::uint32_t
 GetHeadgearToggleSuppressedFittingSlotMask(RE::Actor *a_actor) {
-  return GetEffectiveHeadgearToggleSuppressedSlotMask(GetState(a_actor));
+  return fitting_slot_rules::GetEffectiveHeadgearSuppressedMask(
+      GetState(a_actor));
 }
 
 } // namespace sfs::native

@@ -3,7 +3,8 @@
 #include "imgui.h"
 #include "native/SmoothCamIntegration.h"
 #include "ui/Menu.h"
-#include "ui/MenuHost.h"
+#include "ui/MenuCameraProjection.h"
+#include "ui/MenuCharacterRotationRules.h"
 
 #include <algorithm>
 #include <array>
@@ -16,16 +17,50 @@ namespace {
 // Show Player In Menus-style `-requestedX - 75` conversion is intentionally
 // not used here: applying the same requested magnitude to both sides produces
 // asymmetric camera values (+90 / -240) because of the shoulder baseline.
-constexpr float kLeftCameraHorizontalOffset = 78.0f;
-constexpr float kRightCameraHorizontalOffset = -78.0f;
-constexpr float kCameraVerticalOffset = -30.0f;
-constexpr float kCameraDistance = 150.0f;
-constexpr float kMenuWorldFov = 90.0f;
-constexpr float kPlayerPitch = 0.27f;
+constexpr float kLeftCameraHorizontalOffset = 70.0f;
+constexpr float kRightCameraHorizontalOffset = -70.0f;
+constexpr float kCameraVerticalOffset = -45.0f;
+constexpr float kCameraDistance = 200.0f;
+constexpr float kMenuWorldFov = 70.0f;
+constexpr float kPlayerPitch = 0.1f;
 constexpr float kLeftFacingCorrection = 0.35f;
 constexpr float kRightFacingCorrection = -0.35f;
 constexpr float kMouseRotationRadiansPerPixel = 0.003f;
 constexpr float kMaxMouseRotationRadiansPerFrame = 0.060f;
+
+void ApplyMenuWorldFov(RE::PlayerCamera *a_camera) {
+  if (a_camera != nullptr) {
+    a_camera->worldFOV = kMenuWorldFov;
+  }
+  RE::DrawWorld::GetSingleton().worldFOV = kMenuWorldFov;
+}
+
+bool ApplyMenuViewFrustum(RE::NiCamera *a_camera) {
+  if (a_camera == nullptr) {
+    return false;
+  }
+
+  auto &frustum = a_camera->GetRuntimeData2().viewFrustum;
+  // PlayerCamera::worldFOV and DrawWorld::worldFOV are only the engine-side
+  // source values. During the SFS menu Skyrim can leave the active NiCamera's
+  // projection frustum unchanged, so update the rendered projection itself.
+  // Scaling all four lateral planes together preserves the active viewport's
+  // aspect ratio and any off-centre projection while changing only its FOV.
+  return camera_projection::SetHorizontalFov(frustum, kMenuWorldFov);
+}
+
+RE::NiCamera *GetActiveNiCamera(RE::PlayerCamera *a_camera) {
+  if (a_camera == nullptr || a_camera->cameraRoot == nullptr) {
+    return nullptr;
+  }
+  for (const auto &child : a_camera->cameraRoot->children) {
+    if (auto *niCamera = skyrim_cast<RE::NiCamera *>(child.get());
+        niCamera != nullptr) {
+      return niCamera;
+    }
+  }
+  return nullptr;
+}
 
 float NormalizeAngle(float a_angle) {
   constexpr auto twoPi = std::numbers::pi_v<float> * 2.0f;
@@ -155,9 +190,13 @@ struct MenuCharacterPresentation::State {
   float actorAngleX{0.0f};
   float actorAngleZ{0.0f};
   bool actorPitchModified{false};
+  RE::NiPointer<RE::NiCamera> fovCamera{};
+  RE::NiFrustum viewFrustum{};
+  bool viewFrustumSaved{false};
   float targetZoomOffset{0.0f};
   float pitchZoomOffset{0.0f};
   float worldFov{0.0f};
+  float drawWorldFov{0.0f};
   bool freeRotationEnabled{false};
   bool toggleAnimCam{false};
   bool headTrackingEnabled{false};
@@ -226,6 +265,7 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
   state_->targetZoomOffset = thirdPersonState->targetZoomOffset;
   state_->pitchZoomOffset = thirdPersonState->pitchZoomOffset;
   state_->worldFov = camera->worldFOV;
+  state_->drawWorldFov = RE::DrawWorld::GetSingleton().worldFOV;
   state_->freeRotationEnabled = thirdPersonState->freeRotationEnabled;
   state_->toggleAnimCam = thirdPersonState->toggleAnimCam;
   state_->side = a_side;
@@ -294,9 +334,18 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
   thirdPersonState->pitchZoomOffset = 0.1f;
   thirdPersonState->posOffsetExpected = state_->desiredPosOffset;
   thirdPersonState->posOffsetActual = state_->desiredPosOffset;
-  camera->worldFOV = kMenuWorldFov;
-
+  if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
+    state_->fovCamera.reset(niCamera);
+    state_->viewFrustum = niCamera->GetRuntimeData2().viewFrustum;
+    state_->viewFrustumSaved = true;
+  }
+  ApplyMenuWorldFov(camera);
   camera->Update();
+  if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
+    if (state_->fovCamera.get() == niCamera) {
+      static_cast<void>(ApplyMenuViewFrustum(niCamera));
+    }
+  }
   presentedActor->Update3DPosition(true);
   logger::debug("Applied SFS menu character presentation: side={}, actor={:08X}",
                 static_cast<std::uint8_t>(a_side),
@@ -304,9 +353,6 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
 }
 
 void MenuCharacterPresentation::Restore() {
-  // Covers every menu-closing path, including a window shutdown that happens
-  // while the right mouse button is still held.
-  MenuHost::EndCharacterRotationUnpause();
   if (state_ == nullptr) {
     return;
   }
@@ -365,9 +411,13 @@ void MenuCharacterPresentation::Restore() {
     }
   }
 
+  RE::DrawWorld::GetSingleton().worldFOV = state_->drawWorldFov;
   if (camera != nullptr) {
     camera->worldFOV = state_->worldFov;
     camera->Update();
+  }
+  if (state_->viewFrustumSaved && state_->fovCamera != nullptr) {
+    state_->fovCamera->GetRuntimeData2().viewFrustum = state_->viewFrustum;
   }
 
   state_->originalCameraState = nullptr;
@@ -379,6 +429,11 @@ void MenuCharacterPresentation::Restore() {
   state_->actorPitchModified = false;
   state_->side = MenuCharacterSide::Disabled;
   state_->rotating = false;
+  state_->worldFov = 0.0f;
+  state_->drawWorldFov = 0.0f;
+  state_->fovCamera.reset();
+  state_->viewFrustum = {};
+  state_->viewFrustumSaved = false;
   state_->active = false;
   native::smoothcam::ReleaseCameraControl();
   logger::debug("Restored SFS menu character presentation");
@@ -386,7 +441,6 @@ void MenuCharacterPresentation::Restore() {
 
 void MenuCharacterPresentation::UpdateRotationInteraction() {
   if (state_ == nullptr || ImGui::GetCurrentContext() == nullptr) {
-    MenuHost::EndCharacterRotationUnpause();
     return;
   }
   if (!state_->active &&
@@ -396,7 +450,6 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
     Apply(requestedSide, requestedActor.get());
   }
   if (!state_->active) {
-    MenuHost::EndCharacterRotationUnpause();
     return;
   }
 
@@ -412,26 +465,19 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
                                    ? io.MousePos.x >= io.DisplaySize.x * 0.55f
                                    : io.MousePos.x <= io.DisplaySize.x * 0.45f;
 
-  // The game may only advance while a deliberate character rotation is in
-  // progress.  Losing app focus is important here: Windows can swallow the
-  // matching right-button-up event when the game is alt-tabbed.
+  // Losing app focus can swallow the matching right-button-up event, so end
+  // the interaction explicitly without changing Skyrim's pause state.
   if (state_->rotating &&
       (!ImGui::IsMouseDown(ImGuiMouseButton_Right) ||
        rotationBlockedByPopup ||
        io.AppFocusLost)) {
     state_->rotating = false;
-    MenuHost::EndCharacterRotationUnpause();
   }
 
   if (!state_->rotating && !rotationBlockedByPopup && !overSfsWindow &&
       onCharacterSide &&
       ImGui::IsMouseClicked(ImGuiMouseButton_Right)) {
     state_->rotating = true;
-    // Fast SMP intentionally suspends all simulation while UI::GameIsPaused.
-    // Temporarily release SFS's own pause count so its nodes can follow this
-    // real player-heading rotation.  Gameplay controls stay blocked by SFS's
-    // menu context; release/focus loss restores the pause immediately.
-    MenuHost::BeginCharacterRotationUnpause();
   }
 
   auto presentedActor = state_->presentedActorHandle.get();
@@ -441,7 +487,6 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
       thirdPersonState == nullptr ||
       camera->currentState.get() != thirdPersonState) {
     state_->rotating = false;
-    MenuHost::EndCharacterRotationUnpause();
     return;
   }
 
@@ -454,26 +499,57 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
     auto cameraTargetHandle = state_->presentedActorHandle.native_handle();
     thirdPersonState->SetCameraHandle(cameraTargetHandle);
   }
-
+  if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
+    if (state_->viewFrustumSaved && state_->fovCamera.get() == niCamera) {
+      static_cast<void>(ApplyMenuViewFrustum(niCamera));
+    }
+  }
+  ApplyMenuWorldFov(camera);
   if (!state_->rotating || io.MouseDelta.x == 0.0f) {
     return;
   }
 
   // Large cursor deltas used to teleport the actor by tens or hundreds of
-  // degrees in one frame.  SMP bones then retained their previous world-space
-  // transforms and appeared pinned to the background.  Preserve proportional
-  // mouse control, but keep each physics-visible rotation step small enough
-  // for the equipped nodes to follow the actor.
+  // degrees in one frame. Preserve proportional control and keep each visible
+  // rotation step bounded.
   const auto delta =
       std::clamp(-io.MouseDelta.x * kMouseRotationRadiansPerPixel,
                  -kMaxMouseRotationRadiansPerFrame,
                  kMaxMouseRotationRadiansPerFrame);
-  presentedActor->SetHeading(
-      NormalizeAngle(presentedActor->data.angle.z + delta));
-  thirdPersonState->freeRotation.x =
-      NormalizeAngle(thirdPersonState->freeRotation.x - delta);
-  presentedActor->Update3DPosition(true);
-  camera->Update();
+  const auto gamePaused = [] {
+    auto *ui = RE::UI::GetSingleton();
+    return ui != nullptr && ui->GameIsPaused();
+  }();
+
+  const auto rotationPlan = character_rotation::BuildPlan(gamePaused);
+  if (!rotationPlan.rotateActor) {
+    // FSMP deliberately writes its last simulated world transforms while the
+    // game is paused. Rotating the actor root in that state leaves its physics
+    // bones behind and stretches the mesh toward the background. Orbit the
+    // menu camera instead: the same appearance angles remain inspectable while
+    // neither Skyrim's pause state nor any actor/SMP state is changed.
+    if (rotationPlan.orbitCamera) {
+      thirdPersonState->freeRotation.x =
+          NormalizeAngle(thirdPersonState->freeRotation.x - delta);
+    }
+    camera->Update();
+  } else {
+    presentedActor->SetHeading(
+        NormalizeAngle(presentedActor->data.angle.z + delta));
+    if (rotationPlan.orbitCamera) {
+      thirdPersonState->freeRotation.x =
+          NormalizeAngle(thirdPersonState->freeRotation.x - delta);
+    }
+    presentedActor->Update3DPosition(true);
+    camera->Update();
+  }
+
+  ApplyMenuWorldFov(camera);
+  if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
+    if (state_->viewFrustumSaved && state_->fovCamera.get() == niCamera) {
+      static_cast<void>(ApplyMenuViewFrustum(niCamera));
+    }
+  }
 }
 
 } // namespace sfs::ui

@@ -1,0 +1,58 @@
+[center]
+[size=6][b][color=#42ACC8]Skyrim Fitting System v1.5.2[/color][/b][/size]
+[/center]
+
+
+[line]
+[size=4][b][color=#42ACC8]Registered appearance locks[/color][/b][/size]
+
+
+[list]
+[*]Registered appearance cards can be locked or unlocked from the right-click menu. The actor-local lock is saved in the SKSE co-save and shown with a small lock icon.[/*]
+[*]Locked appearances survive Gear, Outfits, Conditions, Kits, and Kit Generator previews and applications. An incoming multi-slot card is omitted atomically if any displayed slot overlaps a lock.[/*]
+[*]Mod-Configured, Vanilla, Direct, DD Hider, and Helmet Toggle 2 automatic suppression cannot hide a locked appearance. Manual eye and condition behavior remain unchanged.[/*]
+[*]The right-click Lock, Unlock, and Dye labels are consistent in English, Korean, and Simplified Chinese.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Registered high heels and BodyMorph[/color][/b][/size]
+
+
+[list]
+[*]Registered appearances now synchronize mesh [font=Courier New]HH_OFFSET[/font] through RaceMenu's public NiTransform interface for the player, NPCs, and followers.[/*]
+[*]High-heel synchronization is actor-local and event driven across DAVE, DAV, native refreshes, and late DAVE attachments. It never equips a proxy or modifies actual equipment.[/*]
+[*]Fixed live RaceMenu BodyMorph on visible registered appearances across DAVE, DAV, native display, and deferred [font=Courier New]UpdateModelWeight[/font] processing without actor-state leakage.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Input and Fitting Dye[/color][/b][/size]
+
+
+[list]
+[*]Workbench kit lists accept W/S alongside directional controls, except while a real SFS text editor owns focus and shows its caret.[/*]
+[*]Fitting Dye excludes base-body and helper geometry for CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM, and Vanilla body families while retaining actual outfit components.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Menu camera and SMP[/color][/b][/size]
+
+
+[list]
+[*]Character framing and FOV are now identical with menu pause enabled or disabled. SFS uses FOV 70 only while open and restores the user's original camera and FOV on close.[/*]
+[*]SmoothCam control is acquired and returned through its public API boundary.[/*]
+[*]While paused, right-drag orbits the camera without moving the actor or SMP roots, preventing FSMP garments from stretching toward the background. With pause disabled, the existing live actor rotation and SMP follow behavior remains.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]Compatibility and packaging[/color][/b][/size]
+
+
+[list]
+[*]Actor ownership, DAVE/DAV/native separation, all four strip-link policies, DD, Pama, Grid Inventory, OAR, Helmet Toggle 2, IED compatibility, actual inventory, and equipment semantics remain isolated from the new state.[/*]
+[*]Added fast regression coverage for actor-local BodyMorph and suppression, virtual-token and actual-equipment transactions, Mod-Configured, Vanilla, Direct+ModSettings, Direct+Vanilla, and DAVE/DAV/native refresh dispatch.[/*]
+[*]Runtime and MO2 packages no longer include [font=Courier New]SFSCore.pdb[/font]. Debug symbols remain only in the local build tree for optional diagnostics.[/*]
+[/list]
