@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Skyrim Fitting System - 아카라이브 게시용</title>
+<style>
+body{max-width:980px;margin:32px auto;padding:0 24px;background:#202124;color:#e8eaed;font-family:Arial,"Noto Sans KR",sans-serif;line-height:1.72}
+h1,h2,h3{color:#42acc8;line-height:1.35} h1{text-align:center;font-size:2.2rem} h2{font-size:1.55rem} h3{font-size:1.2rem}
+hr{border:0;border-top:1px solid #4b4d50;margin:32px 0 20px} a{color:#63d3ea} code{background:#303236;padding:2px 5px;border-radius:4px}
+figure{text-align:center;margin:24px auto} figure img{display:block;width:75%;height:auto;margin:auto;border-radius:5px} figcaption{margin-top:7px;color:#aeb4ba;font-size:.9rem}
+blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;background:#292b2f} li{margin:4px 0}
+</style>
+</head>
+<body>
+<h1>Skyrim Fitting System v1.5.3</h1>
+<hr>
+<h2>주요 변경</h2>
+<ul>
+<li>SexLab P+ v2.12.0의 Skyrim 1.5.97&#183;1.6.1170 패키지에 별도 패치 없는 내장 탈의&#183;재착의 연동을 추가했습니다. 모드 설정&#183;직접 편집+모드 설정은 가상토큰, 바닐라&#183;직접 편집+바닐라는 기존 실제 장비 경로를 유지합니다.</li>
+<li>장비&#183;의상&#183;키트에 기본 활성화되는 바디 호환 필터 옵션을 추가했습니다. 불확실한 커스텀 액터는 전체 표시하며 등록 외형 작업대에는 필터를 적용하지 않습니다.</li>
+<li>스크롤바 드래그를 놓을 때 목록이 최상단으로 돌아가던 문제와 일시정지 상태의 다음 UI 실행에서 Left/Right 캐릭터 구도가 끝까지 적용되지 않던 문제를 수정했습니다.</li>
+<li>거짓 항목이 든 사용자 정의 조건을 다른 조건에서 다시 거짓으로 참조해 저장할 때 게임이 멈추던 문제를 수정했습니다.</li>
+<li>RaceMenu 구형 NiOverride transform, NiTransform v3 이상, 호환 BodyMorph v4/v5 경로를 버전별로 안전하게 선택하면서 플레이어&#183;NPC&#183;팔로워 및 DAVE&#183;DAV&#183;native 경계를 유지합니다.</li>
+<li>피팅 염색 대상에서 UBE의 <code>ArmColli</code>, <code>FeetColli</code>, <code>ButtLegColli</code> 같은 축약 충돌 헬퍼를 제외했습니다.</li>
+</ul>
+<hr>
+<h2>호환 경계</h2>
+<ul>
+<li>실제 장비&#183;인벤토리, 등록 외형&#183;조건&#183;잠금&#183;염색 저장, 네 가지 탈의 연동 정책, DD&#183;Pama&#183;Grid&#183;HT2&#183;OAR 및 IED 호환 체인은 변경하지 않았습니다.</li>
+<li>런타임 ZIP과 MO2에는 PDB를 넣지 않으며 디버그 심볼은 로컬 빌드 폴더에만 남습니다.</li>
+</ul>
+</body>
+</html>

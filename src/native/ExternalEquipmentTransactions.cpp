@@ -48,7 +48,10 @@ enum class TargetNative : std::uint8_t {
   SetOutfit,
   GlobalSetValue,
   ActorAddSpell,
-  ActorRemoveSpell
+  ActorRemoveSpell,
+  SexLabPPlusStripByData,
+  SexLabPPlusStripByDataEx,
+  SexLabPPlusUnequipSlots
 };
 
 struct EventExpectation {
@@ -107,6 +110,28 @@ std::atomic<RE::BSScript::IVirtualMachine *> g_observerVm{nullptr};
   return a_left && a_right && _stricmp(a_left, a_right) == 0;
 }
 
+[[nodiscard]] bool MatchesNativeSignature(
+    const NativeFunctionBase *a_function, const bool a_static,
+    const RE::BSScript::TypeInfo::RawType a_returnType,
+    const std::initializer_list<RE::BSScript::TypeInfo::RawType>
+        a_parameterTypes) {
+  if (!a_function || a_function->GetIsStatic() != a_static ||
+      a_function->GetReturnType().GetUnmangledRawType() != a_returnType ||
+      a_function->GetParamCount() != a_parameterTypes.size()) {
+    return false;
+  }
+  std::uint32_t index = 0;
+  for (const auto expectedType : a_parameterTypes) {
+    RE::BSFixedString name;
+    RE::BSScript::TypeInfo type;
+    a_function->GetParam(index++, name, type);
+    if (type.GetUnmangledRawType() != expectedType) {
+      return false;
+    }
+  }
+  return true;
+}
+
 [[nodiscard]] TargetNative
 ClassifyNative(const NativeFunctionBase *a_function) {
   if (!a_function) {
@@ -146,6 +171,34 @@ ClassifyNative(const NativeFunctionBase *a_function) {
                  std::memory_order_acquire) &&
              EqualNoCase(name, "SetValue")) {
     return TargetNative::GlobalSetValue;
+  } else if (EqualNoCase(object, "sslActorAlias")) {
+    if (EqualNoCase(name, "StripByData") &&
+        MatchesNativeSignature(
+            a_function, false,
+            RE::BSScript::TypeInfo::RawType::kObjectArray,
+            {RE::BSScript::TypeInfo::RawType::kInt,
+             RE::BSScript::TypeInfo::RawType::kIntArray,
+             RE::BSScript::TypeInfo::RawType::kIntArray})) {
+      return TargetNative::SexLabPPlusStripByData;
+    }
+    if (EqualNoCase(name, "StripByDataEx") &&
+        MatchesNativeSignature(
+            a_function, false,
+            RE::BSScript::TypeInfo::RawType::kObjectArray,
+            {RE::BSScript::TypeInfo::RawType::kInt,
+             RE::BSScript::TypeInfo::RawType::kIntArray,
+             RE::BSScript::TypeInfo::RawType::kIntArray,
+             RE::BSScript::TypeInfo::RawType::kObjectArray})) {
+      return TargetNative::SexLabPPlusStripByDataEx;
+    }
+  } else if (EqualNoCase(object, "sslActorLibrary") &&
+             EqualNoCase(name, "UnequipSlots") &&
+             MatchesNativeSignature(
+                 a_function, true,
+                 RE::BSScript::TypeInfo::RawType::kObjectArray,
+                 {RE::BSScript::TypeInfo::RawType::kObject,
+                  RE::BSScript::TypeInfo::RawType::kInt})) {
+    return TargetNative::SexLabPPlusUnequipSlots;
   }
   return TargetNative::None;
 }
@@ -167,6 +220,12 @@ ClassifyNative(const NativeFunctionBase *a_function) {
   case TargetNative::GlobalSetValue: return "GlobalVariable.SetValue";
   case TargetNative::ActorAddSpell: return "Actor.AddSpell";
   case TargetNative::ActorRemoveSpell: return "Actor.RemoveSpell";
+  case TargetNative::SexLabPPlusStripByData:
+    return "sslActorAlias.StripByData";
+  case TargetNative::SexLabPPlusStripByDataEx:
+    return "sslActorAlias.StripByDataEx";
+  case TargetNative::SexLabPPlusUnequipSlots:
+    return "sslActorLibrary.UnequipSlots";
   default: return "None";
   }
 }
@@ -549,7 +608,13 @@ void StageCurrentWornUnequipExpectations(HookOperation &a_operation,
   }
 
   auto &frame = *a_stack->top;
-  if (a_target == TargetNative::RemoveItem ||
+  if (a_target == TargetNative::SexLabPPlusStripByData ||
+      a_target == TargetNative::SexLabPPlusStripByDataEx) {
+    auto *alias = frame.self.Unpack<RE::BGSRefAlias *>();
+    operation.actor = alias ? alias->GetActorReference() : nullptr;
+  } else if (a_target == TargetNative::SexLabPPlusUnequipSlots) {
+    operation.actor = ReadArgument<RE::Actor *>(frame, 0);
+  } else if (a_target == TargetNative::RemoveItem ||
       a_target == TargetNative::RemoveAllItems ||
       a_target == TargetNative::DropObject) {
     auto *reference = frame.self.Unpack<RE::TESObjectREFR *>();
@@ -603,6 +668,14 @@ void StageCurrentWornUnequipExpectations(HookOperation &a_operation,
   }
   case TargetNative::UnequipAll:
   case TargetNative::RemoveAllItems:
+  case TargetNative::SexLabPPlusStripByData:
+  case TargetNative::SexLabPPlusStripByDataEx:
+  case TargetNative::SexLabPPlusUnequipSlots:
+    // P+ performs its inventory loop and ActorEquipManager calls wholly
+    // inside these native functions. Stage the actor's current equipment
+    // before entering P+ so the existing actor-local event ledger can accept
+    // only the forms that P+ actually removes. This is active exclusively for
+    // Vanilla and Direct+Vanilla policies.
     StageCurrentWornUnequipExpectations(operation, a_stack->stackID);
     break;
   case TargetNative::SetOutfit:
@@ -882,8 +955,8 @@ bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm) {
 
   g_observerVm.store(a_vm, std::memory_order_release);
 
-  constexpr std::array<std::string_view, 2> kTargetTypes{
-      "Actor", "ObjectReference"};
+  constexpr std::array<std::string_view, 4> kTargetTypes{
+      "Actor", "ObjectReference", "sslActorAlias", "sslActorLibrary"};
   std::size_t patchedCount = 0;
   for (const auto typeName : kTargetTypes) {
     RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> type;

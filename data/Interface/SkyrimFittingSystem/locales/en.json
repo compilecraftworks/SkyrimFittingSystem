@@ -106,6 +106,8 @@
     "options.pause_game_while_open": "Pause Game While Open",
     "options.smooth_scrolling": "Smooth Scrolling",
     "options.add_crosshair_npc": "Add NPC via Crosshair",
+    "options.catalog_body_family_filter": "Show Only Body-Compatible Items",
+    "options.catalog_body_family_filter.tooltip": "Filters the Equipment, Outfits, and Kits catalogs for the selected actor's confidently detected body family. The workbench and uncertain actors remain unfiltered.",
     "options.ui_opacity": "UI Opacity",
     "options.external_mod_strip_link": "External Mod Strip Link",
     "options.external_mod_strip_link.tooltip": "Hide and restore registered appearances only when an external mod unequips and re-equips actual gear. Manual inventory changes are ignored.",

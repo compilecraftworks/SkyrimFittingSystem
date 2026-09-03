@@ -6,6 +6,7 @@
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
+#include "native/SexLabPPlusRules.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
@@ -1362,6 +1363,20 @@ void ObserveActorContextWardrobeBoundary(RE::Actor *a_actor) {
       });
 }
 
+[[nodiscard]] std::uint64_t GetRestorableTicketTransaction(
+    const RE::FormID a_actorID, const RE::FormID a_itemID) {
+  if (a_actorID == 0 || a_itemID == 0) {
+    return 0;
+  }
+  std::lock_guard lock(g_runtimeMutex);
+  const auto ticket = std::ranges::find_if(
+      g_suppressionTickets, [&](const SuppressionTicket &a_candidate) {
+        return a_candidate.actorID == a_actorID &&
+               a_candidate.restoreItemID == a_itemID;
+      });
+  return ticket != g_suppressionTickets.end() ? ticket->transactionID : 0;
+}
+
 void RestoreTickets(const RE::FormID a_actorID, const RE::FormID a_itemID,
                     const std::string_view a_source) {
   if (a_actorID == 0 || a_itemID == 0) {
@@ -1891,19 +1906,22 @@ enum class TargetNative {
   RemoveAllItems,
   DropObject,
   SetOutfit,
-  DeviousDevicesSyncSetting
+  DeviousDevicesSyncSetting,
+  SexLabPPlusStripByData,
+  SexLabPPlusStripByDataEx,
+  SexLabPPlusUnequipSlots
 };
 
 [[nodiscard]] bool EqualNoCase(const char *a_left, const char *a_right) {
   return a_left && a_right && _stricmp(a_left, a_right) == 0;
 }
 
-[[nodiscard]] bool MatchesStaticNativeSignature(
-    const NativeFunctionBase *a_function,
+[[nodiscard]] bool MatchesNativeSignature(
+    const NativeFunctionBase *a_function, const bool a_static,
     const RE::BSScript::TypeInfo::RawType a_returnType,
     const std::initializer_list<RE::BSScript::TypeInfo::RawType>
         a_parameterTypes) {
-  if (!a_function || !a_function->GetIsStatic() ||
+  if (!a_function || a_function->GetIsStatic() != a_static ||
       a_function->GetReturnType().GetUnmangledRawType() != a_returnType ||
       a_function->GetParamCount() != a_parameterTypes.size()) {
     return false;
@@ -1918,6 +1936,24 @@ enum class TargetNative {
     }
   }
   return true;
+}
+
+[[nodiscard]] bool MatchesStaticNativeSignature(
+    const NativeFunctionBase *a_function,
+    const RE::BSScript::TypeInfo::RawType a_returnType,
+    const std::initializer_list<RE::BSScript::TypeInfo::RawType>
+        a_parameterTypes) {
+  return MatchesNativeSignature(a_function, true, a_returnType,
+                                a_parameterTypes);
+}
+
+[[nodiscard]] bool MatchesMemberNativeSignature(
+    const NativeFunctionBase *a_function,
+    const RE::BSScript::TypeInfo::RawType a_returnType,
+    const std::initializer_list<RE::BSScript::TypeInfo::RawType>
+        a_parameterTypes) {
+  return MatchesNativeSignature(a_function, false, a_returnType,
+                                a_parameterTypes);
 }
 
 [[nodiscard]] TargetNative
@@ -2037,6 +2073,32 @@ ClassifyNativeUncached(const NativeFunctionBase *a_function) {
   } else if (EqualNoCase(object, "ZadNativeFunctions") &&
              EqualNoCase(name, "SyncSetting")) {
     return TargetNative::DeviousDevicesSyncSetting;
+  } else if (EqualNoCase(object, "sslActorAlias")) {
+    if (EqualNoCase(name, "StripByData") &&
+        MatchesMemberNativeSignature(
+            a_function, RE::BSScript::TypeInfo::RawType::kObjectArray,
+            {RE::BSScript::TypeInfo::RawType::kInt,
+             RE::BSScript::TypeInfo::RawType::kIntArray,
+             RE::BSScript::TypeInfo::RawType::kIntArray})) {
+      return TargetNative::SexLabPPlusStripByData;
+    }
+    if (EqualNoCase(name, "StripByDataEx") &&
+        MatchesMemberNativeSignature(
+            a_function, RE::BSScript::TypeInfo::RawType::kObjectArray,
+            {RE::BSScript::TypeInfo::RawType::kInt,
+             RE::BSScript::TypeInfo::RawType::kIntArray,
+             RE::BSScript::TypeInfo::RawType::kIntArray,
+             RE::BSScript::TypeInfo::RawType::kObjectArray})) {
+      return TargetNative::SexLabPPlusStripByDataEx;
+    }
+  } else if (EqualNoCase(object, "sslActorLibrary") &&
+             EqualNoCase(name, "UnequipSlots") &&
+             MatchesStaticNativeSignature(
+                 a_function,
+                 RE::BSScript::TypeInfo::RawType::kObjectArray,
+                 {RE::BSScript::TypeInfo::RawType::kObject,
+                  RE::BSScript::TypeInfo::RawType::kInt})) {
+    return TargetNative::SexLabPPlusUnequipSlots;
   }
   return TargetNative::None;
 }
@@ -2080,6 +2142,7 @@ struct HookOperation {
   std::vector<RE::TESForm *> filterForms;
   std::vector<RE::BGSKeyword *> filterKeywords;
   std::vector<std::string> filterKeywordStrings;
+  std::unordered_set<RE::FormID> pplusMergeInputForms;
   std::string keywordSubstring;
   RE::BGSKeyword *keyword{nullptr};
   std::int32_t keywordIndex{-1};
@@ -2130,6 +2193,12 @@ struct HookOperation {
   case TargetNative::DropObject: return "DropObject";
   case TargetNative::SetOutfit: return "SetOutfit";
   case TargetNative::DeviousDevicesSyncSetting: return "DDSyncSetting";
+  case TargetNative::SexLabPPlusStripByData:
+    return "sslActorAlias.StripByData";
+  case TargetNative::SexLabPPlusStripByDataEx:
+    return "sslActorAlias.StripByDataEx";
+  case TargetNative::SexLabPPlusUnequipSlots:
+    return "sslActorLibrary.UnequipSlots";
   default: return "None";
   }
 }
@@ -2175,6 +2244,12 @@ void ApplyDisplayedBodyKeywordCompatibility(
   } else if (a_target == TargetNative::AddAllEquippedItemsToArray) {
     // Equipped-array helpers expose the actor as the first argument, not the
     // Papyrus self object.
+    operation.actor = ReadArgument<RE::Actor *>(frame, 0);
+  } else if (a_target == TargetNative::SexLabPPlusStripByData ||
+             a_target == TargetNative::SexLabPPlusStripByDataEx) {
+    auto *alias = frame.self.Unpack<RE::BGSRefAlias *>();
+    operation.actor = alias ? alias->GetActorReference() : nullptr;
+  } else if (a_target == TargetNative::SexLabPPlusUnequipSlots) {
     operation.actor = ReadArgument<RE::Actor *>(frame, 0);
   } else if (a_target == TargetNative::AddItem ||
       a_target == TargetNative::RemoveItem ||
@@ -2259,6 +2334,31 @@ void ApplyDisplayedBodyKeywordCompatibility(
     break;
   case TargetNative::SetOutfit:
     operation.outfit = ReadArgument<RE::BGSOutfit *>(frame, 0);
+    break;
+  case TargetNative::SexLabPPlusStripByData:
+  case TargetNative::SexLabPPlusStripByDataEx: {
+    const auto stripData = ReadArgument<std::int32_t>(frame, 0);
+    const auto defaults =
+        ReadArgument<std::vector<std::int32_t>>(frame, 1);
+    const auto overwrites =
+        ReadArgument<std::vector<std::int32_t>>(frame, 2);
+    operation.requestedMask =
+        sfs::native::sexlab_pplus::rules::ResolveStripSlotMask(
+            stripData, defaults, overwrites);
+    if (a_target == TargetNative::SexLabPPlusStripByDataEx) {
+      const auto merge =
+          ReadArgument<std::vector<RE::TESForm *>>(frame, 3);
+      for (auto *form : merge) {
+        if (form) {
+          operation.pplusMergeInputForms.insert(form->GetFormID());
+        }
+      }
+    }
+    break;
+  }
+  case TargetNative::SexLabPPlusUnequipSlots:
+    operation.requestedMask =
+        static_cast<std::uint32_t>(ReadArgument<std::int32_t>(frame, 1));
     break;
   default: break;
   }
@@ -2818,6 +2918,138 @@ BuildEffectiveSourceKeywords(RE::TESObjectARMO *a_source) {
   });
 }
 
+[[nodiscard]] bool SourceHasRawKeywordSubstring(
+    RE::TESObjectARMO *a_source, const std::string_view a_substring) {
+  if (!a_source) {
+    return false;
+  }
+  const auto keywords = a_source->GetKeywords();
+  return std::ranges::any_of(keywords, [&](const auto *keyword) {
+    return keyword && ContainsNoCase(sfs::armor::GetEditorID(keyword),
+                                     a_substring);
+  });
+}
+
+[[nodiscard]] bool IsSexLabPPlusStripTarget(
+    const TargetNative a_target) {
+  return a_target == TargetNative::SexLabPPlusStripByData ||
+         a_target == TargetNative::SexLabPPlusStripByDataEx ||
+         a_target == TargetNative::SexLabPPlusUnequipSlots;
+}
+
+void HandleSexLabPPlusStripResult(const HookOperation &a_operation,
+                                  RE::BSScript::Stack &a_stack) {
+  const auto actorID = ActorID(a_operation.actor);
+  if (!IsSexLabPPlusStripTarget(a_operation.target) || actorID == 0 ||
+      GetRegisteredMask(actorID) == 0 ||
+      !a_stack.returnValue.IsArray()) {
+    return;
+  }
+
+  auto forms = a_stack.returnValue.Unpack<std::vector<RE::TESForm *>>();
+  auto effectiveMask = a_operation.requestedMask;
+  for (auto *form : forms) {
+    if (!form || MaskForToken(form) != 0 ||
+        (a_operation.target == TargetNative::SexLabPPlusStripByDataEx &&
+         a_operation.pplusMergeInputForms.contains(form->GetFormID()))) {
+      continue;
+    }
+    auto *armor = form->As<RE::TESObjectARMO>();
+    if (!armor ||
+        sfs::poc::IsDeviousDevicesEquipmentTransactionArmor(armor)) {
+      continue;
+    }
+    // StripByData can remove an explicit AlwaysStrip item outside its slot
+    // policy. Only newly returned armor contributes this evidence;
+    // StripByDataEx's pre-existing merge entries are deliberately ignored.
+    effectiveMask |= static_cast<std::uint32_t>(
+        sfs::armor::GetArmorDisplaySlotMask(armor));
+  }
+
+  std::unordered_map<std::uint32_t, std::vector<RegisteredAppearance>>
+      appearancesByRestoreToken;
+  for (const auto &appearance : GetRegisteredAppearances(actorID)) {
+    auto *source = RE::TESForm::LookupByID<RE::TESObjectARMO>(
+        appearance.armorID);
+    const bool noStrip = SourceHasRawKeywordSubstring(source, "NoStrip");
+    const bool alwaysStrip =
+        !noStrip && SourceHasRawKeywordSubstring(source, "AlwaysStrip");
+    if (!sfs::native::sexlab_pplus::rules::ShouldStripAppearance(
+            effectiveMask, appearance.tokenSlotMask, noStrip,
+            alwaysStrip)) {
+      continue;
+    }
+    const auto restoreTokenMask =
+        sfs::native::sexlab_pplus::rules::SelectRestoreTokenMask(
+            effectiveMask, appearance.tokenSlotMask, alwaysStrip);
+    if (restoreTokenMask != 0) {
+      // A multi-slot appearance is atomic. Give it one deterministic token
+      // owner so one P+ redress call restores the whole card rather than
+      // requiring every overlapping slot token to succeed independently.
+      appearancesByRestoreToken[restoreTokenMask].push_back(appearance);
+    }
+  }
+  if (appearancesByRestoreToken.empty()) {
+    return;
+  }
+
+  std::unordered_set<RE::FormID> returnedFormIDs;
+  for (auto *form : forms) {
+    if (form) {
+      returnedFormIDs.insert(form->GetFormID());
+    }
+  }
+
+  std::uint64_t newTransactionID = 0;
+  std::size_t appended = 0;
+  std::size_t linkedAppearances = 0;
+  const auto sourceName = TargetName(a_operation.target);
+  for (std::uint32_t slot = kFirstSlot; slot <= kLastSlot; ++slot) {
+    const auto tokenMask = SlotMask(slot);
+    const auto group = appearancesByRestoreToken.find(tokenMask);
+    if (group == appearancesByRestoreToken.end() || group->second.empty()) {
+      continue;
+    }
+    auto *token = g_tokens[TokenIndexForSlot(slot)];
+    if (!token) {
+      continue;
+    }
+
+    auto transactionID =
+        GetRestorableTicketTransaction(actorID, token->GetFormID());
+    if (transactionID == 0) {
+      if (newTransactionID == 0) {
+        newTransactionID = EnsureStripTransaction(
+            a_operation.actor, a_stack.stackID, sourceName);
+      }
+      transactionID = newTransactionID;
+    }
+    if (transactionID == 0 ||
+        AddTicket(actorID, token->GetFormID(), group->second, sourceName,
+                  transactionID, 0,
+                  ShouldQueueVirtualStripRefresh(transactionID)) == 0) {
+      continue;
+    }
+
+    linkedAppearances += group->second.size();
+    if (returnedFormIDs.insert(token->GetFormID()).second) {
+      forms.push_back(token);
+      ++appended;
+    }
+  }
+  if (linkedAppearances == 0) {
+    return;
+  }
+  if (appended != 0) {
+    a_stack.returnValue.Pack(forms);
+  }
+  logger::info("SexLab P+ virtual strip linked actor={:08X} source={} "
+               "requestedMask={:08X} effectiveMask={:08X} "
+               "appearances={} appendedTokens={} stack={}",
+               actorID, sourceName, a_operation.requestedMask, effectiveMask,
+               linkedAppearances, appended, a_stack.stackID);
+}
+
 [[nodiscard]] bool MatchesKeywordFilter(
     RE::TESObjectARMO *a_source,
     const std::span<RE::BGSKeyword *const> a_keywords,
@@ -3213,6 +3445,8 @@ struct NativeDispatchHook {
       ApplyDisplayedBodyKeywordCompatibility(operation, *a_stack);
     } else if (target == TargetNative::AddAllEquippedItemsToArray) {
       HandleEquippedArrayResult(operation, *a_stack);
+    } else if (IsSexLabPPlusStripTarget(target)) {
+      HandleSexLabPPlusStripResult(operation, *a_stack);
     } else if (target == TargetNative::FormHasKeyword ||
                target == TargetNative::FormGetKeywords ||
                target == TargetNative::FormGetNumKeywords ||
@@ -3579,8 +3813,9 @@ struct NativeRegistrationHook {
   // other Papyrus type is inspected lazily by ScriptTypeLoadHook when the
   // game or a newly installed mod naturally loads it; no mod or PEX name is
   // enumerated here.
-  constexpr std::array<std::string_view, 3> targetTypes{
-      "Actor", "Form", "ObjectReference"};
+  constexpr std::array<std::string_view, 5> targetTypes{
+      "Actor", "Form", "ObjectReference", "sslActorAlias",
+      "sslActorLibrary"};
   std::size_t patchedCount = 0;
   for (const auto typeName : targetTypes) {
     RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> type;

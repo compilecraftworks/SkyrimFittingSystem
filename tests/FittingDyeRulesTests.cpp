@@ -29,7 +29,8 @@ void TestVanillaBodyComponentsAreExcluded() {
                            "MaleHands", "FemaleFeet", "MaleFeet",
                            "VanillaBody",
                            "FemaleGenitals", "MaleGenitals",
-                           "VirtualCBBE", "LowerCollision"}) {
+                           "VirtualCBBE", "LowerCollision", "ArmColli",
+                           "FeetColli", "ButtLegColli"}) {
     Require(IsCharacterBaseComponent(shape, "armor_piece.dds"),
             "Vanilla body and renderer-helper shapes must be excluded");
   }
@@ -47,15 +48,35 @@ void TestVanillaBodyComponentsAreExcluded() {
   }
 }
 
+void TestUbeRaceSpecificComponentsAreExcluded() {
+  for (const auto shape : {"VaginaB1", "VaginaDeep1", "NPC RB Anus2",
+                           "NPC Anus Deep2", "Genitals"}) {
+    Require(IsCharacterBaseComponent(shape, "outfit_component.dds"),
+            "UBE anatomical body/helper shapes must never enter the dye list");
+  }
+
+  Require(IsCharacterBaseComponent(
+              "UnlabelledShape", "Textures/!UBE/Body/femalebody_1_d.dds"),
+          "UBE base-body diffuse paths must be excluded independently of shape names");
+}
+
 void TestOutfitComponentsRemainDyeableCandidates() {
   for (const auto shape : {"upper", "leg", "Lower", "PEW_00_Headwear",
-                           "samurai_armor", "uber_coat", "cube_armor"}) {
+                           "samurai_armor", "uber_coat", "cube_armor",
+                           "Collier", "CollimatorArmor"}) {
     Require(!IsCharacterBaseComponent(shape, "armor_piece.dds"),
             "Unrelated outfit components must not be filtered by substrings");
   }
   Require(!IsCharacterBaseComponent(
               "Dress", "textures/armor/example/cbbe_dress.dds"),
           "A family-labelled outfit diffuse must not be mistaken for a base body");
+
+  for (const auto shape : {"XF-Femme Flame Top", "UV1_Bra",
+                           "CorsetTop"}) {
+    Require(!IsCharacterBaseComponent(
+                shape, "textures/!UBE/outfits/example_basecolor.dds"),
+            "UBE outfit components under the race-specific path must remain dyeable");
+  }
 }
 } // namespace
 
@@ -63,6 +84,7 @@ int main() {
   try {
     TestSupportedBodyFamiliesAreExcluded();
     TestVanillaBodyComponentsAreExcluded();
+    TestUbeRaceSpecificComponentsAreExcluded();
     TestOutfitComponentsRemainDyeableCandidates();
     std::cout << "FittingDyeRulesTests passed\n";
     return 0;

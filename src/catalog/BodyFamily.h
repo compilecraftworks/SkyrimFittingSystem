@@ -65,6 +65,8 @@ inline constexpr Mask kAllFamilies = kFemaleFamilies | kMaleFamilies;
 
 // Resolves one family for the selected actor. This is actor-local and cached by
 // the actor's effective Skin/Race/3D signature; it never scans nearby actors.
+// Returns zero when the available evidence is absent or ambiguous so callers
+// can fail open instead of hiding valid catalog entries.
 [[nodiscard]] Mask ResolveActor(RE::Actor *a_actor);
 
 // Clears actor and installed-framework runtime caches across save transitions.

@@ -8,31 +8,42 @@
 
 
 [list]
-[*]등록 외형 카드 우클릭 메뉴에서 잠금·잠금 해제를 할 수 있습니다. 액터별 잠금 상태는 SKSE 코세이브에 저장하고 이름 뒤에 작은 자물쇠 아이콘을 표시합니다.[/*]
-[*]잠긴 외형은 장비·의상·조건·키트·키트 생성기 미리보기와 적용에서 유지됩니다. 새 멀티슬롯 카드가 잠긴 외형의 표시 슬롯과 하나라도 겹치면 카드 전체를 제외합니다.[/*]
-[*]모드 설정·바닐라·직접 편집 탈의 연동과 DD Hider·Helmet Toggle 2 자동 억제로 잠긴 외형을 숨기지 않습니다. 수동 눈과 조건 동작은 기존대로 유지합니다.[/*]
-[*]우클릭 메뉴의 잠금·잠금 해제·염색 문구를 한·중·영에서 일관되게 표시합니다.[/*]
+[*]등록 외형 카드의 우클릭 메뉴에서 외형을 잠그거나 잠금 해제할 수 있습니다. 이름 뒤에 작은 자물쇠 아이콘을 표시하며 액터별 잠금 상태는 SKSE 코세이브에 저장합니다.[/*]
+[*]우클릭 메뉴의 [font=Courier New]잠금[/font], [font=Courier New]잠금 해제[/font], [font=Courier New]염색[/font] 문구를 한·중·영에서 일관되게 표시합니다.[/*]
+[*]잠긴 외형은 장비·의상·조건·키트·키트 생성기 결과를 미리 보거나 적용할 때 그대로 유지됩니다. 새 멀티슬롯 외형의 표시 슬롯 하나라도 잠긴 외형과 겹치면 해당 카드를 통째로 제외합니다.[/*]
+[*]모드 설정·바닐라·직접 편집 탈의 연동과 DD Hider·Helmet Toggle 2의 자동 억제로 잠긴 외형을 숨기지 않습니다. 수동 눈 상태와 조건 결과는 기존 동작을 유지합니다.[/*]
 [/list]
 
 
 [line]
-[size=4][b][color=#42ACC8]등록 하이힐과 BodyMorph[/color][/b][/size]
+[size=4][b][color=#42ACC8]등록 외형 하이힐[/color][/b][/size]
 
 
 [list]
-[*]등록 외형 메시의 [font=Courier New]HH_OFFSET[/font]을 RaceMenu 공개 NiTransform 인터페이스로 플레이어·NPC·팔로워에게 동기화합니다.[/*]
-[*]DAVE·DAV·native 갱신과 늦은 DAVE 부착을 액터별 이벤트로 처리하며 프록시를 착용시키거나 실제 장비를 변경하지 않습니다.[/*]
-[*]표시 중인 등록 외형의 RaceMenu 실시간 BodyMorph를 DAVE·DAV·native 및 지연 [font=Courier New]UpdateModelWeight[/font] 경로에서 수정하고 액터 간 상태 누수를 차단했습니다.[/*]
+[*]등록 외형 메시의 [font=Courier New]HH_OFFSET[/font] 값을 RaceMenu 공개 NiTransform 인터페이스로 플레이어·NPC·팔로워에게 동기화합니다.[/*]
+[*]DAVE·DAV·native 표시 갱신과 늦게 완료되는 DAVE 부착 콜백을 액터별 이벤트로 처리합니다. 주변 액터를 스캔하거나 프록시 장비를 착용시키지 않고 실제 장비도 변경하지 않습니다.[/*]
+[*]SFS의 임시 변환 부트스트랩만 제거하며 실제 착용한 하이힐에 대한 RaceMenu 처리는 보존합니다.[/*]
 [/list]
 
 
 [line]
-[size=4][b][color=#42ACC8]입력과 피팅 염색[/color][/b][/size]
+[size=4][b][color=#42ACC8]BodyMorph 회귀 수정[/color][/b][/size]
 
 
 [list]
-[*]작업대 키트 목록을 방향키와 함께 W/S로 탐색할 수 있습니다. 실제 SFS 텍스트 입력란에 편집 커서가 활성화된 동안에는 처리하지 않습니다.[/*]
-[*]피팅 염색 목록에서 CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM 및 바닐라 계열의 기본 몸체·헬퍼 지오메트리를 제외하고 실제 의상 조각만 유지합니다.[/*]
+[*]등록 외형이 표시된 상태에서도 RaceMenu 실시간 BodyMorph가 정상 적용되도록 수정했습니다. 플레이어·NPC·팔로워의 액터별 부착 상태를 유지합니다.[/*]
+[*]DAVE·DAV·native 표시 갱신과 지연 [font=Courier New]UpdateModelWeight[/font] 경로에서 동일하게 동작하며, 외형 숨김·표시 또는 액터 전환 상태가 다른 액터로 누수되지 않습니다.[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]입력·염색·배포[/color][/b][/size]
+
+
+[list]
+[*]작업대 키트 목록을 기존 방향키와 함께 W/S로 탐색할 수 있습니다. 실제 SFS 텍스트 입력란이 키보드 포커스와 편집 커서를 가진 동안에는 이 탐색 입력을 처리하지 않습니다.[/*]
+[*]피팅 염색 목록에서 CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM 및 바닐라 바디 계열의 기본 몸체·헬퍼 지오메트리를 제외하고 실제 의상 조각만 유지합니다.[/*]
+[*]런타임 ZIP과 MO2 배포에서 PDB를 제외합니다. 디버그 심볼은 필요할 때 쓸 수 있도록 로컬 빌드 폴더에만 남깁니다.[/*]
 [/list]
 
 
@@ -41,18 +52,18 @@
 
 
 [list]
-[*]일시정지 ON/OFF에서 캐릭터 구도와 FOV를 동일하게 적용합니다. SFS가 열려 있는 동안만 FOV 70을 사용하고 종료 시 원래 카메라와 FOV를 복원합니다.[/*]
-[*]SmoothCam 공개 API 경계에서 제어권을 요청하고 메뉴 종료 시 반환합니다.[/*]
-[*]일시정지 중 우클릭은 액터와 SMP 본을 움직이지 않고 카메라만 선회해 FSMP 의상이 배경으로 늘어나는 현상을 방지합니다. 일시정지 해제 상태에서는 기존처럼 액터가 회전하고 SMP가 따라갑니다.[/*]
+[*]메뉴 캐릭터의 FOV와 구도를 일시정지 ON/OFF에서 동일하게 적용합니다. SFS 메뉴에서만 FOV 70을 사용하고 종료 시 원래 카메라·FOV를 복원합니다.[/*]
+[*]SmoothCam의 공개 제어권 경계를 사용하며 메뉴 종료 시 정상 반환합니다.[/*]
+[*]일시정지 중 우클릭 회전은 액터와 SMP 본을 움직이지 않고 카메라만 선회합니다. FSMP가 정지 중 마지막 물리 본 좌표를 유지하면서 의상이 배경에 붙어 늘어나던 현상을 방지합니다. 일시정지 해제 상태에서는 기존처럼 액터가 회전하고 SMP가 실시간으로 따라갑니다.[/*]
 [/list]
 
 
 [line]
-[size=4][b][color=#42ACC8]호환성과 배포[/color][/b][/size]
+[size=4][b][color=#42ACC8]호환 경계[/color][/b][/size]
 
 
 [list]
-[*]액터 소유권, DAVE/DAV/native 분리, 네 탈의 연동 정책, DD, Pama, Grid Inventory, OAR, Helmet Toggle 2, IED 호환, 실제 인벤토리와 장비 의미를 새 상태와 분리해 유지합니다.[/*]
-[*]액터별 BodyMorph·억제, 가상토큰·실제 장비 트랜잭션, ModSettings·Vanilla·Direct+ModSettings·Direct+Vanilla와 DAVE·DAV·native 분기를 검증하는 빠른 회귀 테스트를 추가했습니다.[/*]
-[*]런타임 ZIP과 MO2 배포에서 [font=Courier New]SFSCore.pdb[/font]를 제외합니다. 디버그 심볼은 선택적 진단을 위해 로컬 빌드 폴더에만 남깁니다.[/*]
+[*]액터 소유권, DAVE/DAV/native 분리, BodyMorph·염색 상태, 모드 설정·바닐라· 직접 편집 탈의 연동, DD, Pama, Grid Inventory, OAR, Helmet Toggle 2 상태는 새 잠금·하이힐 상태와 분리해 유지합니다.[/*]
+[*]IED 호환 [font=Courier New]VisitWornItems[/font] 체인과 실제 인벤토리·장비 의미는 변경하지 않았습니다.[/*]
+[*]액터별 BodyMorph·가상토큰·실제 장비 트랜잭션, 네 가지 탈의 연동 정책과 DAVE·DAV·native 갱신 분기를 프로덕션 규칙과 공유하는 빠른 회귀 테스트를 추가했습니다.[/*]
 [/list]

@@ -252,6 +252,8 @@ void Menu::LoadUserSettings() {
             : ui::MenuCharacterSide::Right;
     addCrosshairNpcToActorList_ =
         json.value("addCrosshairNpcToActorList", addCrosshairNpcToActorList_);
+    catalogBodyFamilyFilterEnabled_ = json.value(
+        "catalogBodyFamilyFilterEnabled", catalogBodyFamilyFilterEnabled_);
     workbench::SetSpecialEffectProtectedSlotMask(
         ParseSpecialEffectProtectedSlots(json));
     workbench::SetShieldAppearanceSlotEnabled(
@@ -384,6 +386,7 @@ void Menu::SaveUserSettings() const {
       {"smoothScroll", smoothScroll_},
       {"menuCharacterSide", static_cast<std::uint8_t>(menuCharacterSide_)},
       {"addCrosshairNpcToActorList", addCrosshairNpcToActorList_},
+      {"catalogBodyFamilyFilterEnabled", catalogBodyFamilyFilterEnabled_},
       {"specialEffectProtectedSlots",
        BuildSpecialEffectProtectedSlotNumbers(
            workbench::GetSpecialEffectProtectedSlotMask())},

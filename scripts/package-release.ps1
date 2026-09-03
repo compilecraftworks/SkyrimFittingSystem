@@ -120,7 +120,8 @@ $sourceDocs = @(
     'OpenAnimationReplacer-Conditions.md', 'SkyrimFittingSystem-Menu-API.md',
     'RELEASE-NOTES-v1.5.0.md', 'RELEASE-NOTES-v1.5.0-ko.md',
     'RELEASE-NOTES-v1.5.1.md', 'RELEASE-NOTES-v1.5.1-ko.md',
-    'RELEASE-NOTES-v1.5.2.md', 'RELEASE-NOTES-v1.5.2-ko.md'
+    'RELEASE-NOTES-v1.5.2.md', 'RELEASE-NOTES-v1.5.2-ko.md',
+    'RELEASE-NOTES-v1.5.3.md', 'RELEASE-NOTES-v1.5.3-ko.md'
 )
 foreach ($name in $sourceDocs) {
     Copy-RequiredFile (Join-Path $repoRoot "docs\$name") (Join-Path $sourceStage "docs\$name")

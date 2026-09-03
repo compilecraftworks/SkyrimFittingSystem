@@ -2,7 +2,7 @@
 
 Available in Skyrim Fitting System v1.3.0 and later.
 
-The current v1.5.2 runtime module is `SFSCore.dll`. The DLL was renamed in
+The current v1.5.3 runtime module is `SFSCore.dll`. The DLL was renamed in
 v1.4.0; the four export names and their C ABI remain unchanged from v1.3.x. A
 consumer that supports both release lines can try `SFSCore.dll` first and then
 the legacy `SkyrimFittingSystem.dll`.

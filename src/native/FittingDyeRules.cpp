@@ -46,6 +46,38 @@ template <std::size_t N>
          a_value.starts_with("ube2") || a_value.starts_with("ubebody");
 }
 
+[[nodiscard]] bool IsAnatomicalHelperShape(
+    const std::string_view a_value) {
+  static constexpr std::array kAnatomyPrefixes{
+      std::string_view{"anus"},     std::string_view{"clit"},
+      std::string_view{"genital"},  std::string_view{"labia"},
+      std::string_view{"penis"},    std::string_view{"rectum"},
+      std::string_view{"scrotum"},  std::string_view{"testicle"},
+      std::string_view{"urethra"},  std::string_view{"vagina"},
+  };
+  if (StartsWithAny(a_value, kAnatomyPrefixes)) {
+    return true;
+  }
+
+  // UBE body references use names such as "NPC RB Anus2". Restrict the
+  // contains check to NPC helper names so ordinary armor names remain valid.
+  if (!a_value.starts_with("npc ")) {
+    return false;
+  }
+  return std::ranges::any_of(kAnatomyPrefixes, [&](const auto a_prefix) {
+    return a_value.find(a_prefix) != std::string_view::npos;
+  });
+}
+
+[[nodiscard]] bool IsCollisionHelperShape(const std::string_view a_value) {
+  // Most meshes spell this out (for example LowerCollision), while UBE also
+  // uses compact names such as ArmColli, FeetColli and ButtLegColli. Match
+  // only the complete compact suffix so ordinary outfit names containing
+  // "colli" remain available for dyeing.
+  return a_value.find("collision") != std::string_view::npos ||
+         a_value.ends_with("colli");
+}
+
 [[nodiscard]] bool IsCharacterBaseShapeName(
     const std::string_view a_shapeName) {
   static constexpr std::array kFamilyPrefixes{
@@ -72,11 +104,12 @@ template <std::size_t N>
 
   return StartsWithAny(a_shapeName, kFamilyPrefixes) ||
          HasUbeBodyPrefix(a_shapeName) || HasSamBodyPrefix(a_shapeName) ||
+         IsAnatomicalHelperShape(a_shapeName) ||
          StartsWithAny(a_shapeName, kVanillaBodyPrefixes) ||
          std::ranges::find(kGenericBodyNames, a_shapeName) !=
              kGenericBodyNames.end() ||
          a_shapeName.starts_with("virtual") ||
-         a_shapeName.find("collision") != std::string_view::npos;
+         IsCollisionHelperShape(a_shapeName);
 }
 
 [[nodiscard]] bool IsCharacterBaseDiffuseFilename(

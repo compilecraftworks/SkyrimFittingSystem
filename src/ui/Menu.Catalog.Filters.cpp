@@ -245,38 +245,32 @@ void Menu::InvalidateCatalogDerivedState() {
   catalogDerived_.kits = {};
 }
 
-body_family::Mask
-Menu::ResolveCatalogActorBodyFamily(RE::FormID &a_actorFormID) {
+body_family::Mask Menu::SyncCatalogActorContext() {
   auto *actor = ResolveWorkbenchPreviewActor();
-  a_actorFormID = actor ? actor->GetFormID() : 0;
-  const auto family = body_family::ResolveActor(actor);
+  const auto actorFormID = actor ? actor->GetFormID() : 0;
 
-  if (!catalogActorBodyState_.initialized ||
-      catalogActorBodyState_.actorFormID != a_actorFormID ||
-      catalogActorBodyState_.family != family) {
-    const bool changedSelectionContext = catalogActorBodyState_.initialized;
-    catalogActorBodyState_ = {
+  if (!catalogActorState_.initialized ||
+      catalogActorState_.actorFormID != actorFormID) {
+    const bool changedSelectionContext = catalogActorState_.initialized;
+    catalogActorState_ = {
         .initialized = true,
-        .actorFormID = a_actorFormID,
-        .family = family,
+        .actorFormID = actorFormID,
     };
-    InvalidateCatalogDerivedState();
     if (changedSelectionContext) {
       ClearCatalogSelection();
     }
   }
-  return family;
+  return catalogBodyFamilyFilterEnabled_ ? body_family::ResolveActor(actor) : 0;
 }
 
 const std::vector<const GearEntry *> &Menu::GetFilteredGearRows() {
   const auto &browser = CatalogBrowserState();
-  RE::FormID actorFormID = 0;
-  const auto actorBodyFamily = ResolveCatalogActorBodyFamily(actorFormID);
+  const auto actorBodyFamily = SyncCatalogActorContext();
   ui::catalog::GearFilterState currentState{
       .catalogRevision = std::string(EquipmentCatalog::Get().GetRevision()),
       .favoritesRevision = catalogDerived_.favoritesRevision,
-      .actorFormID = actorFormID,
       .actorBodyFamily = actorBodyFamily,
+      .bodyFamilyFilterEnabled = catalogBodyFamilyFilterEnabled_,
       .favoritesOnly = browser.favoritesOnly,
       .inventoryOnly = browser.inventoryOnly,
       .hideUnnamedGear = browser.hideUnnamedGear,
@@ -299,13 +293,12 @@ const std::vector<const GearEntry *> &Menu::GetFilteredGearRows() {
 
 const std::vector<const OutfitEntry *> &Menu::GetFilteredOutfitRows() {
   const auto &browser = CatalogBrowserState();
-  RE::FormID actorFormID = 0;
-  const auto actorBodyFamily = ResolveCatalogActorBodyFamily(actorFormID);
+  const auto actorBodyFamily = SyncCatalogActorContext();
   ui::catalog::OutfitFilterState currentState{
       .catalogRevision = std::string(EquipmentCatalog::Get().GetRevision()),
       .favoritesRevision = catalogDerived_.favoritesRevision,
-      .actorFormID = actorFormID,
       .actorBodyFamily = actorBodyFamily,
+      .bodyFamilyFilterEnabled = catalogBodyFamilyFilterEnabled_,
       .favoritesOnly = browser.favoritesOnly,
       .pluginIndex = browser.outfitPluginIndex,
       .selectedSlotFilters = browser.selectedSlotFilters,
@@ -326,13 +319,12 @@ const std::vector<const OutfitEntry *> &Menu::GetFilteredOutfitRows() {
 
 const std::vector<const KitEntry *> &Menu::GetFilteredKitRows() {
   const auto &browser = CatalogBrowserState();
-  RE::FormID actorFormID = 0;
-  const auto actorBodyFamily = ResolveCatalogActorBodyFamily(actorFormID);
+  const auto actorBodyFamily = SyncCatalogActorContext();
   ui::catalog::KitFilterState currentState{
       .catalogRevision = std::string(EquipmentCatalog::Get().GetRevision()),
       .favoritesRevision = catalogDerived_.favoritesRevision,
-      .actorFormID = actorFormID,
       .actorBodyFamily = actorBodyFamily,
+      .bodyFamilyFilterEnabled = catalogBodyFamilyFilterEnabled_,
       .favoritesOnly = browser.favoritesOnly,
       .collectionIndex = browser.kitCollectionIndex,
       .selectedSlotFilters = browser.selectedSlotFilters,

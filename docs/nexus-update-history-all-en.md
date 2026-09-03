@@ -1,3 +1,12 @@
+## Version 1.5.3
+
+- Added built-in SexLab P+ v2.12.0 strip/redress integration for Skyrim 1.5.97 and 1.6.1170. Mod-Configured and Direct+Mod-Configured retain virtual-token matching; Vanilla and Direct+Vanilla retain actual-equipment transactions.
+- Added an optional, default-on BodyFamily filter for Equipment, Outfits, and Kits. Uncertain/custom actors fail open, and registered workbench rows remain unfiltered.
+- Fixed scrollbar-drag release resetting long lists and fixed paused Left/Right camera placement on subsequent menu openings.
+- Fixed nested false custom-condition saves freezing the game by folding negations before bounded CNF materialization.
+- Expanded RaceMenu version routing for legacy NiOverride transforms, public NiTransform v3+, and compatible BodyMorph v4/v5 interfaces without changing actor-local DAVE/DAV/native ownership.
+- Excluded compact UBE collision helpers such as `ArmColli`, `FeetColli`, and `ButtLegColli` from Fitting Dye targets.
+
 ## Version 1.5.2
 
 - Added actor-local registered-appearance locks from the card context menu. Locks survive Gear, Outfits, Conditions, Kits, and Kit Generator previews/applications and are excluded from automatic strip-link, DD Hider, and Helmet Toggle 2 suppression while retaining manual eye and condition behavior.

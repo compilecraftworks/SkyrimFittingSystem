@@ -2,7 +2,9 @@
 #include "native/ExternalEquipmentTransactionRules.h"
 #include "native/FittingSlotStateRules.h"
 #include "native/RegisteredAppearanceMorphRules.h"
+#include "native/SexLabPPlusRules.h"
 #include "ui/MenuCharacterRotationRules.h"
+#include "ui/MenuInteractionRules.h"
 #include "workbench/ExternalStripLinkRules.h"
 
 #include <cstdint>
@@ -170,8 +172,77 @@ void TestActorLocalActualEquipmentTransactions() {
          "Final redress must clear the matching pending strip");
 }
 
+void TestSexLabPPlusStripContract() {
+  using namespace sfs::native::sexlab_pplus::rules;
+  const auto head = EquipmentSlotMask(30);
+  const auto hands = EquipmentSlotMask(33);
+  const auto feet = EquipmentSlotMask(37);
+  const auto body = EquipmentSlotMask(32);
+  const auto extension = EquipmentSlotMask(49);
+
+  Expect(kStripHelmet == 0x01 && kStripGloves == 0x02 &&
+             kStripBoots == 0x04 && kStripDefault == 0x80 &&
+             kStripAll == 0xFF,
+         "SexLab P+ v2.12 SE/AE StripData bits must stay exact");
+
+  const std::vector<std::int32_t> defaults{
+      static_cast<std::int32_t>(body | extension), 1};
+  const std::vector<std::int32_t> noOverwrites;
+  Expect(ResolveStripSlotMask(kStripDefault, defaults, noOverwrites) ==
+             (body | extension),
+         "P+ Default must use the supplied MCM slot mask");
+  Expect(ResolveStripSlotMask(kStripDefault | kStripHelmet | kStripGloves |
+                                 kStripBoots,
+                             defaults, noOverwrites) ==
+             (body | extension | head | hands | feet),
+         "P+ explicit animation pieces must extend the default mask");
+
+  const std::vector<std::int32_t> overwrites{
+      static_cast<std::int32_t>(feet), 0};
+  Expect(ResolveStripSlotMask(kStripDefault | kStripHelmet, defaults,
+                             overwrites) == feet,
+         "P+ per-actor overwrite must take precedence over animation bits");
+  Expect(ResolveStripSlotMask(kStripAll, defaults, noOverwrites) ==
+             UINT32_MAX,
+         "P+ All must cover the full biped mask");
+  Expect(ResolveStripSlotMask(kStripDefault, {}, {}) == 0,
+         "Malformed P+ defaults must fail closed");
+
+  Expect(ShouldStripAppearance(body, body, false, false) &&
+             !ShouldStripAppearance(body, feet, false, false),
+         "P+ ModSettings matching must use each actor appearance token mask");
+  Expect(ShouldStripAppearance(0, feet, false, true),
+         "P+ AlwaysStrip must override a non-matching slot mask");
+  Expect(!ShouldStripAppearance(UINT32_MAX, body, true, true),
+         "P+ NoStrip must retain precedence over AlwaysStrip");
+  Expect(SelectRestoreTokenMask(body | extension, body | extension, false) ==
+             body,
+         "A multi-slot appearance must receive one deterministic restore token");
+}
+
 void TestBodyMorphActivity() {
   using namespace sfs::native::racemenu::rules;
+  Expect(ResolveHighHeelTransformRoute(0) ==
+             HighHeelTransformRoute::Unavailable,
+         "A missing RaceMenu NiTransform interface must fail closed");
+  Expect(ResolveHighHeelTransformRoute(1) ==
+             HighHeelTransformRoute::LegacyPapyrus &&
+             ResolveHighHeelTransformRoute(2) ==
+                 HighHeelTransformRoute::LegacyPapyrus,
+         "Pre-v3 RaceMenu transforms must use the ABI-neutral Papyrus route");
+  Expect(ResolveHighHeelTransformRoute(3) ==
+             HighHeelTransformRoute::PublicInterface &&
+             ResolveHighHeelTransformRoute(4) ==
+                 HighHeelTransformRoute::PublicInterface,
+         "RaceMenu NiTransform v3+ must retain the public interface route");
+  Expect(!IsPublicBodyMorphInterfaceCompatible(0) &&
+             !IsPublicBodyMorphInterfaceCompatible(1) &&
+             !IsPublicBodyMorphInterfaceCompatible(2) &&
+             !IsPublicBodyMorphInterfaceCompatible(3) &&
+             IsPublicBodyMorphInterfaceCompatible(4) &&
+             IsPublicBodyMorphInterfaceCompatible(5),
+         "Only RaceMenu BodyMorph v4+ may use the public C++ ABI");
+
   Expect(ShouldTrackRegisteredAppearanceNodes(false, true, 1),
          "A visible saved registered appearance must enable morph tracking");
   Expect(!ShouldTrackRegisteredAppearanceNodes(true, true, 1),
@@ -250,6 +321,43 @@ void TestPausedCharacterRotationIsolation() {
   Expect(running.rotateActor && running.orbitCamera,
          "Unpaused right-drag must retain actor rotation and camera counter-rotation");
 }
+
+void TestCatalogScrollbarReleaseIsolation() {
+  using namespace sfs::ui::menu_interaction;
+  CatalogReleaseState state{
+      .hasSelection = true,
+      .mouseReleased = true,
+      .pointerOverWindow = true,
+  };
+  Expect(ShouldClearCatalogSelection(state),
+         "A plain release on unused catalog space may clear selection");
+
+  state.mouseDragPastThreshold = true;
+  Expect(!ShouldClearCatalogSelection(state),
+         "A scrollbar drag release must retain selection and scroll position");
+
+  state.mouseDragPastThreshold = false;
+  state.pointerOverItem = true;
+  Expect(!ShouldClearCatalogSelection(state),
+         "A scrollbar-track or other item release must retain selection");
+
+  state.pointerOverItem = false;
+  state.rowHandledRelease = true;
+  Expect(!ShouldClearCatalogSelection(state),
+         "A catalog row must own its release without a second global clear");
+}
+
+void TestMenuCameraCommitTiming() {
+  using sfs::ui::menu_interaction::ShouldCommitCharacterCamera;
+  Expect(!ShouldCommitCharacterCamera(true, true, false),
+         "Camera commit must wait until third person is ready");
+  Expect(ShouldCommitCharacterCamera(true, true, true),
+         "Pending camera framing must commit on the first ready menu frame");
+  Expect(!ShouldCommitCharacterCamera(true, false, true),
+         "Stable framing must not issue redundant camera commits");
+  Expect(!ShouldCommitCharacterCamera(false, true, true),
+         "Closed presentation state must never commit camera work");
+}
 } // namespace
 
 int main() {
@@ -257,9 +365,12 @@ int main() {
   TestVanillaAnchorResolution();
   TestActorLocalModSettingsState();
   TestActorLocalActualEquipmentTransactions();
+  TestSexLabPPlusStripContract();
   TestBodyMorphActivity();
   TestRefreshBackends();
   TestPausedCharacterRotationIsolation();
+  TestCatalogScrollbarReleaseIsolation();
+  TestMenuCameraCommitTiming();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " core behavior regression test(s) failed\n";

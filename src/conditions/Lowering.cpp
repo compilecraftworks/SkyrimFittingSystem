@@ -3,8 +3,8 @@
 #include "ArmorUtils.h"
 #include "RE/A/ActorValueList.h"
 #include "StringUtils.h"
+#include "conditions/CnfBuilder.h"
 #include "conditions/ParamEnumOptions.h"
-#include "conditions/Validation.h"
 
 #include <RE/M/MagicItem.h>
 #include <RE/T/TESBoundObject.h>
@@ -22,14 +22,12 @@
 #include <ranges>
 #include <string>
 #include <string_view>
-#include <unordered_set>
 #include <utility>
 #include <vector>
 
 namespace {
 using Clause = sfs::conditions::Clause;
 using Comparator = sfs::conditions::Comparator;
-using Connective = sfs::conditions::Connective;
 using Definition = sfs::conditions::Definition;
 using ParamType = RE::SCRIPT_PARAM_TYPE;
 
@@ -43,9 +41,7 @@ struct NativeLiteral {
   std::string comparand{"1"};
 };
 
-using OrClause = std::vector<NativeLiteral>;
-using ConditionCnf = std::vector<OrClause>;
-using ConditionVisitSet = std::unordered_set<std::string>;
+using ConditionCnf = sfs::conditions::cnf::Expression<NativeLiteral>;
 
 union ConditionParam {
   char c;
@@ -582,73 +578,6 @@ sfs::conditions::DisplayCnf BuildDisplayCnf(const ConditionCnf &a_cnf) {
   return displayCnf;
 }
 
-// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
-ConditionCnf AndCnf(const ConditionCnf &a_left, const ConditionCnf &a_right) {
-  ConditionCnf result = a_left;
-  result.insert(result.end(), a_right.begin(), a_right.end());
-  return result;
-}
-
-ConditionCnf OrCnf(const ConditionCnf &a_left, const ConditionCnf &a_right) {
-  if (a_left.empty()) {
-    return a_right;
-  }
-  if (a_right.empty()) {
-    return a_left;
-  }
-
-  ConditionCnf result;
-  result.reserve(a_left.size() * a_right.size());
-  for (const auto &leftGroup : a_left) {
-    for (const auto &rightGroup : a_right) {
-      OrClause merged = leftGroup;
-      merged.insert(merged.end(), rightGroup.begin(), rightGroup.end());
-      result.push_back(std::move(merged));
-    }
-  }
-  return result;
-}
-
-ConditionCnf NegateCnf(const ConditionCnf &a_cnf) {
-  ConditionCnf result;
-  bool firstGroup = true;
-
-  for (const auto &group : a_cnf) {
-    ConditionCnf negatedGroup;
-    negatedGroup.reserve(group.size());
-    for (const auto &literal : group) {
-      auto negatedLiteral = literal;
-      negatedLiteral.comparator = InvertComparator(negatedLiteral.comparator);
-      negatedGroup.push_back(OrClause{std::move(negatedLiteral)});
-    }
-
-    if (firstGroup) {
-      result = std::move(negatedGroup);
-      firstGroup = false;
-    } else {
-      result = OrCnf(result, negatedGroup);
-    }
-  }
-
-  return result;
-}
-
-std::optional<bool> EvaluateNestedConditionPolarity(const Clause &a_clause) {
-  if (a_clause.comparator != Comparator::Equal &&
-      a_clause.comparator != Comparator::NotEqual) {
-    return std::nullopt;
-  }
-
-  const auto comparand = sfs::strings::TrimText(a_clause.comparand);
-  if (comparand != "0" && comparand != "1") {
-    return std::nullopt;
-  }
-
-  const bool truthy = comparand == "1";
-  return (a_clause.comparator == Comparator::Equal && truthy) ||
-         (a_clause.comparator == Comparator::NotEqual && !truthy);
-}
-
 std::optional<NativeLiteral> BuildNativeLiteral(const Clause &a_clause) {
   const auto *command = FindConditionFunction(a_clause.functionName);
   if (!command) {
@@ -673,105 +602,6 @@ std::optional<NativeLiteral> BuildNativeLiteral(const Clause &a_clause) {
   }
 
   return literal;
-}
-
-std::optional<ConditionCnf>
-BuildConditionCnf(const Definition &a_definition,
-                  const std::vector<Definition> &a_conditions,
-                  ConditionVisitSet &a_visiting);
-
-std::optional<ConditionCnf>
-BuildClauseCnf(const Clause &a_clause,
-               const std::vector<Definition> &a_conditions,
-               ConditionVisitSet &a_visiting) {
-  if (!a_clause.customConditionId.empty()) {
-    const auto *definition = sfs::conditions::FindDefinitionById(
-        a_conditions, a_clause.customConditionId);
-    if (!definition) {
-      return std::nullopt;
-    }
-
-    const auto polarity = EvaluateNestedConditionPolarity(a_clause);
-    if (!polarity.has_value()) {
-      return std::nullopt;
-    }
-
-    auto nestedCnf = BuildConditionCnf(*definition, a_conditions, a_visiting);
-    if (!nestedCnf) {
-      return std::nullopt;
-    }
-
-    if (*polarity) {
-      return nestedCnf;
-    }
-    return NegateCnf(*nestedCnf);
-  }
-
-  auto literal = BuildNativeLiteral(a_clause);
-  if (!literal) {
-    return std::nullopt;
-  }
-
-  return ConditionCnf{OrClause{std::move(*literal)}};
-}
-
-std::optional<ConditionCnf>
-BuildConditionCnf(const Definition &a_definition,
-                  const std::vector<Definition> &a_conditions,
-                  ConditionVisitSet &a_visiting) {
-  if (a_definition.clauses.empty()) {
-    return std::nullopt;
-  }
-  if (!a_definition.id.empty() && !a_visiting.insert(a_definition.id).second) {
-    return std::nullopt;
-  }
-
-  auto currentBlock =
-      BuildClauseCnf(a_definition.clauses.front(), a_conditions, a_visiting);
-  if (!currentBlock) {
-    if (!a_definition.id.empty()) {
-      a_visiting.erase(a_definition.id);
-    }
-    return std::nullopt;
-  }
-
-  ConditionCnf result;
-  bool hasResult = false;
-
-  for (std::size_t index = 1; index < a_definition.clauses.size(); ++index) {
-    auto clauseCnf =
-        BuildClauseCnf(a_definition.clauses[index], a_conditions, a_visiting);
-    if (!clauseCnf) {
-      if (!a_definition.id.empty()) {
-        a_visiting.erase(a_definition.id);
-      }
-      return std::nullopt;
-    }
-
-    const auto connective = a_definition.clauses[index - 1].connectiveToNext;
-    if (connective == Connective::Or) {
-      currentBlock = OrCnf(*currentBlock, *clauseCnf);
-    } else {
-      if (!hasResult) {
-        result = *currentBlock;
-        hasResult = true;
-      } else {
-        result = AndCnf(result, *currentBlock);
-      }
-      currentBlock = std::move(clauseCnf);
-    }
-  }
-
-  if (!hasResult) {
-    result = *currentBlock;
-  } else {
-    result = AndCnf(result, *currentBlock);
-  }
-
-  if (!a_definition.id.empty()) {
-    a_visiting.erase(a_definition.id);
-  }
-  return result;
 }
 
 std::optional<RE::CONDITION_ITEM_DATA>
@@ -850,19 +680,27 @@ namespace sfs::conditions {
 std::optional<LoweredMaterialization>
 LowerAndEmitCondition(const Definition &a_definition,
                       const std::vector<Definition> &a_conditions) {
-  ConditionVisitSet visiting;
-  auto cnf = BuildConditionCnf(a_definition, a_conditions, visiting);
-  if (!cnf || cnf->empty()) {
+  auto expression = cnf::Build<NativeLiteral>(
+      a_definition, a_conditions,
+      [](const Clause &a_clause,
+         const bool a_negated) -> std::optional<NativeLiteral> {
+        auto literal = BuildNativeLiteral(a_clause);
+        if (literal && a_negated) {
+          literal->comparator = InvertComparator(literal->comparator);
+        }
+        return literal;
+      });
+  if (!expression || expression->empty()) {
     return std::nullopt;
   }
 
-  auto condition = EmitCondition(*cnf);
+  auto condition = EmitCondition(*expression);
   if (!condition) {
     return std::nullopt;
   }
 
   return LoweredMaterialization{.condition = *condition,
-                                .signature = BuildCnfSignature(*cnf),
-                                .displayCnf = BuildDisplayCnf(*cnf)};
+                                .signature = BuildCnfSignature(*expression),
+                                .displayCnf = BuildDisplayCnf(*expression)};
 }
 } // namespace sfs::conditions

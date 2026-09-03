@@ -91,7 +91,7 @@ void Menu::Open() {
   workbenchBaseSessionOrder_.clear();
   workbenchConditionalSessionOrder_.clear();
   workbenchDerived_ = {};
-  catalogActorBodyState_ = {};
+  catalogActorState_ = {};
 
   if (!CatalogBrowserState().initialized) {
     QueueCatalogRefresh();

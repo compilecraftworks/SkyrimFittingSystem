@@ -106,6 +106,8 @@
     "options.pause_game_while_open": "열려 있는 동안 게임 일시정지",
     "options.smooth_scrolling": "부드러운 스크롤",
     "options.add_crosshair_npc": "조준선으로 NPC 추가",
+    "options.catalog_body_family_filter": "바디 호환 항목만 표시",
+    "options.catalog_body_family_filter.tooltip": "선택 액터의 바디 계열이 확실할 때만 장비·의상·키트 탭을 필터링합니다. 작업대와 판정이 불확실한 액터는 필터링하지 않습니다.",
     "options.external_events": "외부 이벤트",
     "options.sexlab_auto_strip": "SexLab 자동 탈의 연동",
     "options.dd_auto_strip": "Devious Devices 자동 탈의 연동",

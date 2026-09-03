@@ -106,6 +106,8 @@
     "options.pause_game_while_open": "打开时暂停游戏",
     "options.smooth_scrolling": "平滑滚动",
     "options.add_crosshair_npc": "通过准星添加 NPC",
+    "options.catalog_body_family_filter": "仅显示体型兼容项目",
+    "options.catalog_body_family_filter.tooltip": "仅在能够可靠识别所选角色体型系列时筛选装备、套装和套件目录。工作台和体型识别不确定的角色不会被筛选。",
     "options.external_events": "外部事件",
     "options.sexlab_auto_strip": "SexLab 自动脱衣联动",
     "options.dd_auto_strip": "Devious Devices 自动脱衣联动",

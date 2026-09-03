@@ -408,6 +408,10 @@ void Menu::DrawOptionsTab() {
       localization->Get("options.smooth_scrolling");
   const auto addCrosshairNpcLabel =
       localization->Get("options.add_crosshair_npc");
+  const auto bodyFamilyFilterLabel =
+      localization->Get("options.catalog_body_family_filter");
+  const auto bodyFamilyFilterTooltip =
+      localization->Get("options.catalog_body_family_filter.tooltip");
   const auto externalStripLinkLabel =
       localization->Get("options.external_mod_strip_link");
   const auto externalStripLinkTooltip =
@@ -660,6 +664,23 @@ void Menu::DrawOptionsTab() {
       bool addCrosshairNpc = addCrosshairNpcToActorList_;
       if (ImGui::Checkbox("##add-crosshair-npc", &addCrosshairNpc)) {
         addCrosshairNpcToActorList_ = addCrosshairNpc;
+        SaveUserSettings();
+      }
+
+      ImGui::TableNextRow();
+      ImGui::TableSetColumnIndex(0);
+      ImGui::TextUnformatted(bodyFamilyFilterLabel.data());
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+        ImGui::SetTooltip("%s", bodyFamilyFilterTooltip.data());
+      }
+
+      ImGui::TableSetColumnIndex(1);
+      bool bodyFamilyFilterEnabled = catalogBodyFamilyFilterEnabled_;
+      if (ImGui::Checkbox("##catalog-body-family-filter",
+                          &bodyFamilyFilterEnabled)) {
+        catalogBodyFamilyFilterEnabled_ = bodyFamilyFilterEnabled;
+        ClearCatalogSelection();
+        InvalidateCatalogDerivedState();
         SaveUserSettings();
       }
 

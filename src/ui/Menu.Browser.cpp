@@ -3,9 +3,12 @@
 #include "ArmorUtils.h"
 #include "PlayerInventory.h"
 #include "kit_generator/UI.h"
+#include "ui/MenuInteractionRules.h"
 #include "ui/Localization.h"
 #include "ui/catalog/Widgets.h"
 #include "workbench/AppearanceSlotProtection.h"
+
+#include "imgui_internal.h"
 
 #include <format>
 #include <optional>
@@ -355,8 +358,23 @@ void Menu::DrawCatalogPaneBody() {
       catalogRowClicked = DrawGearTab();
     }
 
-    if (!browser.selectedKey.empty() &&
-        ImGui::IsMouseReleased(ImGuiMouseButton_Left) && !catalogRowClicked) {
+    const auto *imguiContext = ImGui::GetCurrentContext();
+    const auto &io = ImGui::GetIO();
+    const auto dragThresholdSquared =
+        io.MouseDragThreshold * io.MouseDragThreshold;
+    const ui::menu_interaction::CatalogReleaseState releaseState{
+        .hasSelection = !browser.selectedKey.empty(),
+        .mouseReleased = ImGui::IsMouseReleased(ImGuiMouseButton_Left),
+        .rowHandledRelease = catalogRowClicked,
+        .mouseDragPastThreshold =
+            io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Left] >=
+            dragThresholdSquared,
+        .pointerOverWindow =
+            ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow),
+        .pointerOverItem =
+            imguiContext != nullptr && imguiContext->HoveredId != 0,
+    };
+    if (ui::menu_interaction::ShouldClearCatalogSelection(releaseState)) {
       ClearCatalogSelection();
     }
   }

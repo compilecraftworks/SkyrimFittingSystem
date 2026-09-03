@@ -5,6 +5,7 @@
 #include "ui/Menu.h"
 #include "ui/MenuCameraProjection.h"
 #include "ui/MenuCharacterRotationRules.h"
+#include "ui/MenuInteractionRules.h"
 
 #include <algorithm>
 #include <array>
@@ -177,6 +178,7 @@ struct MenuCharacterPresentation::State {
 
   bool active{false};
   bool rotating{false};
+  bool cameraCommitPending{false};
   MenuCharacterSide side{MenuCharacterSide::Disabled};
   MenuCharacterSide requestedSide{MenuCharacterSide::Disabled};
   RE::ActorHandle presentedActorHandle{};
@@ -270,6 +272,7 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
   state_->toggleAnimCam = thirdPersonState->toggleAnimCam;
   state_->side = a_side;
   state_->rotating = false;
+  state_->cameraCommitPending = true;
   state_->active = true;
 
   camera->cameraTarget = requestedActorHandle;
@@ -339,13 +342,9 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
     state_->viewFrustum = niCamera->GetRuntimeData2().viewFrustum;
     state_->viewFrustumSaved = true;
   }
-  ApplyMenuWorldFov(camera);
-  camera->Update();
-  if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
-    if (state_->fovCamera.get() == niCamera) {
-      static_cast<void>(ApplyMenuViewFrustum(niCamera));
-    }
-  }
+  // ProcessMessage(kShow) runs before Skyrim finishes registering this menu's
+  // pause state. The first camera Update is committed from the ordinary menu
+  // render frame instead, after the pause flag/count has settled.
   presentedActor->Update3DPosition(true);
   logger::debug("Applied SFS menu character presentation: side={}, actor={:08X}",
                 static_cast<std::uint8_t>(a_side),
@@ -358,6 +357,7 @@ void MenuCharacterPresentation::Restore() {
   }
   state_->requestedSide = MenuCharacterSide::Disabled;
   state_->requestedActorHandle.reset();
+  state_->cameraCommitPending = false;
   if (!state_->active) {
     native::smoothcam::ReleaseCameraControl();
     return;
@@ -429,6 +429,7 @@ void MenuCharacterPresentation::Restore() {
   state_->actorPitchModified = false;
   state_->side = MenuCharacterSide::Disabled;
   state_->rotating = false;
+  state_->cameraCommitPending = false;
   state_->worldFov = 0.0f;
   state_->drawWorldFov = 0.0f;
   state_->fovCamera.reset();
@@ -498,6 +499,21 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
     camera->cameraTarget = state_->presentedActorHandle;
     auto cameraTargetHandle = state_->presentedActorHandle.native_handle();
     thirdPersonState->SetCameraHandle(cameraTargetHandle);
+  }
+  if (menu_interaction::ShouldCommitCharacterCamera(
+          state_->active, state_->cameraCommitPending, true)) {
+    // camera->Update() may rebuild the third-person offsets from the active
+    // camera mode. Reassert the SFS values immediately so the first paused and
+    // unpaused frames use the same completed framing.
+    ApplyMenuWorldFov(camera);
+    camera->Update();
+    thirdPersonState->posOffsetExpected = state_->desiredPosOffset;
+    thirdPersonState->posOffsetActual = state_->desiredPosOffset;
+    state_->cameraCommitPending = false;
+    auto *ui = RE::UI::GetSingleton();
+    logger::debug("Committed SFS menu camera framing: actor={:08X}, paused={}",
+                  presentedActor->GetFormID(),
+                  ui != nullptr && ui->GameIsPaused());
   }
   if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
     if (state_->viewFrustumSaved && state_->fovCamera.get() == niCamera) {

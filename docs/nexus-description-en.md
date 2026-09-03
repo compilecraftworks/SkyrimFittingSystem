@@ -23,7 +23,7 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - Actor-local Fitting Dye for individual rendered components of a registered appearance, available from its dye button or right-click context menu
 - Actor-local registered-appearance locks that survive catalog previews and applications
 - RaceMenu high-heel `HH_OFFSET` and live BodyMorph synchronization across DAVE, DAV, and native display
-- Actor-aware Equipment, Outfits, and Kits filtering for CBBE/3BA/3BBB, UNP/BHUNP, UBE, HIMBO, SAM, and same-sex Vanilla/fallback content
+- Optional actor-aware body-family filtering for Equipment, Outfits, and Kits, with fail-open handling for custom actors and no workbench filtering
 - Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges
 
 ![Hiding Actual Equipment](https://i.ibb.co/4bb432f/image.gif)
@@ -49,6 +49,15 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 
 ![Helmet Toggle 2 Appearance Hiding Integration](https://i.ibb.co/S4JHn3DT/2.gif)
 **Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)**
+
+## Version 1.5.3 Update Summary
+
+- Added built-in SexLab P+ v2.12.0 strip/redress integration for both Skyrim 1.5.97 and 1.6.1170. No P+ script, ESP, or separate SFS patch is replaced or required.
+- Preserved all four external-strip policies: Mod-Configured and Direct+Mod-Configured use actor-local virtual tokens, while Automatic Vanilla and Direct+Vanilla use the existing actual-equipment transaction path.
+- Added a default-on body-compatibility option for Equipment, Outfits, and Kits. Uncertain/custom actors fail open, and the registered-appearance workbench is never filtered.
+- Fixed scrollbar drag release resetting long lists, nested false custom-condition saves freezing the game, and paused Left/Right character placement failing on later menu openings.
+- Expanded RaceMenu version routing for legacy NiOverride transforms, public NiTransform v3+, and compatible BodyMorph v4/v5 interfaces across DAVE, DAV, and native refreshes.
+- Fitting Dye now excludes compact UBE collision helpers such as `ArmColli`, `FeetColli`, and `ButtLegColli` without hiding similarly named real outfit components.
 
 ## Version 1.5.2 Update Summary
 
@@ -99,6 +108,7 @@ Built-in: (Not required any patch file)
 - SOS or TNG for genital conceal/reveal compatibility
 - Helmet Toggle 2 for built-in actor-local registered-appearance headgear hiding; SFS does not interfere with Helmet Toggle 2's actual equipment control
 - Grid Inventory v1.4.1
+- SexLab P+ v2.12.0 for built-in actor-local strip/redress integration
 
 ## Installation and Updating
 
@@ -106,7 +116,7 @@ Built-in: (Not required any patch file)
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.5.2 distribution ZIP as a new mod.
+5. Install the v1.5.3 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
 7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.
 

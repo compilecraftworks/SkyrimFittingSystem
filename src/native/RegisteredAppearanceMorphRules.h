@@ -6,6 +6,36 @@
 
 namespace sfs::native::racemenu::rules {
 
+enum class HighHeelTransformRoute : std::uint8_t {
+  Unavailable,
+  LegacyPapyrus,
+  PublicInterface,
+};
+
+// RaceMenu's public INiTransformInterface was introduced at version 3.
+// Released version-2 builds expose the same HH_OFFSET behavior through the
+// long-standing NiOverride Papyrus API, but their concrete C++ vtable is not
+// ABI-compatible with the public interface. Never cast those objects to v3.
+[[nodiscard]] inline constexpr HighHeelTransformRoute
+ResolveHighHeelTransformRoute(const std::uint32_t a_version) noexcept {
+  if (a_version >= 3) {
+    return HighHeelTransformRoute::PublicInterface;
+  }
+  if (a_version != 0) {
+    return HighHeelTransformRoute::LegacyPapyrus;
+  }
+  return HighHeelTransformRoute::Unavailable;
+}
+
+// BodyMorph v4 introduced the public wrapper ABI used by SFS. Older
+// BodyMorph v3 releases still expose NiOverride Papyrus transforms, but their
+// concrete C++ object must not be treated as the public interface.
+[[nodiscard]] inline constexpr bool
+IsPublicBodyMorphInterfaceCompatible(
+    const std::uint32_t a_version) noexcept {
+  return a_version >= 4;
+}
+
 [[nodiscard]] inline constexpr bool ShouldTrackRegisteredAppearanceNodes(
     const bool a_previewReplacesRows, const bool a_displayActive,
     const std::size_t a_displayArmorCount) noexcept {

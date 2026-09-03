@@ -18,7 +18,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
 [line]
-[size=4][b][color=#42ACC8]v1.5.2 주요 기능[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.5.3 주요 기능[/color][/b][/size]
 
 
 [list]
@@ -49,7 +49,21 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]3인칭 SFS 메뉴의 캐릭터 좌우 배치와 우클릭 드래그 플레이어 회전[/*]
 [*]액터별 최종 표시 장비를 읽는 OAR용 읽기 전용 조건[/*]
 [*]내장 Grid Inventory Costume·Helmet Toggle 2 연동과 DFFMA OAR·Dynamic Footprints v3 선택형 호환 패치[/*]
-[*]선택 액터의 바디 계열에 맞춰 장비·의상·키트 목록을 자동 필터링하는 카탈로그[/*]
+[*]플레이어·NPC·팔로워의 혼합 바디 구성에서도 모든 항목을 등록할 수 있는 장비·의상·키트 카탈로그[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]v1.5.3 업데이트 요약[/color][/b][/size]
+
+
+[list]
+[*]SexLab P+ v2.12.0의 Skyrim 1.5.97·1.6.1170 패키지에 별도 PEX/ESP 패치 없는 내장 탈의·재착의 연동을 추가했습니다.[/*]
+[*]모드 설정·직접 편집+모드 설정은 액터별 가상토큰, 바닐라·직접 편집+바닐라는 기존 실제 장비 트랜잭션을 사용해 네 연동 정책을 모두 유지합니다.[/*]
+[*]장비·의상·키트에 기본 활성화되는 바디 호환 필터 옵션을 추가했습니다. 불확실한 커스텀 액터는 전체 표시하며 등록 외형 작업대는 필터링하지 않습니다.[/*]
+[*]스크롤바 드래그 해제 시 목록 초기화, 중첩 거짓 사용자 정의 조건 저장 시 멈춤, 일시정지 상태의 다음 UI 실행에서 Left/Right 구도가 끝까지 적용되지 않던 문제를 수정했습니다.[/*]
+[*]구형 NiOverride transform, NiTransform v3 이상, 호환 BodyMorph v4/v5 인터페이스를 버전별로 안전하게 선택하면서 DAVE·DAV·native 액터별 경계를 유지합니다.[/*]
+[*]피팅 염색 목록에서 UBE의 [font=Courier New]ArmColli[/font], [font=Courier New]FeetColli[/font], [font=Courier New]ButtLegColli[/font] 같은 축약 충돌 헬퍼를 제외하되 이름이 비슷한 실제 의상 조각은 유지합니다.[/*]
 [/list]
 
 
@@ -138,6 +152,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]Wet Function Redux: 별도 SFS 호환 패치로 등록 외형 젖음 효과 적용[/*]
 [*]Open Animation Replacer와 Dynamic Feminine Female Modesty Animations OAR: 별도 DFFMA 구성 패치 사용 대상[/*]
 [*]Grid Inventory v1.4.1 이상과 Helmet Toggle 2: 별도 SFS 패치 없이 본체 내장 연동 사용. Dynamic Footprints SKSE BASE v3: 전용 SFS 선택형 호환 패치 설치 시 사용[/*]
+[*]SexLab P+ v2.12.0: 별도 SFS 패치 없이 액터별 탈의·재착의 내장 연동 사용[/*]
 [*]SexLab, Soulgem Oven, Private Needs, Bathing in Skyrim, Devious Devices, Pama Prison Alternative 등: 외부 모드 탈의 연동 사용 대상[/*]
 [/list]
 
@@ -151,7 +166,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]이전 SFS 모드 폴더를 완전히 삭제합니다.[/*]
 [*]기존의 모든 [b]SFS Helmet Toggle 2 호환 패치[/b]를 완전히 삭제합니다. Helmet Toggle 2 본체를 삭제하는 것은 아닙니다.[/*]
 [*]이전 독립형 시험용 [b]SFS Kit Generator[/b] 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.[/*]
-[*]v1.5.2 배포 ZIP을 새 모드로 설치합니다.[/*]
+[*]v1.5.3 배포 ZIP을 새 모드로 설치합니다.[/*]
 [*][font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font]을 활성화합니다.[/*]
 [*]필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.[/*]
 [/list]

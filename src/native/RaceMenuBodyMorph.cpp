@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstring>
 #include <exception>
+#include <functional>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -18,6 +19,7 @@
 #include <string_view>
 #include <unordered_map>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 
 #include <Windows.h>
@@ -192,15 +194,19 @@ public:
 
 class IActorUpdateManager : public IPluginInterface {
 public:
-  // RaceMenu 0.4.16's public ActorUpdateManager ABI exposes these three
-  // virtuals immediately after IPluginInterface. The Add*Update helpers in
-  // RaceMenu's concrete class are non-virtual and must not be represented
-  // here, or every following vtable index becomes incorrect.
+  // Keep the complete version-1 prefix in official declaration order.
+  // Version 2 only appends callback methods, so AddInterface remains at the
+  // same slot for every released ActorUpdateManager interface generation.
+  virtual void AddBodyUpdate(std::uint32_t) = 0;
+  virtual void AddTransformUpdate(std::uint32_t) = 0;
+  virtual void AddOverlayUpdate(std::uint32_t) = 0;
+  virtual void AddNodeOverrideUpdate(std::uint32_t) = 0;
+  virtual void AddWeaponOverrideUpdate(std::uint32_t) = 0;
+  virtual void AddAddonOverrideUpdate(std::uint32_t) = 0;
+  virtual void AddSkinOverrideUpdate(std::uint32_t) = 0;
+  virtual void Flush() = 0;
   virtual void AddInterface(IAddonAttachmentInterface *) = 0;
   virtual void RemoveInterface(IAddonAttachmentInterface *) = 0;
-  virtual void OnAttach(RE::TESObjectREFR *, RE::TESObjectARMO *,
-                        RE::TESObjectARMA *, RE::NiAVObject *, bool,
-                        RE::NiNode *, RE::NiNode *) = 0;
 };
 } // namespace skee
 
@@ -238,6 +244,7 @@ using UpdateModelWeightTaskRunFn = void (*)(void *);
 
 std::atomic<skee::IBodyMorphInterface *> g_bodyMorphInterface{nullptr};
 std::atomic<skee::INiTransformInterface *> g_transformInterface{nullptr};
+std::atomic_uint32_t g_transformInterfaceVersion{0};
 std::atomic<ApplyBodyMorphsFn> g_originalApplyBodyMorphs{nullptr};
 std::atomic<UpdateModelWeightTaskRunFn>
     g_originalUpdateModelWeightTaskRun{nullptr};
@@ -257,8 +264,32 @@ std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
 sfs::native::racemenu::rules::ActorMorphActivity g_morphActivity;
 std::mutex g_highHeelQueueMutex;
 std::unordered_set<RE::FormID> g_queuedHighHeelSyncs;
+std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
 std::atomic<std::uint64_t> g_highHeelQueueGeneration{0};
 thread_local std::uint32_t g_updateModelWeightTaskDepth{0};
+
+class NiOverrideDispatchCallback final
+    : public RE::BSScript::IStackCallbackFunctor {
+public:
+  explicit NiOverrideDispatchCallback(std::function<void()> a_continuation)
+      : continuation_(std::move(a_continuation)) {}
+
+  void operator()(RE::BSScript::Variable) override {
+    auto continuation = std::move(continuation_);
+    if (continuation) {
+      // RaceMenu registers these NiOverride functions as NoWait natives.
+      // Chaining from the completed VM callback preserves call order and
+      // keeps the neutral bootstrap key alive for the shortest possible time.
+      continuation();
+    }
+  }
+
+  void SetObject(
+      const RE::BSTSmartPointer<RE::BSScript::Object> &) override {}
+
+private:
+  std::function<void()> continuation_;
+};
 
 class ScopedUpdateModelWeightTask final {
 public:
@@ -760,23 +791,210 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
   return state;
 }
 
-[[nodiscard]] bool SynchronizeRegisteredAppearanceHighHeel(RE::Actor *a_actor) {
-  auto *transform = g_transformInterface.load(std::memory_order_acquire);
-  if (!a_actor || !transform || !a_actor->Is3DLoaded()) {
+enum class HighHeelSyncAttempt : std::uint8_t {
+  Complete,
+  Retry,
+  LegacyDispatchStarted,
+};
+
+struct LegacyHighHeelSyncRequest {
+  RE::FormID actorFormID{0};
+  std::uint64_t generation{0};
+  bool isFemale{false};
+  bool targetActive{false};
+  bool clearRaceMenuInternalPosition{false};
+};
+
+void FinishQueuedHighHeelSync(RE::FormID a_actorFormID,
+                              std::uint64_t a_generation);
+
+[[nodiscard]] RE::Actor *
+LookupLegacyHighHeelActor(const LegacyHighHeelSyncRequest &a_request) {
+  if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
+      a_request.generation) {
+    return nullptr;
+  }
+  auto *actor =
+      RE::TESForm::LookupByID<RE::Actor>(a_request.actorFormID);
+  return actor && actor->Is3DLoaded() ? actor : nullptr;
+}
+
+template <class... Args>
+[[nodiscard]] bool
+DispatchNiOverrideCall(const char *a_function,
+                       std::function<void()> a_continuation,
+                       Args &&...a_arguments) {
+  auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+  if (!vm) {
     return false;
+  }
+  RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(
+      new NiOverrideDispatchCallback(std::move(a_continuation)));
+  return vm->DispatchStaticCall(
+      "NiOverride", a_function,
+      RE::MakeFunctionArguments(std::forward<Args>(a_arguments)...),
+      callback);
+}
+
+void CompleteLegacyHighHeelSync(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request,
+    const bool a_success) {
+  if (!a_request) {
+    return;
+  }
+  if (a_success &&
+      g_highHeelQueueGeneration.load(std::memory_order_acquire) ==
+          a_request->generation) {
+    {
+      std::lock_guard lock(g_nodeMutex);
+      if (a_request->targetActive) {
+        g_registeredAppearanceHighHeelActors.insert(a_request->actorFormID);
+      } else {
+        g_registeredAppearanceHighHeelActors.erase(a_request->actorFormID);
+      }
+    }
+    logger::debug(
+        "Synchronized registered-appearance HH_OFFSET through legacy NiOverride API actor={:08X} active={}",
+        a_request->actorFormID, a_request->targetActive);
+  } else if (!a_success) {
+    logger::warn(
+        "Legacy NiOverride HH_OFFSET synchronization failed for actor {:08X}; no direct skeleton transform was applied",
+        a_request->actorFormID);
+  }
+  FinishQueuedHighHeelSync(a_request->actorFormID, a_request->generation);
+}
+
+void DispatchLegacyUpdateNode(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
+  if (!actor ||
+      !DispatchNiOverrideCall(
+          "UpdateNodeTransform",
+          [a_request]() { CompleteLegacyHighHeelSync(a_request, true); },
+          static_cast<RE::Actor *>(actor), false,
+          static_cast<bool>(a_request->isFemale), std::string{"NPC"})) {
+    CompleteLegacyHighHeelSync(a_request, false);
+  }
+}
+
+void DispatchLegacyRemoveInternalPosition(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
+  if (!actor ||
+      !DispatchNiOverrideCall(
+          "RemoveNodeTransformPosition",
+          [a_request]() { DispatchLegacyUpdateNode(a_request); },
+          static_cast<RE::Actor *>(actor), false,
+          static_cast<bool>(a_request->isFemale), std::string{"NPC"},
+          std::string{"internal"})) {
+    CompleteLegacyHighHeelSync(a_request, false);
+  }
+}
+
+void DispatchLegacyRemoveBootstrap(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
+  if (!actor) {
+    CompleteLegacyHighHeelSync(a_request, false);
+    return;
+  }
+  const auto continuation = [a_request]() {
+    if (a_request->clearRaceMenuInternalPosition) {
+      DispatchLegacyRemoveInternalPosition(a_request);
+    } else {
+      CompleteLegacyHighHeelSync(a_request, true);
+    }
+  };
+  if (!DispatchNiOverrideCall(
+          "RemoveNodeTransformScale", continuation,
+          static_cast<RE::Actor *>(actor), false,
+          static_cast<bool>(a_request->isFemale), std::string{"NPC"},
+          std::string{"SFS_HH_SYNC"})) {
+    CompleteLegacyHighHeelSync(a_request, false);
+  }
+}
+
+void DispatchLegacyUpdateAll(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
+  if (!actor ||
+      !DispatchNiOverrideCall(
+          "UpdateAllReferenceTransforms",
+          [a_request]() { DispatchLegacyRemoveBootstrap(a_request); },
+          static_cast<RE::Actor *>(actor))) {
+    // The neutral scale may already have been inserted. Always attempt its
+    // removal before completing a failed chain.
+    DispatchLegacyRemoveBootstrap(a_request);
+  }
+}
+
+[[nodiscard]] bool StartLegacyHighHeelSync(
+    RE::Actor *a_actor, const RegisteredHighHeelState &a_state,
+    const std::uint64_t a_generation) {
+  auto *actorBase = a_actor ? a_actor->GetActorBase() : nullptr;
+  if (!a_actor || !actorBase) {
+    return false;
+  }
+
+  auto request = std::make_shared<LegacyHighHeelSyncRequest>(
+      LegacyHighHeelSyncRequest{
+          .actorFormID = a_actor->GetFormID(),
+          .generation = a_generation,
+          .isFemale = actorBase->IsFemale(),
+          .targetActive = a_state.offset.has_value(),
+          .clearRaceMenuInternalPosition =
+              !a_state.offset.has_value() &&
+              !SceneHasNpcPositionSource(a_actor->Get3D(false)),
+      });
+
+  // A scale of 1.0 is visually neutral. Its only purpose is to create the
+  // actor's transform-storage entry on RaceMenu v1/v2 so the following
+  // official full update scans the synthetic SFS branch for HH_OFFSET. The
+  // key is removed again as soon as the scan completes.
+  return DispatchNiOverrideCall(
+      "AddNodeTransformScale",
+      [request]() { DispatchLegacyUpdateAll(request); },
+      static_cast<RE::Actor *>(a_actor), false,
+      static_cast<bool>(request->isFemale),
+      std::string{"NPC"}, std::string{"SFS_HH_SYNC"}, 1.0F);
+}
+
+[[nodiscard]] HighHeelSyncAttempt SynchronizeRegisteredAppearanceHighHeel(
+    RE::Actor *a_actor, const std::uint64_t a_generation) {
+  using sfs::native::racemenu::rules::HighHeelTransformRoute;
+  const auto route =
+      sfs::native::racemenu::rules::ResolveHighHeelTransformRoute(
+          g_transformInterfaceVersion.load(std::memory_order_acquire));
+  auto *transform = g_transformInterface.load(std::memory_order_acquire);
+  if (!a_actor || route == HighHeelTransformRoute::Unavailable ||
+      !a_actor->Is3DLoaded()) {
+    return HighHeelSyncAttempt::Complete;
   }
 
   const auto state = ResolveRegisteredHighHeelState(a_actor);
   if (!state.offset.has_value() && !state.previouslyActive) {
-    return false;
+    return HighHeelSyncAttempt::Complete;
   }
   if (!state.offset.has_value() && state.staleAttachmentStillPresent) {
-    return true;
+    return HighHeelSyncAttempt::Retry;
+  }
+
+  if (route == HighHeelTransformRoute::LegacyPapyrus) {
+    if (StartLegacyHighHeelSync(a_actor, state, a_generation)) {
+      return HighHeelSyncAttempt::LegacyDispatchStarted;
+    }
+    logger::warn(
+        "Could not start legacy NiOverride HH_OFFSET synchronization for actor {:08X}",
+        a_actor->GetFormID());
+    return HighHeelSyncAttempt::Complete;
+  }
+  if (!transform) {
+    return HighHeelSyncAttempt::Complete;
   }
 
   auto *actorBase = a_actor->GetActorBase();
   if (!actorBase) {
-    return false;
+    return HighHeelSyncAttempt::Complete;
   }
   const bool isFemale = actorBase->IsFemale();
   constexpr const char *nodeName = "NPC";
@@ -803,7 +1021,7 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
     logger::debug(
         "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
         actorFormID, *state.offset);
-    return false;
+    return HighHeelSyncAttempt::Complete;
   }
 
   // RaceMenu's incremental attachment path normally removes its internal
@@ -822,15 +1040,23 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
   }
   logger::debug("Cleared registered-appearance HH_OFFSET for SFS actor {:08X}",
                 actorFormID);
-  return false;
+  return HighHeelSyncAttempt::Complete;
 }
 
 void FinishQueuedHighHeelSync(const RE::FormID a_actorFormID,
                               const std::uint64_t a_generation) {
-  std::lock_guard lock(g_highHeelQueueMutex);
-  if (g_highHeelQueueGeneration.load(std::memory_order_acquire) ==
-      a_generation) {
-    g_queuedHighHeelSyncs.erase(a_actorFormID);
+  bool resync = false;
+  {
+    std::lock_guard lock(g_highHeelQueueMutex);
+    if (g_highHeelQueueGeneration.load(std::memory_order_acquire) ==
+        a_generation) {
+      g_queuedHighHeelSyncs.erase(a_actorFormID);
+      resync = g_pendingHighHeelResyncs.erase(a_actorFormID) != 0;
+    }
+  }
+  if (resync) {
+    auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
+    sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(actor);
   }
 }
 
@@ -853,8 +1079,14 @@ void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
           return;
         }
         auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
-        const bool retry = actor && actor->Is3DLoaded() &&
-                           SynchronizeRegisteredAppearanceHighHeel(actor);
+        const auto result =
+            actor && actor->Is3DLoaded()
+                ? SynchronizeRegisteredAppearanceHighHeel(actor, a_generation)
+                : HighHeelSyncAttempt::Retry;
+        if (result == HighHeelSyncAttempt::LegacyDispatchStarted) {
+          return;
+        }
+        const bool retry = result == HighHeelSyncAttempt::Retry;
         if ((retry || !actor || !actor->Is3DLoaded()) &&
             a_remainingFrames > 0) {
           QueueHighHeelSyncTask(a_actorFormID, a_generation,
@@ -1194,7 +1426,8 @@ namespace sfs::native::racemenu {
 namespace {
 struct ExchangeResult {
   skee::IInterfaceMap *interfaceMap{nullptr};
-  skee::IBodyMorphInterface *bodyMorph{nullptr};
+  skee::IPluginInterface *bodyMorphPlugin{nullptr};
+  std::uint32_t bodyMorphVersion{0};
   std::string_view route;
 };
 
@@ -1215,24 +1448,28 @@ TryInterfaceExchange(const SKSE::MessagingInterface *a_messaging,
       std::addressof(message), sizeof(skee::InterfaceExchangeMessage),
       a_receiver);
 
-  auto *bodyMorph =
+  auto *bodyMorphPlugin =
       message.interfaceMap
-          ? static_cast<skee::IBodyMorphInterface *>(
-                message.interfaceMap->QueryInterface("BodyMorph"))
+          ? message.interfaceMap->QueryInterface("BodyMorph")
           : nullptr;
-  const auto bodyMorphVersion = bodyMorph ? bodyMorph->GetVersion() : 0;
+  const auto bodyMorphVersion =
+      bodyMorphPlugin ? bodyMorphPlugin->GetVersion() : 0;
 
   logger::info(
       "RaceMenu interface exchange attempt {} via {}: dispatched={}, interfaceMap={}, BodyMorph={}, version={}",
       a_attempt, a_route, dispatched,
       static_cast<const void *>(message.interfaceMap),
-      static_cast<const void *>(bodyMorph), bodyMorphVersion);
+      static_cast<const void *>(bodyMorphPlugin), bodyMorphVersion);
 
-  if (!dispatched || !message.interfaceMap || !bodyMorph ||
-      bodyMorphVersion < 4) {
+  // Keep the exchange for legacy BodyMorph v3 releases as well. Their C++
+  // object is not public-ABI-compatible, but their official NiOverride
+  // Papyrus transform functions remain usable for HH_OFFSET synchronization.
+  if (!dispatched || !message.interfaceMap || !bodyMorphPlugin ||
+      bodyMorphVersion == 0) {
     return std::nullopt;
   }
-  return ExchangeResult{message.interfaceMap, bodyMorph, a_route};
+  return ExchangeResult{message.interfaceMap, bodyMorphPlugin,
+                        bodyMorphVersion, a_route};
 }
 } // namespace
 
@@ -1271,32 +1508,59 @@ void InitializeBodyMorphInterface() {
   logger::info("Received supported RaceMenu interfaces via {}",
                exchange->route);
 
-  auto *bodyMorph = exchange->bodyMorph;
+  auto *bodyMorph =
+      rules::IsPublicBodyMorphInterfaceCompatible(
+          exchange->bodyMorphVersion)
+          ? static_cast<skee::IBodyMorphInterface *>(
+                exchange->bodyMorphPlugin)
+          : nullptr;
   g_bodyMorphInterface.store(bodyMorph);
 
-  auto *transform = static_cast<skee::INiTransformInterface *>(
-      exchange->interfaceMap->QueryInterface("NiTransform"));
-  const auto transformVersion = transform ? transform->GetVersion() : 0;
-  if (transform && transformVersion >= 3) {
+  auto *transformPlugin =
+      exchange->interfaceMap->QueryInterface("NiTransform");
+  const auto transformVersion =
+      transformPlugin ? transformPlugin->GetVersion() : 0;
+  const auto transformRoute =
+      rules::ResolveHighHeelTransformRoute(transformVersion);
+  g_transformInterfaceVersion.store(transformVersion,
+                                    std::memory_order_release);
+  if (transformRoute == rules::HighHeelTransformRoute::PublicInterface) {
+    // Version 3 introduced the public INiTransformInterface ABI. Older
+    // concrete vtables are intentionally never cast to this type.
+    auto *transform =
+        static_cast<skee::INiTransformInterface *>(transformPlugin);
     g_transformInterface.store(transform, std::memory_order_release);
     logger::info(
         "Connected to RaceMenu NiTransform interface version {} for registered-appearance HH_OFFSET synchronization",
         transformVersion);
+  } else if (transformRoute ==
+             rules::HighHeelTransformRoute::LegacyPapyrus) {
+    g_transformInterface.store(nullptr, std::memory_order_release);
+    logger::info(
+        "Connected to RaceMenu NiTransform version {}; registered-appearance HH_OFFSET synchronization will use the ABI-neutral NiOverride Papyrus route",
+        transformVersion);
   } else {
+    g_transformInterface.store(nullptr, std::memory_order_release);
     logger::warn(
-        "RaceMenu NiTransform v3 interface is unavailable (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
+        "RaceMenu NiTransform interface is unavailable (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
         transformVersion);
   }
 
-  const bool publicHookInstalled = InstallApplyBodyMorphsHook(bodyMorph);
-  if (!publicHookInstalled) {
-    logger::warn(
-        "RaceMenu BodyMorph public pipeline hook could not be installed; external direct ApplyBodyMorphs callers will use attachment-time synchronization only");
-  }
-  const bool updateTaskHookInstalled = InstallUpdateModelWeightTaskHook();
-  if (!updateTaskHookInstalled) {
-    logger::warn(
-        "RaceMenu UpdateModelWeight task hook could not be installed; NiOverride Papyrus live synchronization will remain inactive");
+  if (bodyMorph) {
+    const bool publicHookInstalled = InstallApplyBodyMorphsHook(bodyMorph);
+    if (!publicHookInstalled) {
+      logger::warn(
+          "RaceMenu BodyMorph public pipeline hook could not be installed; external direct ApplyBodyMorphs callers will use attachment-time synchronization only");
+    }
+    const bool updateTaskHookInstalled = InstallUpdateModelWeightTaskHook();
+    if (!updateTaskHookInstalled) {
+      logger::warn(
+          "RaceMenu UpdateModelWeight task hook could not be installed; NiOverride Papyrus live synchronization will remain inactive");
+    }
+  } else {
+    logger::info(
+        "RaceMenu BodyMorph version {} predates the public v4 ABI; direct registered-appearance morph calls are disabled while NiOverride HH_OFFSET compatibility remains available",
+        exchange->bodyMorphVersion);
   }
 
   auto *actorUpdateManager = static_cast<skee::IActorUpdateManager *>(
@@ -1312,8 +1576,10 @@ void InitializeBodyMorphInterface() {
         "RaceMenu ActorUpdateManager interface is unavailable; SFS will retain native attachment-scene capture only");
   }
 
-  logger::info("Connected to RaceMenu BodyMorph interface version {}",
-               bodyMorph->GetVersion());
+  if (bodyMorph) {
+    logger::info("Connected to RaceMenu BodyMorph interface version {}",
+                 exchange->bodyMorphVersion);
+  }
   g_bodyMorphInitializationComplete.store(true);
 }
 
@@ -1377,7 +1643,10 @@ void MorphNewRegisteredAppearanceNodes(
 }
 
 void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
-  if (!a_actor || !g_transformInterface.load(std::memory_order_acquire)) {
+  if (!a_actor ||
+      rules::ResolveHighHeelTransformRoute(
+          g_transformInterfaceVersion.load(std::memory_order_acquire)) ==
+          rules::HighHeelTransformRoute::Unavailable) {
     return;
   }
   const auto actorFormID = a_actor->GetFormID();
@@ -1393,6 +1662,7 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
       return;
     }
     if (!g_queuedHighHeelSyncs.insert(actorFormID).second) {
+      g_pendingHighHeelResyncs.insert(actorFormID);
       return;
     }
   }
@@ -1427,6 +1697,7 @@ void ForgetAllRegisteredAppearanceNodes() {
   {
     std::lock_guard queueLock(g_highHeelQueueMutex);
     g_queuedHighHeelSyncs.clear();
+    g_pendingHighHeelResyncs.clear();
   }
 
   std::vector<RE::FormID> highHeelActors;

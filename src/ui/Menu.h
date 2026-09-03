@@ -324,15 +324,15 @@ private:
   [[nodiscard]] bool MatchesSelectedSlotsAnd(std::uint64_t a_slotMask) const;
   [[nodiscard]] std::string BuildSelectedSlotPreview() const;
 
-  [[nodiscard]] bool
-  MatchesGearFilters(const GearEntry &a_entry,
-                     body_family::Mask a_actorBodyFamily) const;
-  [[nodiscard]] bool
-  MatchesOutfitFilters(const OutfitEntry &a_entry,
-                       body_family::Mask a_actorBodyFamily) const;
-  [[nodiscard]] bool
-  MatchesKitFilters(const KitEntry &a_entry,
-                    body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] bool MatchesGearFilters(
+      const GearEntry &a_entry,
+      body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] bool MatchesOutfitFilters(
+      const OutfitEntry &a_entry,
+      body_family::Mask a_actorBodyFamily) const;
+  [[nodiscard]] bool MatchesKitFilters(
+      const KitEntry &a_entry,
+      body_family::Mask a_actorBodyFamily) const;
   [[nodiscard]] std::optional<KitEntry::Layout>
   BuildSlotFallbackLayoutFromArmorForms(
       const std::vector<RE::FormID> &a_formIDs) const;
@@ -404,8 +404,7 @@ private:
   BuildFilteredOutfits(body_family::Mask a_actorBodyFamily) const;
   [[nodiscard]] std::vector<const KitEntry *>
   BuildFilteredKits(body_family::Mask a_actorBodyFamily) const;
-  [[nodiscard]] body_family::Mask
-  ResolveCatalogActorBodyFamily(RE::FormID &a_actorFormID);
+  [[nodiscard]] body_family::Mask SyncCatalogActorContext();
   void SortGearRows(std::vector<const GearEntry *> &a_rows,
                     ImGuiTableSortSpecs *a_sortSpecs) const;
   void SortOutfitRows(std::vector<const OutfitEntry *> &a_rows,
@@ -494,6 +493,7 @@ private:
   bool pauseGameWhenOpen_{false};
   bool smoothScroll_{true};
   bool addCrosshairNpcToActorList_{false};
+  bool catalogBodyFamilyFilterEnabled_{true};
   bool hideRealEquipmentWithFitting_{false};
   std::mutex pendingWorkbenchActorSyncMutex_;
   std::unordered_set<RE::FormID> pendingWorkbenchActorSyncs_;
@@ -598,11 +598,10 @@ private:
   };
   WorkbenchDerivedState workbenchDerived_;
   ui::catalog::DerivedState catalogDerived_;
-  struct CatalogActorBodyState {
+  struct CatalogActorState {
     bool initialized{false};
     RE::FormID actorFormID{0};
-    body_family::Mask family{0};
   };
-  CatalogActorBodyState catalogActorBodyState_;
+  CatalogActorState catalogActorState_;
 };
 } // namespace sfs

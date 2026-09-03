@@ -60,6 +60,10 @@ void TestCatalogMerge() {
 }
 
 void TestVanillaFallbackVisibility() {
+  Require(Matches(Bit(Family::Ube), 0) &&
+              Matches(Bit(Family::Cbbe), 0) &&
+              Matches(Bit(Family::Unp), 0),
+          "Unknown or ambiguous actors must leave the catalog unfiltered");
   Require(Matches(Bit(Family::FemaleVanilla), Bit(Family::Cbbe)),
           "Unlabelled female/Vanilla entries must remain visible to CBBE actors");
   Require(Matches(Bit(Family::MaleVanilla), Bit(Family::Himbo)),

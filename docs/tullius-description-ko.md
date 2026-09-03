@@ -1,4 +1,4 @@
-# Skyrim Fitting System v1.5.2
+# Skyrim Fitting System v1.5.3
 
 ![Skyrim Fitting System](https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&key=wSK-nG9UwFePxIQ1PlXhgQ&type=orig)
 
@@ -17,7 +17,15 @@
 - 미리보기·적용과 자동 탈의 억제에서 유지되는 액터별 등록 외형 잠금
 - RaceMenu BodyMorph·등록 하이힐 `HH_OFFSET`, SOS/TNG, DAVE·DAV·native 표시 환경 지원
 - OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume·Helmet Toggle 2 연동, 선택형 DFFMA OAR·Dynamic Footprints 호환 패치
-- 선택 액터의 바디 계열에 맞는 장비·의상·키트 자동 필터
+- 확실한 액터 바디 계열만 선택적으로 거르는 장비·의상·키트 목록과 항상 필터 없는 등록 외형 작업대
+
+## v1.5.3 주요 변경
+
+- SexLab P+ v2.12.0의 Skyrim 1.5.97·1.6.1170 패키지에 별도 PEX/ESP 패치 없는 내장 탈의·재착의 연동을 추가했습니다. 모드 설정·직접 편집+모드 설정은 가상토큰, 바닐라·직접 편집+바닐라는 실제 장비 경로를 유지합니다.
+- 장비·의상·키트에 기본 활성화되는 바디 호환 필터 옵션을 추가했습니다. 불확실한 커스텀 액터는 전체 표시하고 등록 외형 작업대는 필터링하지 않습니다.
+- 스크롤바 드래그 해제 시 목록 초기화, 중첩 거짓 사용자 정의 조건 저장 시 멈춤, 일시정지 상태의 다음 UI 실행에서 Left/Right 구도가 끝까지 적용되지 않던 문제를 수정했습니다.
+- 구형 NiOverride transform, NiTransform v3 이상, 호환 BodyMorph v4/v5 경로를 안전하게 구분하면서 DAVE·DAV·native와 액터별 상태를 유지합니다.
+- 피팅 염색에서 UBE의 `ArmColli`, `FeetColli`, `ButtLegColli` 같은 축약 충돌 헬퍼를 제외했습니다.
 
 ## v1.5.2 주요 변경
 
@@ -50,7 +58,7 @@
 1. 개인 키트가 있다면 `Interface/SkyrimFittingSystem/user`를 백업합니다.
 2. 이전 SFS 모드 폴더를 완전히 삭제합니다.
 3. 이전 독립형 **SFS Kit Generator**, 기존 **SFS Helmet Toggle 2 호환 패치**, v1.4.4 **SFS Grid Inventory Costume Compatibility Patch**가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.
-4. v1.5.2 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
+4. v1.5.3 본체 ZIP을 새 모드로 설치하고 `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
 5. 필요하면 백업한 개인 키트만 복원합니다.
 6. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 **별도 SFS 호환 패치만** 원본 모드 뒤에 설치합니다.
 

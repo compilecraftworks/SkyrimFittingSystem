@@ -284,9 +284,9 @@ Mask ResolveActor(RE::Actor *a_actor) {
   if (family == 0) {
     family = DetectInstalledDefault(sex);
   }
-  if (family == 0) {
-    family = VanillaFamily(sex);
-  }
+  // Do not guess Vanilla when every actor-local and installed-framework hint
+  // is ambiguous. A zero result deliberately makes the catalog filter fail
+  // open, which is safer for custom followers and mixed UBE/3BA load orders.
 
   {
     std::lock_guard lock(g_cacheMutex);
