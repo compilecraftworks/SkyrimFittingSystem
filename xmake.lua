@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.4"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.5"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -155,6 +155,19 @@ target("RaceMenuInterfaceTests")
     if is_plat("windows") then
         add_cxxflags("/EHsc")
     end
+
+target("RaceMenuMorphTrackingTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/RaceMenuMorphTrackingTests.cpp")
+    add_includedirs("src", "build/.gens/morph-tracking-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-MorphTrackingTestSource.ps1", "-Output",
+            "build/.gens/morph-tracking-tests/RaceMenuMorphTracking.production.inc"})
+    end)
 
 -- The private personal-completion experiment is intentionally not part of the
 -- public GPL source archive. Keep its optional local targets available for the

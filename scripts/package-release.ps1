@@ -123,6 +123,8 @@ $sourceDocs = @(
     'RELEASE-NOTES-v1.5.2.md', 'RELEASE-NOTES-v1.5.2-ko.md',
     'RELEASE-NOTES-v1.5.3.md', 'RELEASE-NOTES-v1.5.3-ko.md',
     'RELEASE-NOTES-v1.5.4.md', 'RELEASE-NOTES-v1.5.4-ko.md',
+    'RELEASE-NOTES-v1.5.5.md', 'RELEASE-NOTES-v1.5.5-ko.md',
+    'BodyMorph-v1.5.5-Regression-Checks.md',
     'RaceMenu-ABI-Audit.md'
 )
 foreach ($name in $sourceDocs) {

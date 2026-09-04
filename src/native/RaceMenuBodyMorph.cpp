@@ -41,6 +41,8 @@ struct RegisteredAppearanceNode {
   RE::FormID armorFormID{0};
   RE::FormID addonFormID{0};
   bool firstPerson{false};
+  std::uint8_t detachedChecks{0};
+  std::uint64_t observation{0};
 
   [[nodiscard]] bool operator==(const RegisteredAppearanceNode &a_other) const {
     return object.get() == a_other.object.get() &&
@@ -88,6 +90,9 @@ std::unordered_map<RE::FormID,
     g_registeredAppearanceAttachmentRoots;
 std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
 sfs::native::racemenu::rules::ActorMorphActivity g_morphActivity;
+sfs::native::racemenu::rules::ActorMorphRequests g_morphRequests;
+std::unordered_set<RE::FormID> g_highHeelAttachmentActors;
+std::uint64_t g_nodeObservation{0}; // protected by g_nodeMutex
 std::mutex g_highHeelQueueMutex;
 std::unordered_set<RE::FormID> g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
@@ -322,50 +327,68 @@ GetLoadedModuleImage(const wchar_t *a_moduleName) {
 }
 
 [[nodiscard]] std::vector<RE::NiPointer<RE::NiAVObject>>
-ResolveRegisteredAppearanceNodes(RE::Actor *a_actor) {
+ResolveRegisteredAppearanceNodes(RE::Actor *a_actor,
+                                 bool *a_awaitingAttachment = nullptr,
+                                 const bool a_completionPass = false) {
+  if (a_awaitingAttachment) {
+    *a_awaitingAttachment = false;
+  }
   std::vector<RE::NiPointer<RE::NiAVObject>> resolved;
   if (!a_actor) {
     return resolved;
   }
 
-  std::lock_guard lock(g_nodeMutex);
-  const auto nodesIt =
-      g_registeredAppearanceNodes.find(a_actor->GetFormID());
-  if (nodesIt == g_registeredAppearanceNodes.end()) {
-    return resolved;
+  std::vector<RegisteredAppearanceNode> snapshot;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    const auto it = g_registeredAppearanceNodes.find(a_actor->GetFormID());
+    if (it == g_registeredAppearanceNodes.end()) {
+      return resolved;
+    }
+    snapshot = it->second;
   }
-
-  // A DAVE refresh may retain an unchanged attachment instead of emitting a
-  // replacement OnAttach event. Keep remembered nodes across refreshes and
-  // prune them here only after they have actually left this actor's scene or
-  // no longer belong to the actor's current registered appearance set.
-  const auto isCurrentNode = [&](const RegisteredAppearanceNode &a_entry) {
-    if (!a_entry.object) {
-      return false;
-    }
+  // Never hold g_nodeMutex while acquiring the workbench lock through
+  // IsDisplayedFittingArmor. Skinning publishes in the opposite direction.
+  // A callback may precede scene grafting: skip detached nodes, but give the
+  // bounded completion task two retries before releasing their references.
+  std::unordered_set<RE::NiAVObject *> seen;
+  for (auto &entry : snapshot) {
     const auto *armor =
-        RE::TESForm::LookupByID<RE::TESObjectARMO>(a_entry.armorFormID);
-    if (!armor || !sfs::native::IsDisplayedFittingArmor(a_actor, armor)) {
-      return false;
-    }
-    auto *root = a_actor->Get3D(a_entry.firstPerson);
-    for (auto *object = a_entry.object.get(); object;
+        RE::TESForm::LookupByID<RE::TESObjectARMO>(entry.armorFormID);
+    const bool displayed =
+        armor && sfs::native::IsDisplayedFittingArmor(a_actor, armor);
+    bool attached = false;
+    auto *root = a_actor->Get3D(entry.firstPerson);
+    for (auto *object = entry.object.get(); object;
          object = object->parent) {
       if (object == root) {
-        return true;
+        attached = true;
+        break;
       }
     }
-    return false;
-  };
-
-  auto &rememberedNodes = nodesIt->second;
-  std::erase_if(rememberedNodes, [&](const RegisteredAppearanceNode &a_entry) {
-    return !isCurrentNode(a_entry);
-  });
-  std::unordered_set<RE::NiAVObject *> seen;
-  for (const auto &entry : rememberedNodes) {
-    if (entry.object && seen.insert(entry.object.get()).second) {
+    entry.detachedChecks = attached ? 0 :
+        entry.detachedChecks + (a_completionPass ? 1 : 0);
+    const bool expired = !entry.object || !armor || entry.detachedChecks > 2;
+    if (!expired && !attached && displayed && a_awaitingAttachment) {
+      *a_awaitingAttachment = true;
+    }
+    if (!expired && attached && displayed &&
+        seen.insert(entry.object.get()).second) {
       resolved.push_back(entry.object);
+    }
+    std::lock_guard lock(g_nodeMutex);
+    const auto actorIt = g_registeredAppearanceNodes.find(a_actor->GetFormID());
+    if (actorIt == g_registeredAppearanceNodes.end()) {
+      continue;
+    }
+    auto &nodes = actorIt->second;
+    const auto it = std::ranges::find(nodes, entry);
+    if (it != nodes.end() && it->observation == entry.observation) {
+      if (expired) {
+        nodes.erase(it);
+      } else {
+        it->detachedChecks = entry.detachedChecks;
+      }
     }
   }
   return resolved;
@@ -935,10 +958,14 @@ void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
       });
 }
 
+void QueuePendingMorphSync(RE::FormID a_actorFormID,
+                           std::uint32_t a_retries = 2);
+
 void RememberAndMorphNewNodes(
     skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor,
     const std::vector<RE::NiPointer<RE::NiAVObject>> &a_nodes,
-    const RE::FormID a_armorFormID, const bool a_firstPerson) {
+    const RE::FormID a_armorFormID, const bool a_firstPerson,
+    const bool a_applyInitialMorphs) {
   if (!a_interface || !a_actor || a_nodes.empty()) {
     return;
   }
@@ -956,7 +983,7 @@ void RememberAndMorphNewNodes(
     // vertex delta twice. Otherwise apply the current morphs. Although the
     // upstream public header names argument 3 `erase`, its v4/v5 implementation
     // forwards it as `isAttaching`; false resets/reapplies existing SHAPEDATA.
-    if (!ContainsExtraData(node.get(), shapeDataName)) {
+    if (a_applyInitialMorphs && !ContainsExtraData(node.get(), shapeDataName)) {
       a_interface->ApplyVertexDiff(a_actor, node.get(), false);
     }
 
@@ -967,9 +994,14 @@ void RememberAndMorphNewNodes(
     std::lock_guard lock(g_nodeMutex);
     auto &registered =
         g_registeredAppearanceNodes[a_actor->GetFormID()];
-    if (std::ranges::find(registered, entry) == registered.end()) {
+    entry.observation = ++g_nodeObservation;
+    const auto existing = std::ranges::find(registered, entry);
+    if (existing == registered.end()) {
       registered.push_back(std::move(entry));
       ++remembered;
+    } else {
+      existing->detachedChecks = 0;
+      existing->observation = entry.observation;
     }
   }
 
@@ -978,6 +1010,7 @@ void RememberAndMorphNewNodes(
         "Applied RaceMenu morphs to {} newly attached SFS node(s) actor={:08X} armor={:08X} firstPerson={}",
         remembered, a_actor->GetFormID(), a_armorFormID, a_firstPerson);
   }
+  QueuePendingMorphSync(a_actor->GetFormID());
 }
 
 class RegisteredAppearanceAttachmentObserver final
@@ -1000,7 +1033,14 @@ public:
     // Record the same actor-local third-person heel root from RaceMenu's
     // official attachment callback as well. The helper ignores first-person
     // roots and non-HH_OFFSET branches, and de-duplicates native captures.
-    if (RememberHighHeelAttachmentRoots(
+    // Preserve the pre-existing HH observer scope. Preview morph tracking must
+    // not silently broaden the transform observer to replacement previews.
+    bool observeHighHeels = false;
+    {
+      std::lock_guard lock(g_nodeMutex);
+      observeHighHeels = g_highHeelAttachmentActors.contains(actor->GetFormID());
+    }
+    if (observeHighHeels && RememberHighHeelAttachmentRoots(
             actor, {RE::NiPointer<RE::NiAVObject>{a_object}},
             a_armor->GetFormID(), a_firstPerson)) {
       // DAVE may complete the attachment after RefreshActor returns. Queue
@@ -1009,25 +1049,40 @@ public:
       sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(actor);
     }
 
+    if (!g_bodyMorphInterface.load()) {
+      return; // Keep high-heel observation without enrolling unsupported morph ABIs.
+    }
     RegisteredAppearanceNode node{
                                   .object = RE::NiPointer<RE::NiAVObject>{a_object},
                                   .armorFormID = a_armor->GetFormID(),
                                   .addonFormID = a_addon->GetFormID(),
                                   .firstPerson = a_firstPerson};
-    std::lock_guard lock(g_nodeMutex);
-    auto &nodes = g_registeredAppearanceNodes[actor->GetFormID()];
-    if (std::ranges::find(nodes, node) == nodes.end()) {
-      nodes.push_back(std::move(node));
+    {
+      std::lock_guard lock(g_nodeMutex);
+      auto &nodes = g_registeredAppearanceNodes[actor->GetFormID()];
+      node.observation = ++g_nodeObservation;
+      const auto existing = std::ranges::find(nodes, node);
+      if (existing == nodes.end()) {
+        nodes.push_back(std::move(node));
+      } else {
+        existing->detachedChecks = 0;
+        existing->observation = node.observation;
+      }
     }
+    // Never apply a second initial delta in OnAttach. Only an earlier live
+    // update request permits the deferred completion pass to morph this root.
+    QueuePendingMorphSync(actor->GetFormID());
   }
 };
 
 RegisteredAppearanceAttachmentObserver g_attachmentObserver;
 
 [[nodiscard]] std::size_t ApplyMorphsToRegisteredAppearanceNodes(
-    skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor);
+    skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor,
+    bool *a_awaitingAttachment = nullptr, bool a_completionPass = false);
 
-void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
+void QueuePendingMorphSync(const RE::FormID a_actorFormID,
+                           const std::uint32_t a_retries) {
   if (a_actorFormID == 0 ||
       !IsRegisteredAppearanceDisplayActive(a_actorFormID)) {
     return;
@@ -1041,7 +1096,23 @@ void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
     return;
   }
 
-  taskInterface->AddTask([a_actorFormID]() {
+  std::optional<std::uint64_t> ticket;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    ticket = g_morphRequests.Schedule(a_actorFormID);
+  }
+  if (!ticket) {
+    return;
+  }
+  taskInterface->AddTask([a_actorFormID, ticket = *ticket, a_retries]() {
+    bool requested = false;
+    {
+      std::lock_guard lock(g_nodeMutex);
+      if (!g_morphRequests.Begin(a_actorFormID, ticket)) {
+        return;
+      }
+      requested = g_morphRequests.HasRequest(a_actorFormID);
+    }
     if (!IsRegisteredAppearanceDisplayActive(a_actorFormID)) {
       return;
     }
@@ -1053,8 +1124,21 @@ void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
         return;
       }
 
-      const auto appliedCount =
-          ApplyMorphsToRegisteredAppearanceNodes(bodyMorph, actor);
+      bool awaitingAttachment = false;
+      std::size_t appliedCount = 0;
+      if (requested) {
+        appliedCount = ApplyMorphsToRegisteredAppearanceNodes(
+            bodyMorph, actor, &awaitingAttachment, true);
+      } else {
+        // Housekeeping after an initial attachment must not apply morphs.
+        (void)ResolveRegisteredAppearanceNodes(actor, &awaitingAttachment, true);
+      }
+      if (awaitingAttachment && a_retries != 0) {
+        QueuePendingMorphSync(a_actorFormID, a_retries - 1);
+      }
+      if (!requested) {
+        return;
+      }
       bool firstObservedUpdate = false;
       {
         std::lock_guard lock(g_nodeMutex);
@@ -1063,7 +1147,7 @@ void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
       }
       if (firstObservedUpdate) {
         logger::info(
-            "Observed original RaceMenu UpdateModelWeight task for active SFS actor {:08X}; deferred synchronization applied to {} registered appearance node(s)",
+            "RaceMenu live-update completion for SFS actor {:08X}; synchronization applied to {} registered appearance node(s)",
             a_actorFormID, appliedCount);
       } else {
         logger::debug(
@@ -1082,14 +1166,30 @@ void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
   });
 }
 
+void RecordMorphUpdateRequest(const RE::FormID a_actorFormID) {
+  std::lock_guard lock(g_nodeMutex);
+  // Do not enroll unrelated actors merely because another mod morphs them.
+  if (g_morphActivity.IsActive(a_actorFormID) ||
+      g_registeredAppearanceNodes.contains(a_actorFormID)) {
+    g_morphRequests.Request(a_actorFormID);
+  }
+}
+
+void QueueUpdateModelWeightAppearanceSync(const RE::FormID a_actorFormID) {
+  RecordMorphUpdateRequest(a_actorFormID);
+  QueuePendingMorphSync(a_actorFormID);
+}
+
 [[nodiscard]] std::size_t ApplyMorphsToRegisteredAppearanceNodes(
-    skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor) {
+    skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor,
+    bool *a_awaitingAttachment, const bool a_completionPass) {
   if (!a_interface || !a_actor || !a_actor->Is3DLoaded() ||
       !IsRegisteredAppearanceDisplayActive(a_actor->GetFormID())) {
     return 0;
   }
 
-  auto nodes = ResolveRegisteredAppearanceNodes(a_actor);
+  auto nodes = ResolveRegisteredAppearanceNodes(a_actor, a_awaitingAttachment,
+                                                a_completionPass);
   if (nodes.empty()) {
     return 0;
   }
@@ -1128,7 +1228,13 @@ void ApplyBodyMorphsHook(skee::IBodyMorphInterface *a_interface,
   // so compiler/version differences cannot apply the same vertex deltas twice.
   if (g_updateModelWeightTaskDepth == 0) {
     try {
-      (void)ApplyMorphsToRegisteredAppearanceNodes(a_interface, actor);
+      RecordMorphUpdateRequest(actor->GetFormID());
+      bool awaitingAttachment = false;
+      (void)ApplyMorphsToRegisteredAppearanceNodes(a_interface, actor,
+                                                  &awaitingAttachment);
+      if (awaitingAttachment) {
+        QueuePendingMorphSync(actor->GetFormID());
+      }
     } catch (const std::exception &error) {
       logger::error(
           "RaceMenu public BodyMorph synchronization failed actor={:08X}: {}",
@@ -1161,8 +1267,7 @@ void UpdateModelWeightTaskRunHook(void *a_task) {
     original(a_task);
   }
 
-  if (actorFormID == 0 ||
-      !IsRegisteredAppearanceDisplayActive(actorFormID)) {
+  if (actorFormID == 0) {
     return;
   }
 
@@ -1452,7 +1557,7 @@ AttachmentSceneSnapshot CaptureAttachmentScene(RE::Actor *a_actor) {
 
 void MorphNewRegisteredAppearanceNodes(
     RE::Actor *a_actor, const AttachmentSceneSnapshot &a_before,
-    const RE::FormID a_armorFormID) {
+    const RE::FormID a_armorFormID, const bool a_applyInitialMorphs) {
   if (!a_actor) {
     return;
   }
@@ -1472,21 +1577,18 @@ void MorphNewRegisteredAppearanceNodes(
   }
 
   auto *bodyMorph = g_bodyMorphInterface.load();
-  // Replacing kit previews are deliberately left to RaceMenu's official
-  // OnAttach callback. Tracking the same short-lived attachment here would
-  // make the later SFS synchronization reset its vertex buffer a second time
-  // during the same skinning pass. Saved appearances remain tracked so they
-  // continue to receive explicit RaceMenu body-morph updates.
+  // All displayed roots need later live updates. Only the initial native morph
+  // application is excluded for replacement previews (RaceMenu owns that pass).
   if (!bodyMorph || !IsBodyMorphInterfaceReady() ||
       !IsRegisteredAppearanceDisplayActive(a_actor->GetFormID())) {
     return;
   }
 
   RememberAndMorphNewNodes(bodyMorph, a_actor, newThirdPersonRoots,
-                           a_armorFormID, false);
+                           a_armorFormID, false, a_applyInitialMorphs);
   if (firstPersonRoot != thirdPersonRoot) {
     RememberAndMorphNewNodes(bodyMorph, a_actor, newFirstPersonRoots,
-                             a_armorFormID, true);
+                             a_armorFormID, true, a_applyInitialMorphs);
   }
 }
 
@@ -1520,15 +1622,28 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
 }
 
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
-                                          const bool a_active) {
+                                          const bool a_active,
+                                          const bool a_observeHighHeelAttachments) {
   if (!a_actor) {
     return;
   }
   const auto actorFormID = a_actor->GetFormID();
-  std::lock_guard lock(g_nodeMutex);
-  g_morphActivity.SetActive(actorFormID, a_active);
-  if (!a_active) {
-    g_registeredAppearanceNodes.erase(actorFormID);
+  bool becameActive = false;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    becameActive = a_active && !g_morphActivity.IsActive(actorFormID);
+    g_morphActivity.SetActive(actorFormID, a_active);
+    if (a_active && a_observeHighHeelAttachments) {
+      g_highHeelAttachmentActors.insert(actorFormID);
+    } else {
+      g_highHeelAttachmentActors.erase(actorFormID);
+    }
+    // Hidden/temporarily absent is not destroyed. Keep the last owned roots so
+    // a backend retaining them can resume live updates without another OnAttach.
+    // Deferred reconciliation drops detached roots; load/revert clears all.
+  }
+  if (becameActive) {
+    QueuePendingMorphSync(actorFormID);
   }
 }
 
@@ -1538,6 +1653,7 @@ void ForgetRegisteredAppearanceNodes(RE::Actor *a_actor) {
   }
   std::lock_guard lock(g_nodeMutex);
   g_registeredAppearanceNodes.erase(a_actor->GetFormID());
+  g_morphRequests.Forget(a_actor->GetFormID());
 }
 
 void ForgetAllRegisteredAppearanceNodes() {
@@ -1557,6 +1673,8 @@ void ForgetAllRegisteredAppearanceNodes() {
     g_registeredAppearanceAttachmentRoots.clear();
     g_registeredAppearanceHighHeelActors.clear();
     g_morphActivity.Clear();
+    g_morphRequests.Clear();
+    g_highHeelAttachmentActors.clear();
   }
 
   // Remove only SFS's temporary zero-valued bootstrap if a task was

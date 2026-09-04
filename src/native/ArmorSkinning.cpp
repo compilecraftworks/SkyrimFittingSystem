@@ -54,6 +54,7 @@ GetProtectedActualSlotMask(const RE::TESObjectARMO *a_armor) {
 struct DisplaySet {
   bool active{false};
   bool trackRegisteredAppearanceMorphNodes{false};
+  bool applyInitialNativeMorphs{true};
   std::vector<const RE::TESObjectARMO *> armors;
   std::unordered_set<RE::FormID> hiddenArmorFormIDs;
   std::unordered_set<RE::FormID> forceVisibleArmorFormIDs;
@@ -1814,11 +1815,14 @@ BuildDisplaySet(RE::Actor *a_actor,
   // RaceMenu attachment callbacks can run synchronously from the skinning
   // call below, including during the first post-load 3D construction before
   // RefreshArmorFor has executed. Carry the decision made under the same
-  // actor-local workbench lock so saved appearances are trackable before their
-  // nodes attach, while replacement kit previews remain deliberately excluded.
+  // actor-local workbench lock. Preview roots also need subsequent live updates;
+  // only their initial attach-time morph application belongs to RaceMenu alone.
   displaySet.trackRegisteredAppearanceMorphNodes =
       sfs::native::racemenu::rules::ShouldTrackRegisteredAppearanceNodes(
-          previewReplacesRows, displaySet.active, displaySet.armors.size());
+          displaySet.active, displaySet.armors.size());
+  displaySet.applyInitialNativeMorphs =
+      sfs::native::racemenu::rules::ShouldApplyInitialNativeMorphs(
+          previewReplacesRows);
 
   const auto visibleRealArmors =
       CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
@@ -2961,7 +2965,8 @@ void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
 
   const auto displaySet = BuildDisplaySet(a_actor);
   sfs::native::racemenu::SetRegisteredAppearanceDisplayActive(
-      a_actor, displaySet.trackRegisteredAppearanceMorphNodes);
+      a_actor, displaySet.trackRegisteredAppearanceMorphNodes,
+      displaySet.applyInitialNativeMorphs);
   if (!displaySet.active || displaySet.armors.empty()) {
     return;
   }
@@ -2994,7 +2999,8 @@ void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
         sfs::native::racemenu::CaptureAttachmentScene(a_actor);
     re::ApplyArmorAddon(armor, race, a_actorWeightModel, isFemale);
     sfs::native::racemenu::MorphNewRegisteredAppearanceNodes(
-        a_actor, attachmentScene, armor->GetFormID());
+        a_actor, attachmentScene, armor->GetFormID(),
+        displaySet.applyInitialNativeMorphs);
   }
   sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
@@ -3170,13 +3176,11 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
   sfs::native::helmet_toggle::SynchronizeActor(a_actor, false);
 
   const auto displaySet = BuildDisplaySet(a_actor);
-  // RaceMenu already receives the native OnAttach notification for temporary
-  // kit previews. Do not also retain those short-lived nodes in SFS's
-  // registered-appearance morph synchronization: its reset-and-reapply pass
-  // can otherwise run in the same rebuild as RaceMenu's attach pass. Saved
-  // appearances keep the established tracking and body-morph update path.
+  // Publish actor-local live-update eligibility before every backend dispatch.
+  // Initial preview morphing is separated at the native capture call site.
   sfs::native::racemenu::SetRegisteredAppearanceDisplayActive(
-      a_actor, displaySet.trackRegisteredAppearanceMorphNodes);
+      a_actor, displaySet.trackRegisteredAppearanceMorphNodes,
+      displaySet.applyInitialNativeMorphs);
 
   // Do not discard remembered BodyMorph nodes before asking the backend to
   // refresh. DAVE may keep unchanged attachments and emit no replacement

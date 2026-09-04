@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace sfs::native::racemenu::rules {
@@ -55,10 +57,57 @@ IsPublicBodyMorphInterfaceCompatible(
 }
 
 [[nodiscard]] inline constexpr bool ShouldTrackRegisteredAppearanceNodes(
-    const bool a_previewReplacesRows, const bool a_displayActive,
+    const bool a_displayActive,
     const std::size_t a_displayArmorCount) noexcept {
-  return !a_previewReplacesRows && a_displayActive && a_displayArmorCount != 0;
+  return a_displayActive && a_displayArmorCount != 0;
 }
+
+// Tracking later updates is independent of the initial attach-time application.
+// RaceMenu owns initial morphing for replacement previews; recording their
+// roots must not cause another immediate vertex reset during the attach pass.
+[[nodiscard]] inline constexpr bool ShouldApplyInitialNativeMorphs(
+    const bool a_previewReplacesRows) noexcept {
+  return !a_previewReplacesRows;
+}
+
+// Event-driven, actor-local requests. Remember that an update was requested even
+// if its first pass finds no attached nodes. A later attachment/reactivation can
+// then replay CURRENT values. No polling and no morph-value snapshots.
+class ActorMorphRequests {
+public:
+  void Request(const std::uint32_t a_actor) { states_[a_actor].requested = true; }
+  [[nodiscard]] bool HasRequest(const std::uint32_t a_actor) const {
+    const auto it = states_.find(a_actor);
+    return it != states_.end() && it->second.requested;
+  }
+  [[nodiscard]] std::optional<std::uint64_t> Schedule(
+      const std::uint32_t a_actor) {
+    auto &state = states_[a_actor];
+    if (state.ticket != 0) {
+      return std::nullopt;
+    }
+    state.ticket = ++nextTicket_;
+    return state.ticket;
+  }
+  [[nodiscard]] bool Begin(const std::uint32_t a_actor,
+                           const std::uint64_t a_ticket) {
+    const auto it = states_.find(a_actor);
+    if (it == states_.end() || a_ticket == 0 || it->second.ticket != a_ticket) {
+      return false;
+    }
+    it->second.ticket = 0;
+    return true;
+  }
+  void Forget(const std::uint32_t a_actor) { states_.erase(a_actor); }
+  // Do not reset the ticket counter: an already queued task must never match a
+  // new actor/request after a save transition, even with the same FormID.
+  void Clear() { states_.clear(); }
+
+private:
+  struct State { bool requested{false}; std::uint64_t ticket{0}; };
+  std::unordered_map<std::uint32_t, State> states_;
+  std::uint64_t nextTicket_{0};
+};
 
 class ActorMorphActivity {
 public:

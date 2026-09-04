@@ -1,0 +1,3 @@
+Fixed intermittent live BodyMorph/OBody synchronization gaps during registered-appearance previews and visibility changes.
+Restored missed updates after late attachment or reactivation without duplicating initial preview morphs.
+Added actor-isolation, update-lifecycle, and stale-task regression coverage. Existing strip/redress, dye, BodyFamily filtering, and RaceMenu ABI profiles are unchanged.

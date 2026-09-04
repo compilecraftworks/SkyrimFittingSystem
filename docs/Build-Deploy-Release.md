@@ -1,6 +1,6 @@
 # Build, Deploy, And Release
 
-This document describes the v1.5.4 build and release workflow for:
+This document describes the v1.5.5 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.5.4/windows/x64/<mode>/SFSCore.dll`
-- local-only SE/AE PDB when present: `build/v1.5.4/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.5.5/windows/x64/<mode>/SFSCore.dll`
+- local-only SE/AE PDB when present: `build/v1.5.5/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -70,7 +70,13 @@ Before deployment or packaging, run:
 ```
 
 The suite builds and runs RuntimeLayout, Kit Generator, BodyFamily, Condition
-CNF, Fitting Dye, Kit navigation, core behavior, and RaceMenu interface tests.
+CNF, Fitting Dye, Kit navigation, core behavior, RaceMenu interface, and
+RaceMenu morph-tracking tests (nine executables).
+The morph-tracking target generates a test-only include from production
+function definitions and runs them with fake engine attachments. It covers
+preview/visibility transitions, late grafts, original-call preservation,
+actor isolation, bounded completion, initial morph separation, and stale tasks.
+No test include or fake engine code is linked into SFSCore.dll.
 RaceMenu tests use independent MSVC x64 provider vtables to check versioned
 registration, callback arguments, BodyMorph/NiTransform calls, and cross-thread
 initialization retries. See [RaceMenu ABI audit](RaceMenu-ABI-Audit.md) for the
@@ -136,10 +142,10 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.5.4 SE-AE.zip`
-- `Sources/Skyrim Fitting System v1.5.4 Source.zip`
+- `Release/Skyrim Fitting System v1.5.5 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.5.5 Source.zip`
 - matching copies under `dist/`
-- `Release/SHA256SUMS-v1.5.4.txt`
+- `Release/SHA256SUMS-v1.5.5.txt`
 
 The runtime archive has a flat MO2-installable root. It contains the main DLL,
 VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;

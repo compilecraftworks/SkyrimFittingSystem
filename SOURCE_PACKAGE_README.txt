@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.5.4 - Nexus Source Package
+Skyrim Fitting System v1.5.5 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -11,7 +11,7 @@ release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
 
-v1.5.4 includes the v1.4.1 actor-local empty-equipment display bootstrap and
+v1.5.5 includes the v1.4.1 actor-local empty-equipment display bootstrap and
 the complete in-game Kit Generator built into SFSCore. The generator can scan
 outfit plugins, edit candidate combinations, preview them read-only in the
 character and workbench, and write finished kits directly to the SFS user-kit
@@ -89,7 +89,12 @@ visitor hook.
 
 v1.5.4 fixes legacy RaceMenu ActorUpdateManager initialization, separates
 verified interface versions, and adds independent ABI regression tests.
-See docs/RELEASE-NOTES-v1.5.4.md, its Korean counterpart, and
-docs/RaceMenu-ABI-Audit.md for the current changes and verification limits.
+v1.5.5 repairs registered-appearance live morph tracking through previews,
+temporary hiding, and late attachment completion. Initial preview morphing
+remains separate from subsequent updates, and stale queued actor tasks are
+invalidated. Tests compile the production tracking functions against a fake
+engine; rendered DAVE/DAV/native behavior still needs in-game verification.
+See docs/RELEASE-NOTES-v1.5.5.md, its Korean counterpart, and
+docs/RaceMenu-ABI-Audit.md for changes and verification limits.
 The existing actor-local DAVE/DAV/native, BodyMorph, registered high heels,
 strip/redress, appearance locks, and dye behavior are preserved.

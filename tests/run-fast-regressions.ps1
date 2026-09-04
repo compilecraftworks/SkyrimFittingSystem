@@ -13,7 +13,8 @@ $targets = @(
     "FittingDyeRulesTests",
     "KitListNavigationTests",
     "CoreBehaviorRegressionTests",
-    "RaceMenuInterfaceTests"
+    "RaceMenuInterfaceTests",
+    "RaceMenuMorphTrackingTests"
 )
 
 Push-Location $repository

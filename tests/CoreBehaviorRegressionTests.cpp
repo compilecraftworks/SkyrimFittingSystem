@@ -247,12 +247,13 @@ void TestBodyMorphActivity() {
              !IsPublicBodyMorphInterfaceCompatible(UINT32_MAX),
          "Only RaceMenu BodyMorph v4/v5 may use the public C++ ABI");
 
-  Expect(ShouldTrackRegisteredAppearanceNodes(false, true, 1),
+  Expect(ShouldTrackRegisteredAppearanceNodes(true, 1),
          "A visible saved registered appearance must enable morph tracking");
-  Expect(!ShouldTrackRegisteredAppearanceNodes(true, true, 1),
-         "A replacement preview must stay on RaceMenu's ordinary attach path");
-  Expect(!ShouldTrackRegisteredAppearanceNodes(false, false, 1) &&
-             !ShouldTrackRegisteredAppearanceNodes(false, true, 0),
+  Expect(!ShouldApplyInitialNativeMorphs(true) &&
+             ShouldApplyInitialNativeMorphs(false),
+         "Preview live tracking must not double-apply initial native morphs");
+  Expect(!ShouldTrackRegisteredAppearanceNodes(false, 1) &&
+             !ShouldTrackRegisteredAppearanceNodes(true, 0),
          "Inactive or empty displays must not retain stale morph nodes");
 
   ActorMorphActivity activity;
@@ -267,6 +268,21 @@ void TestBodyMorphActivity() {
   activity.SetActive(0x1234, false);
   Expect(activity.IsActive(0x14) && !activity.IsActive(0x1234),
          "Deactivating an NPC appearance must not disable player morphs");
+
+  ActorMorphRequests requests;
+  requests.Request(0x14);
+  const auto first = requests.Schedule(0x14);
+  Expect(first && !requests.Schedule(0x14), "Actor tasks must coalesce");
+  requests.Request(0x1234);
+  Expect(requests.Schedule(0x1234).has_value(), "NPC tasks must be independent");
+  requests.Clear();
+  requests.Request(0x14);
+  const auto afterLoad = requests.Schedule(0x14);
+  Expect(afterLoad && !requests.Begin(0x14, *first) &&
+             requests.Begin(0x14, *afterLoad), "Stale save tasks must not replay");
+  Expect(requests.HasRequest(0x14), "Late attachment must retain update intent");
+  requests.Forget(0x14);
+  Expect(!requests.HasRequest(0x14), "Forgetting an actor must clear requests");
 }
 
 void ExpectBackendFollowups(
