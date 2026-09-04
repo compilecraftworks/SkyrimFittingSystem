@@ -58,8 +58,10 @@ was not captured, so the reporter-specific cause is not claimed as reproduced.
   RefreshActor, and DAVE empty-equipment Update3D retain actor-local follow-ups.
   Native before/after attachment capture remains available. No render backend
   or external stripping resolver was modified by this audit.
-- ApplyVertexDiff keeps `erase=false`; SHAPEDATA avoids initial double
-  application; the thread-local UpdateModelWeight scope avoids duplicate
+- ApplyVertexDiff keeps argument 3 `false`. The public header calls this
+  parameter `erase`, but the v4/v5 implementation forwards it as
+  `isAttaching`; false resets/reapplies existing SHAPEDATA. SHAPEDATA avoids
+  initial double application; the thread-local UpdateModelWeight scope avoids duplicate
   public-hook postpasses. Unchanged DAVE attachments remain tracked until they
   actually leave that actor's scene/current appearance set.
 - The private NIOVTaskUpdateModelWeight hook is used only with verified
@@ -110,7 +112,8 @@ covered by the official prefix and synthetic ABI tests, not a third DLL sample.
 - `RaceMenuInterfaceTests`: independent provider vtables with trap slots;
   registration versions 0/1/2, missing/unknown versions, OnAttach pointer and
   first-person arguments, registration idempotency, C++ exception/retry from
-  another thread, BodyMorph 4/5 dispatch, NiTransform 3 dispatch, actor/gender
+  another thread, BodyMorph 4/5 dispatch (including GetBodyMorphs slot 6,
+  VisitMorphs slot 8, float return and visitor callback), NiTransform 3 dispatch, actor/gender
   argument isolation, and legacy update-failure completion policy.
 - A diagnostic copy restoring the wrong version-0 slot-11 route was rejected
   with the expected trap exit 2. Production source was not altered for this
@@ -124,9 +127,30 @@ covered by the official prefix and synthetic ABI tests, not a third DLL sample.
   checks, not a substitute for engine/render execution.
 - The pre-version-bump v1.5.3 maintenance build passed. Its local DLL SHA256:
   `34DE9355EA17667573FB0C06792BEF76D1B30445D60CE8B01BF30BC45E819DC6`.
-- The final v1.5.4 build and all eight regression executables passed again.
+- The initial v1.5.4 release build and all eight regression executables passed again.
   DLL FileVersion/ProductVersion: `1.5.4.0`; SHA256:
   `40897BAA622E12D78D3B0FF54566C17D66A3F76A72CCFE0AA519752731375ABD`.
+
+### Follow-up BodyMorph diagnostic check
+
+A temporary diagnostic build logged live morph values and actor-local
+registered-appearance submissions in the native / BodyMorph v4 environment.
+The user reported that the visible result worked during this run. This does
+not identify the cause of the earlier report or establish a new morph fix;
+logging can affect timing, and CPU-side observations do not prove GPU output.
+It also does not constitute DAVE/DAV or BodyMorph v5 in-game verification.
+
+The production repack removes the temporary probes, scene/buffer scans and
+deferred diagnostic tasks. Their sources and diagnostic DLL/PDB are retained
+only in a local, excluded workspace archive. Production morph application,
+tracking, attachment, and refresh decisions remain unchanged. Independent
+read-only ABI tests and the corrected argument-name comment are retained.
+The no-probe production build still needs the same in-game comparison.
+
+The repacked production DLL was built with the pinned toolchain and all eight
+fast regression executables passed again. Diagnostic markers are absent.
+FileVersion/ProductVersion: `1.5.4.0`; SHA256:
+`EA2AD917A1772A64C9AF0735460338B2E7857467C6735BEBE86E272E089E14F2`.
 
 Still needed in game: startup to main menu with matching SE/AE RaceMenu,
 save/reload, player/NPC live morphs, registered heels on all three backends,

@@ -953,10 +953,9 @@ void RememberAndMorphNewNodes(
 
     // RaceMenu's own OnAttach path leaves SHAPEDATA on processed geometry. If
     // it already saw this attachment, record the node without adding the same
-    // vertex delta twice. Otherwise apply the current morphs while preserving
-    // the generated shape data. The public API's third argument is `erase`,
-    // not an attachment flag; passing true here removes the native fallback's
-    // morph state and leaves SFS-displayed armor at its unmorphed shape.
+    // vertex delta twice. Otherwise apply the current morphs. Although the
+    // upstream public header names argument 3 `erase`, its v4/v5 implementation
+    // forwards it as `isAttaching`; false resets/reapplies existing SHAPEDATA.
     if (!ContainsExtraData(node.get(), shapeDataName)) {
       a_interface->ApplyVertexDiff(a_actor, node.get(), false);
     }

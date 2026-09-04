@@ -4,6 +4,12 @@
 // can devirtualize against a mock built from the same consumer declaration.
 namespace race_menu_test {
 namespace abi = sfs::native::racemenu::abi;
+float ExerciseBodyMorphReadOnly(abi::IBodyMorphInterface *a_interface,
+                               RE::TESObjectREFR *a_actor,
+                               abi::IBodyMorphInterface::MorphVisitor &a_visitor) {
+  a_interface->VisitMorphs(a_actor, a_visitor);
+  return a_interface->GetBodyMorphs(a_actor, "PregnancyBelly");
+}
 
 void ExerciseBodyMorph(abi::IBodyMorphInterface *a_interface,
                        RE::TESObjectREFR *a_actor, RE::NiAVObject *a_node) {

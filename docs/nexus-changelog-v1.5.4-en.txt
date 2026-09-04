@@ -1,0 +1,8 @@
+v1.5.4
+
+- Fixed a v1.5.3 startup crash or endless wait before the main menu with older RaceMenu versions.
+- Corrected version-specific RaceMenu interface handling for live BodyMorph and registered high heels. Unverified interfaces are skipped safely.
+- Fixed failure handling for legacy RaceMenu high-heel updates.
+- Expanded compatibility tests while preserving actor isolation, DAVE/DAV/native, strip/redress linking, appearance locks, and dye behavior.
+
+No separate RaceMenu patch is required.

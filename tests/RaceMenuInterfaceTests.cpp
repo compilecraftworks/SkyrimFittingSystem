@@ -16,6 +16,8 @@
 
 namespace race_menu_test {
 namespace abi = sfs::native::racemenu::abi;
+float ExerciseBodyMorphReadOnly(abi::IBodyMorphInterface *, RE::TESObjectREFR *,
+                               abi::IBodyMorphInterface::MorphVisitor &);
 void ExerciseBodyMorph(abi::IBodyMorphInterface *, RE::TESObjectREFR *,
                        RE::NiAVObject *);
 void ExerciseTransform(abi::INiTransformInterface *, RE::TESObjectREFR *, bool);
@@ -71,6 +73,19 @@ struct Provider {
   static std::uint32_t Version(Provider *a_self) {
     ++a_self->versionCalls;
     return a_self->version;
+  }
+  static float ReadMorph(Provider *a_self, RE::TESObjectREFR *a_actor,
+                         const char *a_name) {
+    Expect(a_actor == a_self->actor && std::string_view(a_name) == "PregnancyBelly",
+           "Read-only morph slot 6 must preserve actor and morph name");
+    a_self->calls.push_back(6);
+    return 0.75F;
+  }
+  static void VisitMorphs(Provider *a_self, RE::TESObjectREFR *a_actor,
+                          abi::IBodyMorphInterface::MorphVisitor &a_visitor) {
+    Expect(a_actor == a_self->actor, "Read-only visitor slot 8 must preserve actor");
+    a_self->calls.push_back(8);
+    a_visitor.Visit(a_actor, "PregnancyBelly");
   }
   static void Register(Provider *a_self, abi::IAddonAttachmentInterface *a_observer) {
     Expect(a_self->versionCalls == 1, "GetVersion must precede the versioned cast/call");
@@ -258,15 +273,31 @@ void TestIndependentMorphAndTransformVersions() {
   }
   for (auto version : {4U, 5U}) {
     Provider provider(version);
+    provider.slots[6] = reinterpret_cast<std::uintptr_t>(&Provider::ReadMorph);
+    provider.slots[8] = reinterpret_cast<std::uintptr_t>(&Provider::VisitMorphs);
     provider.slots[12] = reinterpret_cast<std::uintptr_t>(&Provider::Vertex);
     provider.slots[13] = reinterpret_cast<std::uintptr_t>(&Provider::Body);
     for (auto actorIndex : {0U, 1U}) {
       provider.actor = reinterpret_cast<RE::TESObjectREFR *>(&objects[actorIndex]);
       provider.node = reinterpret_cast<RE::NiAVObject *>(&objects[actorIndex + 2]);
+      struct Visitor final : abi::IBodyMorphInterface::MorphVisitor {
+        RE::TESObjectREFR *expectedActor{nullptr};
+        int calls{0};
+        void Visit(RE::TESObjectREFR *a_actor, const char *a_name) override {
+          Expect(a_actor == expectedActor && std::string_view(a_name) == "PregnancyBelly",
+                 "Morph visitor callback must preserve actor/name");
+          ++calls;
+        }
+      } visitor;
+      visitor.expectedActor = provider.actor;
+      Expect(race_menu_test::ExerciseBodyMorphReadOnly(
+                 static_cast<abi::IBodyMorphInterface *>(provider.Plugin()),
+                 provider.actor, visitor) == 0.75F && visitor.calls == 1,
+             "Read-only calls must preserve v4/v5 float return and visitor ABI");
       race_menu_test::ExerciseBodyMorph(static_cast<abi::IBodyMorphInterface *>(provider.Plugin()),
                                        provider.actor, provider.node);
     }
-    Expect(provider.calls == std::vector<int>({12, 13, 12, 13}), "BodyMorph v4/v5 slot dispatch");
+    Expect(provider.calls == std::vector<int>({8, 6, 12, 13, 8, 6, 12, 13}), "BodyMorph v4/v5 read/write slot dispatch");
     std::cout << "BodyMorph v" << version << " dispatch passed\n";
   }
   Provider transform(3);
