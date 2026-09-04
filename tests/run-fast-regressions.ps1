@@ -12,7 +12,8 @@ $targets = @(
     "ConditionCnfLogicTests",
     "FittingDyeRulesTests",
     "KitListNavigationTests",
-    "CoreBehaviorRegressionTests"
+    "CoreBehaviorRegressionTests",
+    "RaceMenuInterfaceTests"
 )
 
 Push-Location $repository

@@ -12,16 +12,32 @@ enum class HighHeelTransformRoute : std::uint8_t {
   PublicInterface,
 };
 
+enum class LegacyHighHeelCompletion : std::uint8_t {
+  Failed,
+  RemoveInternalPosition,
+  Synchronized,
+};
+
+[[nodiscard]] inline constexpr LegacyHighHeelCompletion
+ResolveLegacyHighHeelCompletion(bool a_updateSucceeded,
+                               bool a_clearInternalPosition) noexcept {
+  if (!a_updateSucceeded) {
+    return LegacyHighHeelCompletion::Failed;
+  }
+  return a_clearInternalPosition ? LegacyHighHeelCompletion::RemoveInternalPosition
+                                : LegacyHighHeelCompletion::Synchronized;
+}
+
 // RaceMenu's public INiTransformInterface was introduced at version 3.
 // Released version-2 builds expose the same HH_OFFSET behavior through the
 // long-standing NiOverride Papyrus API, but their concrete C++ vtable is not
 // ABI-compatible with the public interface. Never cast those objects to v3.
 [[nodiscard]] inline constexpr HighHeelTransformRoute
 ResolveHighHeelTransformRoute(const std::uint32_t a_version) noexcept {
-  if (a_version >= 3) {
+  if (a_version == 3) {
     return HighHeelTransformRoute::PublicInterface;
   }
-  if (a_version != 0) {
+  if (a_version == 1 || a_version == 2) {
     return HighHeelTransformRoute::LegacyPapyrus;
   }
   return HighHeelTransformRoute::Unavailable;
@@ -33,7 +49,9 @@ ResolveHighHeelTransformRoute(const std::uint32_t a_version) noexcept {
 [[nodiscard]] inline constexpr bool
 IsPublicBodyMorphInterfaceCompatible(
     const std::uint32_t a_version) noexcept {
-  return a_version >= 4;
+  // v5 appends a callback; the v4 prefix is unchanged. Never assume an
+  // unverified future interface has the same vtable.
+  return a_version == 4 || a_version == 5;
 }
 
 [[nodiscard]] inline constexpr bool ShouldTrackRegisteredAppearanceNodes(

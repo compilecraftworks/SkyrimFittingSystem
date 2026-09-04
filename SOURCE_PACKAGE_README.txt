@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.5.1 - Nexus Source Package
+Skyrim Fitting System v1.5.4 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -11,7 +11,7 @@ release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
 
-v1.5.1 includes the v1.4.1 actor-local empty-equipment display bootstrap and
+v1.5.4 includes the v1.4.1 actor-local empty-equipment display bootstrap and
 the complete in-game Kit Generator built into SFSCore. The generator can scan
 outfit plugins, edit candidate combinations, preview them read-only in the
 character and workbench, and write finished kits directly to the SFS user-kit
@@ -60,7 +60,8 @@ archives contain the source or editable configuration for their own integration
 boundary. They are intentionally not merged into the main runtime archive.
 
 The runtime package is distributed separately and contains the compiled DLL,
-PDB, PEX, ESL, localization data, and UI assets.
+PEX, ESL, localization data, and UI assets. PDB files remain local debugging
+artifacts and are not included in runtime or source ZIPs.
 
 v1.5.1 adds an actor-aware, display-only body-family filter to the Equipment,
 Outfits, and Kits catalogs. Female groups are CBBE/3BA/3BBB, UNP/BHUNP, UBE,
@@ -70,7 +71,7 @@ visible, and does not scan BodySlide or NIF files on disk. The same release
 restores actor-local live RaceMenu BodyMorph synchronization and limits global
 input suppression to a real focused text editor or intentional keybind capture.
 
-v1.5.1 uses the vendored CommonLibSSE-NG v6.7.0 source revision
+This release uses the vendored CommonLibSSE-NG v6.7.0 source revision
 3d81614617910e7f34b33d8750881811b5e36445 with the narrow local SE/AE vtable
 layout correction documented in third_party/CommonLibSSE-NG/SFS_LOCAL_PATCHES.md.
 The workbench actor selector itself remains the v1.4.5 implementation: the
@@ -79,9 +80,16 @@ nearest-first ordering, and 32-actor limit are unchanged. Saved workbench data
 and appearance, strip/redress, DAVE/DAV, and native display paths are not
 changed.
 
-v1.5.1 also centralizes the verified Skyrim SE 1.5.97 and Skyrim AE runtime
+SFS also centralizes the verified Skyrim SE 1.5.97 and Skyrim AE runtime
 hook layouts, validates core hook instruction forms before patching, and adds
 boundary tests for supported and rejected runtime versions. The IED custom-skin
 compatibility boundary is attached to the actual VisitWornItems call sites so
 SFS filtering never passes an incompatible visitor object into IED's concrete
 visitor hook.
+
+v1.5.4 fixes legacy RaceMenu ActorUpdateManager initialization, separates
+verified interface versions, and adds independent ABI regression tests.
+See docs/RELEASE-NOTES-v1.5.4.md, its Korean counterpart, and
+docs/RaceMenu-ABI-Audit.md for the current changes and verification limits.
+The existing actor-local DAVE/DAV/native, BodyMorph, registered high heels,
+strip/redress, appearance locks, and dye behavior are preserved.

@@ -1,3 +1,20 @@
+## Version 1.5.4
+
+- Fixed a v1.5.3 RaceMenu initialization bug that could cause a crash or an
+  endless wait before the main menu with older RaceMenu versions.
+- Separated legacy and current ActorUpdateManager interfaces, keeping the
+  existing registered-appearance attachment callbacks and preventing duplicate
+  registration.
+- Explicitly select verified RaceMenu interfaces for live BodyMorph and
+  registered high heels. Unverified interface versions are skipped safely;
+  this does not imply support for every historical or future RaceMenu release.
+- Fixed failed legacy high-heel updates being reported as successful after
+  temporary transform cleanup.
+- Added version-specific ABI, callback, and initialization-retry regression
+  tests. Existing actor isolation, DAVE/DAV/native paths, strip/redress linking,
+  appearance locks, and dye behavior are preserved. No separate RaceMenu patch
+  is required.
+
 ## Version 1.5.3
 
 - Added built-in SexLab P+ v2.12.0 strip/redress integration for Skyrim 1.5.97 and 1.6.1170. Mod-Configured and Direct+Mod-Configured retain virtual-token matching; Vanilla and Direct+Vanilla retain actual-equipment transactions.

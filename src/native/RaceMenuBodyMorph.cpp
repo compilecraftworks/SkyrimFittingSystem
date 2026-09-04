@@ -1,6 +1,7 @@
 #include "native/RaceMenuBodyMorph.h"
 
 #include "native/ArmorSkinning.h"
+#include "native/RaceMenuInterfaces.h"
 #include "native/RegisteredAppearanceMorphRules.h"
 
 #include <algorithm>
@@ -33,182 +34,7 @@
 #endif
 
 namespace {
-namespace skee {
-class IPluginInterface {
-public:
-  virtual ~IPluginInterface() = default;
-
-  virtual std::uint32_t GetVersion() = 0;
-  virtual void Revert() = 0;
-};
-
-class IInterfaceMap {
-public:
-  virtual IPluginInterface *QueryInterface(const char *a_name) = 0;
-  virtual bool AddInterface(const char *a_name,
-                            IPluginInterface *a_pluginInterface) = 0;
-  virtual IPluginInterface *RemoveInterface(const char *a_name) = 0;
-};
-
-struct InterfaceExchangeMessage {
-  enum : std::uint32_t { kExchangeInterface = 0x9E3779B9 };
-
-  IInterfaceMap *interfaceMap{nullptr};
-};
-
-class IAddonAttachmentInterface {
-public:
-  virtual void OnAttach(RE::TESObjectREFR *, RE::TESObjectARMO *,
-                        RE::TESObjectARMA *, RE::NiAVObject *, bool,
-                        RE::NiNode *, RE::NiNode *) = 0;
-};
-
-class IBodyMorphInterface : public IPluginInterface {
-public:
-  class MorphKeyVisitor {
-  public:
-    virtual void Visit(const char *, float) = 0;
-  };
-
-  class StringVisitor {
-  public:
-    virtual void Visit(const char *) = 0;
-  };
-
-  class ActorVisitor {
-  public:
-    virtual void Visit(RE::TESObjectREFR *) = 0;
-  };
-
-  class MorphValueVisitor {
-  public:
-    virtual void Visit(RE::TESObjectREFR *, const char *, const char *,
-                       float) = 0;
-  };
-
-  class MorphVisitor {
-  public:
-    virtual void Visit(RE::TESObjectREFR *, const char *) = 0;
-  };
-
-  virtual void SetMorph(RE::TESObjectREFR *, const char *, const char *,
-                        float) = 0;
-  virtual float GetMorph(RE::TESObjectREFR *, const char *, const char *) = 0;
-  virtual void ClearMorph(RE::TESObjectREFR *, const char *, const char *) = 0;
-  virtual float GetBodyMorphs(RE::TESObjectREFR *, const char *) = 0;
-  virtual void ClearBodyMorphNames(RE::TESObjectREFR *, const char *) = 0;
-  virtual void VisitMorphs(RE::TESObjectREFR *, MorphVisitor &) = 0;
-  virtual void VisitKeys(RE::TESObjectREFR *, const char *,
-                         MorphKeyVisitor &) = 0;
-  virtual void VisitMorphValues(RE::TESObjectREFR *, MorphValueVisitor &) = 0;
-  virtual void ClearMorphs(RE::TESObjectREFR *) = 0;
-  virtual void ApplyVertexDiff(RE::TESObjectREFR *, RE::NiAVObject *,
-                               bool = false) = 0;
-  virtual void ApplyBodyMorphs(RE::TESObjectREFR *, bool = true) = 0;
-  virtual void UpdateModelWeight(RE::TESObjectREFR *, bool = false) = 0;
-  virtual void SetCacheLimit(std::size_t) = 0;
-  virtual bool HasMorphs(RE::TESObjectREFR *) = 0;
-  virtual std::uint32_t EvaluateBodyMorphs(RE::TESObjectREFR *) = 0;
-  virtual bool HasBodyMorph(RE::TESObjectREFR *, const char *,
-                            const char *) = 0;
-  virtual bool HasBodyMorphName(RE::TESObjectREFR *, const char *) = 0;
-  virtual bool HasBodyMorphKey(RE::TESObjectREFR *, const char *) = 0;
-  virtual void ClearBodyMorphKeys(RE::TESObjectREFR *, const char *) = 0;
-  virtual void VisitStrings(StringVisitor &) = 0;
-  virtual void VisitActors(ActorVisitor &) = 0;
-  virtual std::size_t ClearMorphCache() = 0;
-};
-
-class INiTransformInterface : public IPluginInterface {
-public:
-  struct Position {
-    float x{0.0F};
-    float y{0.0F};
-    float z{0.0F};
-  };
-
-  struct Rotation {
-    float heading{0.0F};
-    float attitude{0.0F};
-    float bank{0.0F};
-  };
-
-  class NodeVisitor {
-  public:
-    virtual bool VisitPosition(const char *, const char *, Position &) = 0;
-    virtual bool VisitRotation(const char *, const char *, Rotation &) = 0;
-    virtual bool VisitScale(const char *, const char *, float) = 0;
-    virtual bool VisitScaleMode(const char *, const char *, std::uint32_t) = 0;
-  };
-
-  // Keep the complete public v3 ABI in declaration order. SFS uses only the
-  // position and update methods, but omitting an earlier virtual would shift
-  // every later call into the wrong RaceMenu slot.
-  virtual bool HasNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
-                                        const char *, const char *) = 0;
-  virtual bool HasNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
-                                        const char *, const char *) = 0;
-  virtual bool HasNodeTransformScale(RE::TESObjectREFR *, bool, bool,
-                                     const char *, const char *) = 0;
-  virtual bool HasNodeTransformScaleMode(RE::TESObjectREFR *, bool, bool,
-                                         const char *, const char *) = 0;
-  virtual void AddNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
-                                        const char *, const char *,
-                                        Position &) = 0;
-  virtual void AddNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
-                                        const char *, const char *,
-                                        Rotation &) = 0;
-  virtual void AddNodeTransformScale(RE::TESObjectREFR *, bool, bool,
-                                     const char *, const char *, float) = 0;
-  virtual void AddNodeTransformScaleMode(RE::TESObjectREFR *, bool, bool,
-                                         const char *, const char *,
-                                         std::uint32_t) = 0;
-  virtual Position GetNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
-                                            const char *, const char *) = 0;
-  virtual Rotation GetNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
-                                            const char *, const char *) = 0;
-  virtual float GetNodeTransformScale(RE::TESObjectREFR *, bool, bool,
-                                      const char *, const char *) = 0;
-  virtual std::uint32_t GetNodeTransformScaleMode(RE::TESObjectREFR *, bool,
-                                                  bool, const char *,
-                                                  const char *) = 0;
-  virtual bool RemoveNodeTransformPosition(RE::TESObjectREFR *, bool, bool,
-                                           const char *, const char *) = 0;
-  virtual bool RemoveNodeTransformRotation(RE::TESObjectREFR *, bool, bool,
-                                           const char *, const char *) = 0;
-  virtual bool RemoveNodeTransformScale(RE::TESObjectREFR *, bool, bool,
-                                        const char *, const char *) = 0;
-  virtual bool RemoveNodeTransformScaleMode(RE::TESObjectREFR *, bool, bool,
-                                            const char *, const char *) = 0;
-  virtual bool RemoveNodeTransform(RE::TESObjectREFR *, bool, bool,
-                                   const char *, const char *) = 0;
-  virtual void RemoveAllReferenceTransforms(RE::TESObjectREFR *) = 0;
-  virtual bool GetOverrideNodeTransform(RE::TESObjectREFR *, bool, bool,
-                                        const char *, const char *,
-                                        std::uint16_t, RE::NiTransform *) = 0;
-  virtual void UpdateNodeAllTransforms(RE::TESObjectREFR *) = 0;
-  virtual void VisitNodes(RE::TESObjectREFR *, bool, bool, NodeVisitor &) = 0;
-  virtual void UpdateNodeTransforms(RE::TESObjectREFR *, bool, bool,
-                                    const char *) = 0;
-};
-
-class IActorUpdateManager : public IPluginInterface {
-public:
-  // Keep the complete version-1 prefix in official declaration order.
-  // Version 2 only appends callback methods, so AddInterface remains at the
-  // same slot for every released ActorUpdateManager interface generation.
-  virtual void AddBodyUpdate(std::uint32_t) = 0;
-  virtual void AddTransformUpdate(std::uint32_t) = 0;
-  virtual void AddOverlayUpdate(std::uint32_t) = 0;
-  virtual void AddNodeOverrideUpdate(std::uint32_t) = 0;
-  virtual void AddWeaponOverrideUpdate(std::uint32_t) = 0;
-  virtual void AddAddonOverrideUpdate(std::uint32_t) = 0;
-  virtual void AddSkinOverrideUpdate(std::uint32_t) = 0;
-  virtual void Flush() = 0;
-  virtual void AddInterface(IAddonAttachmentInterface *) = 0;
-  virtual void RemoveInterface(IAddonAttachmentInterface *) = 0;
-};
-} // namespace skee
+namespace skee = sfs::native::racemenu::abi;
 
 struct RegisteredAppearanceNode {
   RE::NiPointer<RE::NiAVObject> object;
@@ -237,7 +63,7 @@ struct RegisteredAppearanceAttachmentRoot {
   }
 };
 
-constexpr std::size_t kApplyBodyMorphsVtableIndex = 13;
+constexpr auto kApplyBodyMorphsVtableIndex = skee::kApplyBodyMorphsVtableIndex;
 using ApplyBodyMorphsFn = void (*)(skee::IBodyMorphInterface *,
                                    RE::TESObjectREFR *, bool);
 using UpdateModelWeightTaskRunFn = void (*)(void *);
@@ -892,17 +718,29 @@ void DispatchLegacyRemoveInternalPosition(
 }
 
 void DispatchLegacyRemoveBootstrap(
-    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request,
+    const bool a_updateSucceeded) {
   auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
   if (!actor) {
     CompleteLegacyHighHeelSync(a_request, false);
     return;
   }
-  const auto continuation = [a_request]() {
-    if (a_request->clearRaceMenuInternalPosition) {
+  const auto continuation = [a_request, a_updateSucceeded]() {
+    using namespace sfs::native::racemenu::rules;
+    switch (ResolveLegacyHighHeelCompletion(
+        a_updateSucceeded, a_request->clearRaceMenuInternalPosition)) {
+    case LegacyHighHeelCompletion::Failed:
+      // Cleanup succeeding is not evidence that the full transform update
+      // ran. In particular, missing legacy Papyrus functions must not mark
+      // an actor synchronized or remove RaceMenu's internal position.
+      CompleteLegacyHighHeelSync(a_request, false);
+      break;
+    case LegacyHighHeelCompletion::RemoveInternalPosition:
       DispatchLegacyRemoveInternalPosition(a_request);
-    } else {
+      break;
+    case LegacyHighHeelCompletion::Synchronized:
       CompleteLegacyHighHeelSync(a_request, true);
+      break;
     }
   };
   if (!DispatchNiOverrideCall(
@@ -920,11 +758,11 @@ void DispatchLegacyUpdateAll(
   if (!actor ||
       !DispatchNiOverrideCall(
           "UpdateAllReferenceTransforms",
-          [a_request]() { DispatchLegacyRemoveBootstrap(a_request); },
+          [a_request]() { DispatchLegacyRemoveBootstrap(a_request, true); },
           static_cast<RE::Actor *>(actor))) {
     // The neutral scale may already have been inserted. Always attempt its
     // removal before completing a failed chain.
-    DispatchLegacyRemoveBootstrap(a_request);
+    DispatchLegacyRemoveBootstrap(a_request, false);
   }
 }
 
@@ -1307,10 +1145,14 @@ void ApplyBodyMorphsHook(skee::IBodyMorphInterface *a_interface,
 void UpdateModelWeightTaskRunHook(void *a_task) {
   // NIOVTaskUpdateModelWeight contains the TaskDelegate vptr followed by the
   // actor FormID. Read it before Run; RaceMenu disposes the task separately.
+  // This private hook is installed only for verified BodyMorph v4/v5. Their
+  // upstream task declarations and the audited SE/AE binaries both use Run
+  // at slot 0 and a uint32 FormID at +8; it is not a general task layout.
   RE::FormID actorFormID{0};
   if (a_task) {
     std::memcpy(std::addressof(actorFormID),
-                static_cast<const std::byte *>(a_task) + sizeof(void *),
+                static_cast<const std::byte *>(a_task) +
+                    skee::kUpdateModelWeightFormIDOffset,
                 sizeof(actorFormID));
   }
 
@@ -1389,7 +1231,7 @@ InstallApplyBodyMorphsHook(skee::IBodyMorphInterface *a_bodyMorph) {
     return false;
   }
 
-  auto *slot = std::addressof(vtable[0]);
+  auto *slot = std::addressof(vtable[skee::kUpdateModelWeightRunSlot]);
   const auto originalAddress = *slot;
   const auto replacementAddress =
       reinterpret_cast<std::uintptr_t>(UpdateModelWeightTaskRunHook);
@@ -1417,7 +1259,7 @@ InstallApplyBodyMorphsHook(skee::IBodyMorphInterface *a_bodyMorph) {
       reinterpret_cast<const std::byte *>(
           reinterpret_cast<const void *>(originalAddress)) -
           image->base,
-      sizeof(void *));
+      skee::kUpdateModelWeightFormIDOffset);
   return true;
 }
 } // namespace
@@ -1464,8 +1306,9 @@ TryInterfaceExchange(const SKSE::MessagingInterface *a_messaging,
   // Keep the exchange for legacy BodyMorph v3 releases as well. Their C++
   // object is not public-ABI-compatible, but their official NiOverride
   // Papyrus transform functions remain usable for HH_OFFSET synchronization.
-  if (!dispatched || !message.interfaceMap || !bodyMorphPlugin ||
-      bodyMorphVersion == 0) {
+  // Missing/unsupported BodyMorph must not suppress the independently
+  // versioned transform and attachment interfaces.
+  if (!dispatched || !message.interfaceMap) {
     return std::nullopt;
   }
   return ExchangeResult{message.interfaceMap, bodyMorphPlugin,
@@ -1505,7 +1348,7 @@ void InitializeBodyMorphInterface() {
     }
     return;
   }
-  logger::info("Received supported RaceMenu interfaces via {}",
+  logger::info("Received RaceMenu interface map via {}",
                exchange->route);
 
   auto *bodyMorph =
@@ -1542,7 +1385,7 @@ void InitializeBodyMorphInterface() {
   } else {
     g_transformInterface.store(nullptr, std::memory_order_release);
     logger::warn(
-        "RaceMenu NiTransform interface is unavailable (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
+        "RaceMenu NiTransform interface is missing or has no verified ABI (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
         transformVersion);
   }
 
@@ -1559,19 +1402,25 @@ void InitializeBodyMorphInterface() {
     }
   } else {
     logger::info(
-        "RaceMenu BodyMorph version {} predates the public v4 ABI; direct registered-appearance morph calls are disabled while NiOverride HH_OFFSET compatibility remains available",
+        "RaceMenu BodyMorph version {} has no verified public ABI (supported: 4, 5); direct registered-appearance morph calls are disabled; HH_OFFSET compatibility is determined independently by NiTransform",
         exchange->bodyMorphVersion);
   }
 
-  auto *actorUpdateManager = static_cast<skee::IActorUpdateManager *>(
-      exchange->interfaceMap->QueryInterface("ActorUpdateManager"));
-  if (actorUpdateManager &&
-      !g_attachmentObserverRegistered.exchange(true)) {
-    actorUpdateManager->AddInterface(std::addressof(g_attachmentObserver));
+  const auto attachmentRegistration = abi::RegisterAttachmentObserver(
+      exchange->interfaceMap->QueryInterface("ActorUpdateManager"),
+      std::addressof(g_attachmentObserver), g_attachmentObserverRegistered);
+  if (attachmentRegistration.status ==
+      abi::AttachmentRegistrationStatus::Registered) {
     logger::info(
         "Registered official RaceMenu ActorUpdateManager attachment observer for SFS appearance morphs (reported version {})",
-        actorUpdateManager->GetVersion());
-  } else if (!actorUpdateManager) {
+        attachmentRegistration.version);
+  } else if (attachmentRegistration.status ==
+             abi::AttachmentRegistrationStatus::UnsupportedVersion) {
+    logger::warn(
+        "RaceMenu ActorUpdateManager version {} has no verified attachment ABI; observer registration skipped, retaining native attachment-scene capture",
+        attachmentRegistration.version);
+  } else if (attachmentRegistration.status ==
+             abi::AttachmentRegistrationStatus::Unavailable) {
     logger::warn(
         "RaceMenu ActorUpdateManager interface is unavailable; SFS will retain native attachment-scene capture only");
   }

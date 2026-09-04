@@ -50,6 +50,23 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 ![Helmet Toggle 2 Appearance Hiding Integration](https://i.ibb.co/S4JHn3DT/2.gif)
 **Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)**
 
+## Version 1.5.4 Update Summary
+
+- Fixed a v1.5.3 RaceMenu initialization bug that could cause a crash or an
+  endless wait before the main menu with older RaceMenu versions.
+- Separated legacy and current ActorUpdateManager interfaces, keeping the
+  existing registered-appearance attachment callbacks and preventing duplicate
+  registration.
+- Explicitly select verified RaceMenu interfaces for live BodyMorph and
+  registered high heels. Unverified interface versions are skipped safely;
+  this does not imply support for every historical or future RaceMenu release.
+- Fixed failed legacy high-heel updates being reported as successful after
+  temporary transform cleanup.
+- Added version-specific ABI, callback, and initialization-retry regression
+  tests. Existing actor isolation, DAVE/DAV/native paths, strip/redress linking,
+  appearance locks, and dye behavior are preserved. No separate RaceMenu patch
+  is required.
+
 ## Version 1.5.3 Update Summary
 
 - Added built-in SexLab P+ v2.12.0 strip/redress integration for both Skyrim 1.5.97 and 1.6.1170. No P+ script, ESP, or separate SFS patch is replaced or required.
@@ -116,7 +133,7 @@ Built-in: (Not required any patch file)
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.5.3 distribution ZIP as a new mod.
+5. Install the v1.5.4 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
 7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.
 

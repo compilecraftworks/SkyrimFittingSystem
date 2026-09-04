@@ -233,15 +233,19 @@ void TestBodyMorphActivity() {
   Expect(ResolveHighHeelTransformRoute(3) ==
              HighHeelTransformRoute::PublicInterface &&
              ResolveHighHeelTransformRoute(4) ==
-                 HighHeelTransformRoute::PublicInterface,
-         "RaceMenu NiTransform v3+ must retain the public interface route");
+                 HighHeelTransformRoute::Unavailable &&
+             ResolveHighHeelTransformRoute(UINT32_MAX) ==
+                 HighHeelTransformRoute::Unavailable,
+         "Only verified NiTransform v3 may use the public interface route");
   Expect(!IsPublicBodyMorphInterfaceCompatible(0) &&
              !IsPublicBodyMorphInterfaceCompatible(1) &&
              !IsPublicBodyMorphInterfaceCompatible(2) &&
              !IsPublicBodyMorphInterfaceCompatible(3) &&
              IsPublicBodyMorphInterfaceCompatible(4) &&
-             IsPublicBodyMorphInterfaceCompatible(5),
-         "Only RaceMenu BodyMorph v4+ may use the public C++ ABI");
+             IsPublicBodyMorphInterfaceCompatible(5) &&
+             !IsPublicBodyMorphInterfaceCompatible(6) &&
+             !IsPublicBodyMorphInterfaceCompatible(UINT32_MAX),
+         "Only RaceMenu BodyMorph v4/v5 may use the public C++ ABI");
 
   Expect(ShouldTrackRegisteredAppearanceNodes(false, true, 1),
          "A visible saved registered appearance must enable morph tracking");

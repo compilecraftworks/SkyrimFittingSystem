@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.3"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.4"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -142,6 +142,19 @@ target("CoreBehaviorRegressionTests")
     set_targetdir("build/v" .. build_version .. "/tests")
     add_files("tests/CoreBehaviorRegressionTests.cpp")
     add_includedirs("src")
+
+target("RaceMenuInterfaceTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/RaceMenuInterfaceTests.cpp",
+              "tests/RaceMenuInterfaceCalls.cpp",
+              "src/native/RaceMenuActorUpdateManager.cpp")
+    add_includedirs("src")
+    if is_plat("windows") then
+        add_cxxflags("/EHsc")
+    end
 
 -- The private personal-completion experiment is intentionally not part of the
 -- public GPL source archive. Keep its optional local targets available for the

@@ -1,0 +1,15 @@
+[center]
+[size=6][b][color=#42ACC8]Skyrim Fitting System v1.5.4[/color][/b][/size]
+[/center]
+
+
+[list]
+[*]Fixed a v1.5.3 RaceMenu initialization bug that could cause a crash or an endless wait before the main menu with older RaceMenu versions.[/*]
+[*]Separated legacy and current ActorUpdateManager interfaces, keeping the existing registered-appearance attachment callbacks and preventing duplicate registration.[/*]
+[*]Explicitly select verified RaceMenu interfaces for live BodyMorph and registered high heels. Unverified interface versions are skipped safely; this does not imply support for every historical or future RaceMenu release.[/*]
+[*]Fixed failed legacy high-heel updates being reported as successful after temporary transform cleanup.[/*]
+[*]Added version-specific ABI, callback, and initialization-retry regression tests. Existing actor isolation, DAVE/DAV/native paths, strip/redress linking, appearance locks, and dye behavior are preserved. No separate RaceMenu patch is required.[/*]
+[/list]
+
+
+Developer details: [url=https://github.com/compilecraftworks/SkyrimFittingSystem/blob/main/docs/RaceMenu-ABI-Audit.md]RaceMenu ABI audit[/url].
