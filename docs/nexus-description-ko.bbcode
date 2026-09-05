@@ -18,7 +18,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
 [line]
-[size=4][b][color=#42ACC8]v1.5.4 주요 기능[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.5.7 주요 기능[/color][/b][/size]
 
 
 [list]
@@ -50,6 +50,18 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]액터별 최종 표시 장비를 읽는 OAR용 읽기 전용 조건[/*]
 [*]내장 Grid Inventory Costume·Helmet Toggle 2 연동과 DFFMA OAR·Dynamic Footprints v3 선택형 호환 패치[/*]
 [*]플레이어·NPC·팔로워의 혼합 바디 구성에서도 모든 항목을 등록할 수 있는 장비·의상·키트 카탈로그[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]v1.5.7 업데이트 요약[/color][/b][/size]
+
+
+[list]
+[*]DAVE와 AE→SE RaceMenu 역포트를 함께 사용할 때 표시 중인 등록 외형의 실시간 BodyMorph·OBody 변경이 반영되지 않던 문제를 수정했습니다.[/*]
+[*]구형 SE ActorUpdateManager v0, 신형 공개 레이아웃을 사용하는 v0 역포트, 정식 공개 v1/v2를 실제 레이아웃으로 안전하게 구분합니다. 알 수 없는 레이아웃은 잘못된 vtable을 호출하지 않고 안전하게 비활성화합니다.[/*]
+[*]DAVE·DAV·native의 검증된 BodyMorph v4/v5 경로를 유지하며 폴링, 전역 액터 검색이나 강제 3D 갱신을 추가하지 않았습니다.[/*]
+[*]피팅 염색, Helmet Toggle 2, SexLab P+, SOS/TNG, 조건, 키트, 외형 잠금, 하이힐과 저장 데이터는 v1.5.6 동작을 유지합니다. 별도 RaceMenu 패치는 필요하지 않습니다.[/*]
 [/list]
 
 

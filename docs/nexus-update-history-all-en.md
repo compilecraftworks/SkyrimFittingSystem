@@ -1,3 +1,17 @@
+## Version 1.5.7
+
+- Fixed live RaceMenu BodyMorph and OBody updates on visible registered
+  appearances when DAVE is used with an AE-to-SE RaceMenu backport.
+- ActorUpdateManager version 0 is no longer assumed to have one layout. SFS
+  safely distinguishes the original six-entry SE layout from the later
+  fourteen-entry public backport layout, while public versions 1/2 keep their
+  verified route.
+- Unknown layouts fail closed without calling an uncertain vtable slot. The
+  verified BodyMorph v4/v5 paths remain actor-local across DAVE, DAV, and
+  native display.
+- Removed the unsuccessful forced DAVE refresh experiment. Fitting Dye and all
+  other v1.5.6 feature boundaries remain unchanged.
+
 ## Version 1.5.4
 
 - Fixed a v1.5.3 RaceMenu initialization bug that could cause a crash or an

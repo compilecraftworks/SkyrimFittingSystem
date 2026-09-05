@@ -156,19 +156,38 @@ public:
 };
 
 void TestRegistrationAndAttachment() {
-  for (auto version : {0U, 1U, 2U}) {
+  struct Case {
+    std::uint32_t version;
+    std::size_t registerSlot;
+    std::size_t boundarySlot;
+    abi::AttachmentInterfaceLayout layout;
+    const char *name;
+  };
+  for (const auto &test : std::array{
+           Case{0, 3, 6, abi::AttachmentInterfaceLayout::LegacyV0,
+                "legacy v0"},
+           Case{0, 11, 14,
+                abi::AttachmentInterfaceLayout::PublicV0Backport,
+                "public-layout v0 backport"},
+           Case{1, 11, 28, abi::AttachmentInterfaceLayout::PublicV1V2,
+                "public v1"},
+           Case{2, 11, 28, abi::AttachmentInterfaceLayout::PublicV1V2,
+                "public v2"}}) {
+    const auto version = test.version;
     Provider provider(version);
-    // Legacy concrete class: 3. Public v1/v2: 11. Keeping these independent
-    // catches the exact v1.5.3 startup regression.
-    provider.slots[version == 0 ? 3 : 11] =
+    provider.slots[test.registerSlot] =
         reinterpret_cast<std::uintptr_t>(&Provider::Register);
+    if (test.boundarySlot < provider.slots.size()) {
+      provider.slots[test.boundarySlot] = 0;
+    }
     std::atomic_bool registered{false};
     provider.published = &registered;
     Observer observer;
     const auto result = abi::RegisterAttachmentObserver(provider.Plugin(), &observer, registered);
     Expect(result.status == Status::Registered && result.version == version &&
+               result.layout == test.layout &&
                registered && provider.registerCalls == 1 && provider.observer == &observer,
-           "ActorUpdateManager 0/1/2 must register on the correct slot");
+           "ActorUpdateManager layouts must register on the verified slot");
     Expect(abi::RegisterAttachmentObserver(provider.Plugin(), &observer, registered).status ==
                Status::AlreadyRegistered && provider.registerCalls == 1 && provider.versionCalls == 1,
            "DataLoaded retry must not register the process-lifetime observer twice");
@@ -191,7 +210,8 @@ void TestRegistrationAndAttachment() {
       }
       Expect(observer.firstPerson == firstPerson, "OnAttach first-person ABI");
     }
-    std::cout << "ActorUpdateManager v" << version << " registration/OnAttach passed\n";
+    std::cout << "ActorUpdateManager " << test.name
+              << " registration/OnAttach passed\n";
   }
 }
 
@@ -207,8 +227,21 @@ void TestFailureAndThreadedRetry() {
                unknown.versionCalls == 1 && !registered,
            "Unverified versions must never call beyond the stable prefix");
   }
+  Provider ambiguousV0(0);
+  ambiguousV0.slots[7] = 0;
+  const auto ambiguousResult =
+      abi::RegisterAttachmentObserver(ambiguousV0.Plugin(), &observer,
+                                      registered);
+  Expect(ambiguousResult.status == Status::UnsupportedLayout &&
+             ambiguousResult.version == 0 &&
+             ambiguousResult.layout ==
+                 abi::AttachmentInterfaceLayout::Unknown &&
+             ambiguousV0.versionCalls == 1 &&
+             ambiguousV0.registerCalls == 0 && !registered,
+         "Unrecognized version-0 layouts must fail closed without calling either candidate slot");
   Provider provider(0);
   provider.slots[3] = reinterpret_cast<std::uintptr_t>(&Provider::Register);
+  provider.slots[6] = 0;
   provider.published = &registered;
   Expect(abi::RegisterAttachmentObserver(provider.Plugin(), nullptr, registered).status ==
              Status::Unavailable && provider.versionCalls == 0, "Missing observer must not call provider");

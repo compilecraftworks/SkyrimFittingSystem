@@ -1,0 +1,4 @@
+Fixed live RaceMenu BodyMorph and OBody updates on visible registered appearances when using DAVE with AE-to-SE RaceMenu backports.
+Added safe ActorUpdateManager layout detection for original SE v0, public-layout v0 backports, and public v1/v2 while preserving BodyMorph v4/v5 across DAVE, DAV, and native display.
+Unknown layouts now fail closed without calling an uncertain vtable slot.
+Removed the unsuccessful forced DAVE refresh experiment; Fitting Dye and all other v1.5.6 feature boundaries remain unchanged.

@@ -65,16 +65,32 @@ enum class AttachmentRegistrationStatus : std::uint8_t {
   AlreadyRegistered,
   Unavailable,
   UnsupportedVersion,
+  UnsupportedLayout,
+};
+
+enum class AttachmentInterfaceLayout : std::uint8_t {
+  Unknown,
+  LegacyV0,
+  PublicV0Backport,
+  PublicV1V2,
 };
 
 struct AttachmentRegistrationResult {
   AttachmentRegistrationStatus status;
   std::uint32_t version{0};
+  AttachmentInterfaceLayout layout{AttachmentInterfaceLayout::Unknown};
 };
+
+[[nodiscard]] const char *
+AttachmentInterfaceLayoutName(AttachmentInterfaceLayout a_layout);
 
 // The caller must hold the existing initialization mutex. This function does
 // not acquire any other lock or access actor/render/save/equipment state.
 // Read GetVersion on the stable base BEFORE any version-specific cast/call.
+// Some SE backports report version 0 while exposing the public v1/v2 vtable.
+// Version 0 is therefore additionally classified from a read-only, exact
+// executable-slot profile before AddInterface is called. Unknown profiles fail
+// closed and retain SFS's native attachment-scene capture.
 // Publish registration only after AddInterface returns successfully.
 [[nodiscard]] AttachmentRegistrationResult RegisterAttachmentObserver(
     IPluginInterface *a_plugin, IAddonAttachmentInterface *a_observer,

@@ -1516,12 +1516,18 @@ void InitializeBodyMorphInterface() {
   if (attachmentRegistration.status ==
       abi::AttachmentRegistrationStatus::Registered) {
     logger::info(
-        "Registered official RaceMenu ActorUpdateManager attachment observer for SFS appearance morphs (reported version {})",
-        attachmentRegistration.version);
+        "Registered RaceMenu ActorUpdateManager attachment observer for SFS appearance morphs (reported version {}, verified layout {})",
+        attachmentRegistration.version,
+        abi::AttachmentInterfaceLayoutName(attachmentRegistration.layout));
   } else if (attachmentRegistration.status ==
              abi::AttachmentRegistrationStatus::UnsupportedVersion) {
     logger::warn(
         "RaceMenu ActorUpdateManager version {} has no verified attachment ABI; observer registration skipped, retaining native attachment-scene capture",
+        attachmentRegistration.version);
+  } else if (attachmentRegistration.status ==
+             abi::AttachmentRegistrationStatus::UnsupportedLayout) {
+    logger::warn(
+        "RaceMenu ActorUpdateManager version {} has an unrecognized vtable layout; observer registration skipped without calling an uncertain slot, retaining native attachment-scene capture",
         attachmentRegistration.version);
   } else if (attachmentRegistration.status ==
              abi::AttachmentRegistrationStatus::Unavailable) {

@@ -5,6 +5,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.IO.Compression.FileSystem
 
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repoRoot = [System.IO.Path]::GetFullPath((Join-Path $scriptDirectory '..'))
@@ -125,6 +126,7 @@ $sourceDocs = @(
     'RELEASE-NOTES-v1.5.4.md', 'RELEASE-NOTES-v1.5.4-ko.md',
     'RELEASE-NOTES-v1.5.5.md', 'RELEASE-NOTES-v1.5.5-ko.md',
     'RELEASE-NOTES-v1.5.6.md', 'RELEASE-NOTES-v1.5.6-ko.md',
+    'RELEASE-NOTES-v1.5.7.md', 'RELEASE-NOTES-v1.5.7-ko.md',
     'BodyMorph-v1.5.5-Regression-Checks.md',
     'RaceMenu-ABI-Audit.md'
 )

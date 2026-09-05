@@ -50,6 +50,19 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 ![Helmet Toggle 2 Appearance Hiding Integration](https://i.ibb.co/S4JHn3DT/2.gif)
 **Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)**
 
+## Version 1.5.7 Update Summary
+
+- Fixed live RaceMenu BodyMorph and OBody updates on visible registered
+  appearances when DAVE is used with AE-to-SE RaceMenu backports.
+- Safely distinguishes original SE ActorUpdateManager v0, public-layout v0
+  backports, and public v1/v2 instead of choosing a vtable from the reported
+  version alone. Unknown layouts fail closed.
+- Preserves the verified BodyMorph v4/v5 routes across DAVE, DAV, and native
+  display without polling, a global actor scan, or forced 3D refreshes.
+- Fitting Dye, Helmet Toggle 2, SexLab P+, SOS/TNG, conditions, kits, locks,
+  high heels, and save data retain their v1.5.6 behavior. No RaceMenu patch is
+  required.
+
 ## Version 1.5.4 Update Summary
 
 - Fixed a v1.5.3 RaceMenu initialization bug that could cause a crash or an

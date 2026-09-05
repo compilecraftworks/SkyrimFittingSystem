@@ -47,7 +47,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.6)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.7)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -65,7 +65,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.5.6/windows/x64/<mode>/` in the project root.
+`build/v1.5.7/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -115,14 +115,14 @@ download small. Debug symbols remain available only in the local build tree.
 
 ## Runtime Menu API
 
-SFS v1.5.6 exports a stable menu API for external hotkey and menu-management
+SFS v1.5.7 exports a stable menu API for external hotkey and menu-management
 mods. Managers may temporarily disable the native F6 or user-defined shortcut
 without changing its saved binding; this runtime-only state defaults to enabled
 on every game launch. Open, Close, and IsMenuOpen remain independent. See
 `docs/SkyrimFittingSystem-Menu-API.md` and `extras/SkyrimFittingSystemAPI.h`.
-The v1.5.6 module name is `SFSCore.dll`; the four C export names are unchanged.
+The v1.5.7 module name is `SFSCore.dll`; the four C export names are unchanged.
 
-SFS v1.5.6 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
+SFS v1.5.7 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
 selected outfit plugins, builds and edits candidate combinations, previews the
 selection on the character and in the workbench, and writes finished kits
 directly to the SFS user-kit folder. Only this temporary generator preview may
@@ -155,7 +155,7 @@ for Dynamic Feminine Female Modesty Animations OAR 4.30, Wet Function Redux,
 and Dynamic Footprints SKSE BASE v3. These use narrow, versioned integration
 boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.5.6.md` for the current release scope.
+state. See `docs/RELEASE-NOTES-v1.5.7.md` for the current release scope.
 
 ## Fitting Kits
 

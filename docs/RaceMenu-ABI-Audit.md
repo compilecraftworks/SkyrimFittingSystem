@@ -1,7 +1,6 @@
-# RaceMenu ABI audit — 2026-09-04
+# RaceMenu ABI audit — 2026-09-06
 
-Scope: v1.5.4 RaceMenu compatibility fix. The published v1.5.3 ZIP does not
-contain this fix. Installed MO2 copies must be updated separately.
+Scope: the v1.5.4 base compatibility fix and v1.5.7 backport-layout correction.
 
 ## Independent interface versions
 
@@ -11,7 +10,8 @@ Never use one interface's version to choose another interface's vtable.
 
 | Boundary | Reported interface version | SFS route |
 | --- | --- | --- |
-| ActorUpdateManager | 0 | Verified legacy concrete prefix; AddInterface at x64 slot 3 |
+| ActorUpdateManager | 0, six-entry legacy layout | AddInterface at x64 slot 3 |
+| ActorUpdateManager | 0, fourteen-entry public backport layout | AddInterface at x64 slot 11 |
 | ActorUpdateManager | 1, 2 | Public prefix; AddInterface at slot 11 |
 | ActorUpdateManager | Other/missing | Skip observer registration; retain native scene capture |
 | BodyMorph | 4, 5 | Public prefix; ApplyVertexDiff at 12, ApplyBodyMorphs at 13 |
@@ -20,8 +20,10 @@ Never use one interface's version to choose another interface's vtable.
 | NiTransform | 3 | Public C++ transform interface |
 | NiTransform | Other/missing | No SFS height synchronization calls |
 
-A non-null ActorUpdateManager with version 0 is valid legacy data, not a
-missing interface. Missing BodyMorph does not invalidate a received interface
+A non-null ActorUpdateManager with version 0 can be either legacy data or an
+AE-to-SE public-layout backport. SFS validates the exact executable vtable
+profile before choosing slot 3 or 11 and fails closed on any other profile.
+Missing BodyMorph does not invalidate a received interface
 map or disable an independently available NiTransform/attachment interface.
 The existing bounded PostPostLoad/DataLoaded initialization and initialization
 mutex remain in place. Unknown versions are logged, not presumed compatible.
@@ -35,8 +37,15 @@ mutex remain in place. Unknown versions are logged, not presumed compatible.
   vtable and reaches an unrelated Scaleform function. Correct registration is
   at slot 3. The resulting access violation can strand the SFS initialization
   mutex under `/EHsc` if an outer SKSE SEH handler catches the exception.
-- Fix: read the stable GetVersion prefix before casting; select 0 or 1/2
-  explicitly; publish `registered=true` only after AddInterface returns.
+- The later UBE AE-to-SE backport keeps reported version 0 but exposes the
+  fourteen-entry public layout with AddInterface at slot 11. Treating every v0
+  as legacy silently called AddBodyUpdate and left DAVE's late attachments
+  unobserved, so live registered-appearance morph synchronization found zero
+  nodes.
+- Fix: read the stable GetVersion prefix before casting; for v0 verify either
+  the exact six-entry legacy or fourteen-entry public-backport executable-slot
+  profile; publish `registered=true` only after AddInterface returns. Unknown
+  profiles call neither candidate slot.
 - The observer stays process-lifetime and is not re-registered on save/load.
   Failed registration remains retryable. No global exception-mode change,
   lock removal, RaceMenu replacement, ESP, or PEX patch was added.
@@ -98,6 +107,7 @@ Read-only PE/RTTI/disassembly checks (no LoadLibrary/game execution):
 | skee64.dll sample | SHA256 | ActorUpdate / BodyMorph / NiTransform |
 | --- | --- | --- |
 | TuLED13E Race Menu | `255C0DB0BA5FF14640CC6D75CCDDFB24474B498D35B77F3140CCB05EB80E7273` | 0 / 4 / 2 |
+| TuLED13E UBE 2.0 AE-to-SE backport | `283EA6F0DF6234B5636D6B03445A57C90369514E61EC3B02DA07F731FCF3469B` | 0 (public layout) / 4 / 2 |
 | TAKEALOOK RaceMenu | `5225E4E3B185E6FC57C8D31B0CEDBE5A030A951D9A744D33071B64C45A38C208` | 2 / 5 / 3 |
 
 Legacy/new task vtable RVAs are `16BFB8` / `1DA2E8`, Run RVAs `A460` /
@@ -110,7 +120,8 @@ covered by the official prefix and synthetic ABI tests, not a third DLL sample.
 - Pinned xmake 3.1.0, MSVC 14.51.36231, x64 releasedbg `/MD /O2 /EHsc`.
   Existing CommonLibSSE-NG 6.7.0 build closure unchanged.
 - `RaceMenuInterfaceTests`: independent provider vtables with trap slots;
-  registration versions 0/1/2, missing/unknown versions, OnAttach pointer and
+  legacy-v0/public-backport-v0/public-v1/v2 registration, ambiguous-v0 and
+  missing/unknown versions, OnAttach pointer and
   first-person arguments, registration idempotency, C++ exception/retry from
   another thread, BodyMorph 4/5 dispatch (including GetBodyMorphs slot 6,
   VisitMorphs slot 8, float return and visitor callback), NiTransform 3 dispatch, actor/gender
