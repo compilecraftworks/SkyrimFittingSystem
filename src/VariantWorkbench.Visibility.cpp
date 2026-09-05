@@ -78,7 +78,7 @@ bool VariantWorkbench::ConvertConditionalVisibilityRuleToFittingRow(
       RE::TESForm::LookupByID<RE::TESObjectARMO>(a_formID);
   if (appearanceArmor == nullptr || !BuildCatalogItem(a_formID, item) ||
       !item.SupportsArmorReplacement() ||
-      armor::IsSosTngGenitalArmor(appearanceArmor)) {
+      armor::IsSosTngInternalArmor(appearanceArmor)) {
     return false;
   }
   const auto appearanceSlotMask = armor::GetArmorDisplaySlotMask(appearanceArmor);

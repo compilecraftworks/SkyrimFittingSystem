@@ -3,6 +3,7 @@
 #include "ArmorUtils.h"
 #include "native/ExternalEquipmentTransactionRules.h"
 #include "native/HelmetToggle2Integration.h"
+#include "native/PapyrusObserverInstallRules.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "runtime/RuntimeLayouts.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
@@ -969,6 +970,41 @@ bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm) {
                "available immediately)",
                patchedCount);
   return true;
+}
+
+void InspectFullyLinkedSexLabPPlusAlias(
+    RE::BSScript::ObjectTypeInfo *a_type) {
+  if (!g_observerInstalled.load(std::memory_order_acquire) || !a_type ||
+      !a_type->IsLinked() ||
+      !sfs::native::papyrus_observer::rules::ShouldInspectPostLinkMembers(
+          a_type->GetName() ? a_type->GetName() : "")) {
+    return;
+  }
+
+  std::size_t discovered = 0;
+  std::size_t patched = 0;
+  if (auto *functions = a_type->GetMemberFuncIter()) {
+    for (std::uint32_t index = 0; index < a_type->GetNumMemberFuncs();
+         ++index) {
+      auto *function = functions[index].func.get();
+      if (!function || !function->GetIsNative()) {
+        continue;
+      }
+      const auto target =
+          ClassifyNative(static_cast<NativeFunctionBase *>(function));
+      if (target != TargetNative::SexLabPPlusStripByData &&
+          target != TargetNative::SexLabPPlusStripByDataEx) {
+        continue;
+      }
+      ++discovered;
+      if (PatchSelectedNativeFunction(function)) {
+        ++patched;
+      }
+    }
+  }
+  logger::info("SexLab P+ post-link external-equipment observer scan "
+               "type=sslActorAlias discovered={} newlyHooked={}",
+               discovered, patched);
 }
 
 bool EnableHelmetToggleSignalObserver() {

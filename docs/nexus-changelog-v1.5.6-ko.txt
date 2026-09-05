@@ -1,0 +1,5 @@
+UBE·CBBE/3BA·UNP/BHUNP 의상 염색과 Community Shaders·ENB·ReShade·업스케일러 렌더 체인 호환성을 개선했습니다.
+Helmet Toggle 2 사용 시 실제 장비·등록 외형 투구·머리와 헤어 표시 처리를 수정했습니다.
+모드 설정·바닐라·직접 편집·액터별 동작을 유지하면서 늦게 연결되는 SexLab P+ StripByData/StripByDataEx 연동을 수정했습니다.
+SOS/TNG 내부 생식기·커버 폼을 일반 장비 처리에서 분리했습니다.
+Modex/SFS 키트 호환, 미설치 조각 제외, 유니코드 키트 생성, 스크롤바 드래그, 메뉴 카메라 재진입, 커스텀 조건 부정, 키트 입력을 개선했습니다.

@@ -151,7 +151,7 @@ void Menu::DrawWorkbenchToolbar() {
     if (row.isEquipped && !row.IsSlotRow()) {
       const auto *armor =
           RE::TESForm::LookupByID<RE::TESObjectARMO>(row.equipped.formID);
-      if (!sfs::armor::IsSosTngGenitalArmor(armor) &&
+      if (!sfs::armor::IsSosTngInternalArmor(armor) &&
           !row.IsAlwaysVisibleActualEquipment()) {
         controllableActualRows.push_back(rowIndex);
         const bool ddOrdinaryVisible =
@@ -437,10 +437,17 @@ void Menu::DrawWorkbenchToolbar() {
             (overrideSlotMask & headgearToggleSuppressedFittingSlotMask) != 0;
         if (!hideFittingAppearances && headgearToggleHidden) {
           // A global show is a temporary user override for Helmet Toggle.
-          // Preserve the saved eye state so its show transition restores it.
+          // It is also an explicit request to make every saved appearance
+          // visible. Clear a stale saved eye-hide before returning; otherwise
+          // the HT2 show transition removes the temporary override and the
+          // same card becomes permanently hidden again.
           static_cast<void>(
               workbench_.SetOverrideHeadgearToggleManualVisible(
                   rowIndex, itemIndex, true));
+          if (item.hidden) {
+            static_cast<void>(
+                workbench_.SetOverrideHidden(rowIndex, itemIndex, false));
+          }
           continue;
         }
         if (hideFittingAppearances) {

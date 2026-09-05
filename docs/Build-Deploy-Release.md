@@ -1,6 +1,6 @@
 # Build, Deploy, And Release
 
-This document describes the v1.5.5 build and release workflow for:
+This document describes the v1.5.6 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.5.5/windows/x64/<mode>/SFSCore.dll`
-- local-only SE/AE PDB when present: `build/v1.5.5/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.5.6/windows/x64/<mode>/SFSCore.dll`
+- local-only SE/AE PDB when present: `build/v1.5.6/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -142,10 +142,10 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.5.5 SE-AE.zip`
-- `Sources/Skyrim Fitting System v1.5.5 Source.zip`
+- `Release/Skyrim Fitting System v1.5.6 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.5.6 Source.zip`
 - matching copies under `dist/`
-- `Release/SHA256SUMS-v1.5.5.txt`
+- `Release/SHA256SUMS-v1.5.6.txt`
 
 The runtime archive has a flat MO2-installable root. It contains the main DLL,
 VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;

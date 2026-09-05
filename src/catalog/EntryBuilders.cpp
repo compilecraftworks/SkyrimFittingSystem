@@ -1,5 +1,6 @@
 #include "catalog/EntryBuilders.h"
 #include "catalog/KitLayoutMetadata.h"
+#include "catalog/KitJsonRules.h"
 
 #include "ArmorUtils.h"
 #include "Utf8Path.h"
@@ -285,7 +286,7 @@ auto GetOrBuildLeveledListCache(
     }
 
     if (const auto *armor = form->As<RE::TESObjectARMO>()) {
-      if (sfs::armor::IsSosTngGenitalArmor(armor)) {
+      if (sfs::armor::IsSosTngInternalArmor(armor)) {
         continue;
       }
 
@@ -339,7 +340,7 @@ void AccumulateArmorDescription(
     const RE::TESObjectARMO *a_armor, OutfitDescription &a_description,
     std::unordered_set<RE::FormID> &a_seenArmor,
     std::unordered_map<RE::FormID, sfs::ArmorMetadata> &a_armorMetadataCache) {
-  if (!a_armor || sfs::armor::IsSosTngGenitalArmor(a_armor)) {
+  if (!a_armor || sfs::armor::IsSosTngInternalArmor(a_armor)) {
     return;
   }
 
@@ -368,7 +369,7 @@ auto BuildOutfitItemNode(
   }
 
   if (const auto *armor = a_item->As<RE::TESObjectARMO>()) {
-    if (sfs::armor::IsSosTngGenitalArmor(armor)) {
+    if (sfs::armor::IsSosTngInternalArmor(armor)) {
       return std::nullopt;
     }
 
@@ -509,18 +510,51 @@ nlohmann::json OpenJsonFile(const std::filesystem::path &a_path) {
 
 KitDescription DescribeKitItems(
     const nlohmann::json &a_items,
-    std::unordered_map<RE::FormID, sfs::ArmorMetadata> &a_armorMetadataCache) {
+    std::unordered_map<RE::FormID, sfs::ArmorMetadata> &a_armorMetadataCache,
+    const sfs::catalog::KitArmorLookup &a_armorLookup) {
   KitDescription description;
   if (!a_items.is_object()) {
     return description;
   }
 
   std::unordered_set<RE::FormID> seenArmorForms;
-  for (const auto &[itemKey, _] : a_items.items()) {
-    RE::TESForm *form = RE::TESForm::LookupByEditorID(itemKey);
+  for (const auto &[itemKey, itemData] : a_items.items()) {
+    if (!sfs::catalog::kit_json::IsItemEquipped(itemData)) {
+      continue;
+    }
+
+    RE::TESForm *form = nullptr;
+    const auto expectedPlugin =
+        sfs::catalog::kit_json::GetItemPluginName(itemData);
+    if (expectedPlugin) {
+      const auto indexed = a_armorLookup.find(
+          sfs::catalog::kit_json::MakePluginEditorIDKey(*expectedPlugin,
+                                                        itemKey));
+      if (indexed != a_armorLookup.end()) {
+        form = indexed->second;
+      } else {
+        // A Modex kit can intentionally contain weapons or books. Preserve
+        // that compatibility by skipping a matching non-ARMO form, while an
+        // absent/mismatched plugin remains a missing dependency.
+        auto *globalForm = RE::TESForm::LookupByEditorID(itemKey);
+        if (globalForm && sfs::catalog::kit_json::PluginNamesEqual(
+                              sfs::armor::GetPluginName(globalForm),
+                              *expectedPlugin)) {
+          if (!globalForm->As<RE::TESObjectARMO>()) {
+            continue;
+          }
+          form = globalForm;
+        }
+      }
+    } else {
+      form = RE::TESForm::LookupByEditorID(itemKey);
+    }
     if (!form) {
       description.hasMissingItems = true;
-      break;
+      // Kit files are portable catalogs, not hard dependency declarations.
+      // Keep the installed pieces from a partially available Modex/SFS kit
+      // instead of hiding the entire kit because one source mod is absent.
+      continue;
     }
 
     const auto *armor = form->As<RE::TESObjectARMO>();
@@ -528,7 +562,7 @@ KitDescription DescribeKitItems(
       continue;
     }
 
-    if (sfs::armor::IsSosTngGenitalArmor(armor)) {
+    if (sfs::armor::IsSosTngInternalArmor(armor)) {
       continue;
     }
 
@@ -561,7 +595,7 @@ KitDescription DescribeKitLayout(
         description.hasMissingItems = true;
         continue;
       }
-      if (sfs::armor::IsSosTngGenitalArmor(armor) ||
+      if (sfs::armor::IsSosTngInternalArmor(armor) ||
           !seenArmorForms.insert(armor->GetFormID()).second) {
         continue;
       }
@@ -575,6 +609,38 @@ KitDescription DescribeKitLayout(
   }
   SortUniqueStrings(description.pieces);
   return description;
+}
+
+std::optional<sfs::KitEntry::Layout>
+FilterInstalledKitLayout(sfs::KitEntry::Layout a_layout) {
+  sfs::KitEntry::Layout filtered;
+  filtered.rows.reserve(a_layout.rows.size());
+
+  for (auto &row : a_layout.rows) {
+    std::vector<std::string> installedIdentifiers;
+    installedIdentifiers.reserve(row.overrideIdentifiers.size());
+    std::unordered_set<RE::FormID> seenArmorForms;
+    for (auto &identifier : row.overrideIdentifiers) {
+      const auto *armor =
+          sfs::armor::LookupByIdentifier<RE::TESObjectARMO>(identifier);
+      if (!armor || sfs::armor::IsSosTngInternalArmor(armor) ||
+          !seenArmorForms.insert(armor->GetFormID()).second) {
+        continue;
+      }
+      installedIdentifiers.push_back(std::move(identifier));
+    }
+
+    if (installedIdentifiers.empty()) {
+      continue;
+    }
+    row.overrideIdentifiers = std::move(installedIdentifiers);
+    filtered.rows.push_back(std::move(row));
+  }
+
+  if (filtered.rows.empty()) {
+    return std::nullopt;
+  }
+  return filtered;
 }
 
 std::string BuildKitSummary(const KitDescription &a_description) {
@@ -593,6 +659,20 @@ std::string BuildKitSummary(const KitDescription &a_description) {
 } // namespace
 
 namespace sfs::catalog {
+void IndexKitArmorForm(RE::TESObjectARMO *a_armor,
+                       KitArmorLookup &a_lookup) {
+  if (!a_armor) {
+    return;
+  }
+  const auto plugin = sfs::armor::GetPluginName(a_armor);
+  const auto editorID = sfs::armor::GetEditorID(a_armor);
+  if (plugin.empty() || editorID.empty()) {
+    return;
+  }
+  a_lookup.try_emplace(
+      kit_json::MakePluginEditorIDKey(plugin, editorID), a_armor);
+}
+
 const std::filesystem::path &GetPrimaryKitPath() { return kPrimaryKitPath; }
 
 const std::vector<std::filesystem::path> &GetKitSearchPaths() {
@@ -603,7 +683,7 @@ std::optional<GearEntry> BuildGearEntry(
     RE::TESObjectARMO *a_armor,
     std::unordered_map<RE::FormID, sfs::ArmorMetadata> &a_armorMetadataCache) {
   if (!a_armor || a_armor->IsDeleted() || a_armor->IsIgnored() ||
-      !a_armor->GetFile(0) || sfs::armor::IsSosTngGenitalArmor(a_armor)) {
+      !a_armor->GetFile(0) || sfs::armor::IsSosTngInternalArmor(a_armor)) {
     return std::nullopt;
   }
 
@@ -691,7 +771,8 @@ std::optional<OutfitEntry> BuildOutfitEntry(
 std::optional<KitEntry> BuildKitEntry(
     const std::filesystem::path &a_rootPath,
     const std::filesystem::path &a_path,
-    std::unordered_map<RE::FormID, sfs::ArmorMetadata> &a_armorMetadataCache) {
+    std::unordered_map<RE::FormID, sfs::ArmorMetadata> &a_armorMetadataCache,
+    const KitArmorLookup &a_armorLookup) {
   if (!std::filesystem::is_regular_file(a_path) ||
       a_path.extension() != ".json") {
     return std::nullopt;
@@ -715,13 +796,17 @@ std::optional<KitEntry> BuildKitEntry(
   }
 
   auto description = DescribeKitItems(
-      kitData.value("Items", nlohmann::json::object()), a_armorMetadataCache);
+      kitData.value("Items", nlohmann::json::object()), a_armorMetadataCache,
+      a_armorLookup);
   std::shared_ptr<const KitEntry::Layout> layout;
   if (const auto sfsMetadataIt =
           kitData.find(std::string(sfs::catalog::kSfsKitMetadataKey));
       sfsMetadataIt != kitData.end()) {
-    if (auto parsedLayout = ParseKitLayout(*sfsMetadataIt);
-        parsedLayout.has_value()) {
+    auto parsedLayout = ParseKitLayout(*sfsMetadataIt);
+    if (parsedLayout.has_value()) {
+      parsedLayout = FilterInstalledKitLayout(std::move(*parsedLayout));
+    }
+    if (parsedLayout.has_value()) {
       layout =
           std::make_shared<const KitEntry::Layout>(std::move(*parsedLayout));
     }
@@ -734,8 +819,9 @@ std::optional<KitEntry> BuildKitEntry(
     description = DescribeKitLayout(*layout, a_armorMetadataCache);
   }
 
-  if (description.hasMissingItems ||
-      (description.armorFormIDs.empty() && !layout)) {
+  // A missing source mod removes only its unavailable pieces. The kit stays
+  // usable as long as at least one installed armor component remains.
+  if (description.armorFormIDs.empty()) {
     return std::nullopt;
   }
 

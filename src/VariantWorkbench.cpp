@@ -7,6 +7,7 @@
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
+#include "native/HelmetToggle2Rules.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "poc/VirtualWornTokenPoC.h"
 #include "ui/Menu.h"
@@ -294,7 +295,7 @@ void VisitDistinctWornArmorItems(RE::Actor *a_actor, F &&a_visit) {
   std::unordered_set<RE::FormID> seenArmorForms;
   for (const auto slot : kTrackedWornSlots) {
     const auto *armor = a_actor->GetWornArmor(slot);
-    if (armor == nullptr || armor::IsSosTngGenitalArmor(armor) ||
+    if (armor == nullptr || armor::IsSosTngInternalArmor(armor) ||
         !seenArmorForms.insert(armor->GetFormID()).second) {
       continue;
     }
@@ -597,7 +598,7 @@ bool VariantWorkbench::ResolveCatalogArmors(
   for (const auto formID :
        EquipmentCatalog::Get().ResolveArmorFormIDs(a_formIDs)) {
     const auto *armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(formID);
-    if (!armor || armor::IsSosTngGenitalArmor(armor) ||
+    if (!armor || armor::IsSosTngInternalArmor(armor) ||
         !armor::HasArmorAddons(armor)) {
       continue;
     }
@@ -799,8 +800,8 @@ int VariantWorkbench::FindBestCatalogTargetRowIndex(
     const std::vector<PlannedCatalogAssignment> *a_pendingAssignments,
     const std::vector<int> *a_candidateRowIndices) const {
   return FindBestItemTargetRowIndexBySlotMask(
-      a_item.slotMask, a_requireAcceptable, &a_item, a_pendingAssignments,
-      a_candidateRowIndices);
+      GetPlacementSlotMask(a_item), a_requireAcceptable, &a_item,
+      a_pendingAssignments, a_candidateRowIndices);
 }
 
 int VariantWorkbench::FindBestItemTargetRowIndexBySlotMask(
@@ -1271,7 +1272,7 @@ void VariantWorkbench::SyncRowsFromActor(RE::Actor *a_actor) {
     }
     const auto *pendingArmor =
         RE::TESForm::LookupByID<RE::TESObjectARMO>(pendingState.armorFormID);
-    if (!pendingArmor || armor::IsSosTngGenitalArmor(pendingArmor)) {
+    if (!pendingArmor || armor::IsSosTngInternalArmor(pendingArmor)) {
       continue;
     }
     const auto pendingSlotMask =
@@ -1431,6 +1432,29 @@ bool VariantWorkbench::HasRegisteredAppearancesForActor(
          });
 }
 
+bool VariantWorkbench::HasDisplayStateForActor(
+    const RE::FormID a_actorFormID) const {
+  if (a_actorFormID == 0) {
+    return false;
+  }
+
+  auto stateLock = AcquireStateLock();
+  if (previewActorFormID_ == a_actorFormID &&
+      !previewSelectionKey_.empty() && !previewNativeRows_.empty()) {
+    return true;
+  }
+  if (std::ranges::any_of(rows_, [&](const auto &a_row) {
+        return a_row.ownerActorFormID == a_actorFormID &&
+               a_row.HasOverridesOrHideState();
+      })) {
+    return true;
+  }
+  return std::ranges::any_of(
+      conditionalVisibilityRules_, [&](const auto &a_rule) {
+        return a_rule.ownerActorFormID == a_actorFormID;
+      });
+}
+
 bool VariantWorkbench::HasActualEquipmentLinkedAppearancesForActor(
     const RE::FormID a_actorFormID) const {
   return GetActualEquipmentLinkedSlotMaskForActor(a_actorFormID) != 0;
@@ -1513,16 +1537,9 @@ std::uint32_t VariantWorkbench::GetHeadgearToggleFittingSlotMaskForActor(
     return 0;
   }
 
-  const bool modSettingsPolicy = IsModSettingsStripLinkPolicyActive();
-  const bool actualEquipmentPolicy = IsActualEquipmentStripLinkPolicyActive();
   const auto *player = RE::PlayerCharacter::GetSingleton();
   const bool resolvingPlayer =
       player != nullptr && player->GetFormID() == a_actorFormID;
-  // HT2 owns real slot-31 hair replacement itself. SFS never projects that
-  // signal onto a registered appearance which is purely slot 31, even if a
-  // Direct edit maps its external-strip token to another headgear slot.
-  // Multi-slot 31+42 cards remain eligible through their visible slot 42.
-  constexpr std::uint32_t kManagedRegisteredHeadgearSlots = 0x02005001;
   std::uint32_t fittingSlotMask = 0;
   auto stateLock = AcquireStateLock();
   for (const auto &row : rows_) {
@@ -1534,50 +1551,11 @@ std::uint32_t VariantWorkbench::GetHeadgearToggleFittingSlotMaskForActor(
       continue;
     }
     for (const auto &item : row.overrides) {
-      if (item.locked) {
-        continue;
-      }
       const auto visualSlotMask = static_cast<std::uint32_t>(
           row.GetOverrideVisualSlotMask(item));
-      if (visualSlotMask == 0 ||
-          (visualSlotMask & kManagedRegisteredHeadgearSlots) == 0) {
-        continue;
-      }
-
-      if (actualEquipmentPolicy) {
-        // Vanilla linking and direct editing on its vanilla base have already
-        // resolved their per-card real-equipment anchor during row sync.
-        if ((item.automaticEquipmentAnchorSlotMask & a_controllerSlotMask) !=
-            0) {
-          fittingSlotMask |= visualSlotMask;
-        }
-        continue;
-      }
-
-      if (modSettingsPolicy) {
-        if (!IsExternalModStripLinkAppearanceEnabled(visualSlotMask)) {
-          continue;
-        }
-        // In the normal mod-settings policy a visual slot queries itself. A
-        // direct edit on that base may redirect this individual query to any
-        // 30-61 token slot, including a real headgear slot.
-        const auto mappedTokenSlotMask =
-            ResolveCustomDirectStripLinkTokenSlotMask(visualSlotMask);
-        const auto tokenSlotMask = mappedTokenSlotMask.has_value()
-                                       ? *mappedTokenSlotMask
-                                       : visualSlotMask;
-        if ((tokenSlotMask & a_controllerSlotMask) != 0) {
-          fittingSlotMask |= visualSlotMask;
-        }
-        continue;
-      }
-
-      // With external linking disabled (or with an old fully-direct saved
-      // policy), Helmet Toggle still controls only cards which visibly occupy
-      // the headgear slots it controls. It never guesses extension slots.
-      if ((visualSlotMask & a_controllerSlotMask) != 0) {
-        fittingSlotMask |= visualSlotMask;
-      }
+      fittingSlotMask |= sfs::native::helmet_toggle::rules::
+          ResolveRegisteredAppearanceSuppressionSlots(
+              visualSlotMask, a_controllerSlotMask, item.locked);
     }
   }
   return fittingSlotMask;
@@ -1619,7 +1597,7 @@ bool VariantWorkbench::CanAcceptOverride(int a_targetRowIndex,
 
   if (!a_item.IsSlot()) {
     const auto *armorForm = appearanceArmor;
-    if (!armorForm || armor::IsSosTngGenitalArmor(armorForm) ||
+    if (!armorForm || armor::IsSosTngInternalArmor(armorForm) ||
         armor::GetFormIdentifier(armorForm).empty()) {
       return false;
     }
@@ -1630,7 +1608,10 @@ bool VariantWorkbench::CanAcceptOverride(int a_targetRowIndex,
     return false;
   }
 
-  const auto overrideSlotMask = a_item.slotMask;
+  // Match against the same normalized placement mask used before catalog
+  // items began retaining their complete visual slot identity. This preserves
+  // row-selection behavior while the stored appearance keeps every ARMO bit.
+  const auto overrideSlotMask = GetPlacementSlotMask(a_item);
   const auto targetSlotMask = row.GetSelectionConflictSlotMask();
   if (overrideSlotMask == 0 || targetSlotMask == 0 ||
       (overrideSlotMask & targetSlotMask) == 0) {
@@ -1963,7 +1944,7 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
   if (appearanceArmor == nullptr ||
       !workbench::BuildCatalogItem(a_formID, item) ||
       !item.SupportsArmorReplacement() ||
-      armor::IsSosTngGenitalArmor(appearanceArmor) ||
+      armor::IsSosTngInternalArmor(appearanceArmor) ||
       armor::GetFormIdentifier(appearanceArmor).empty()) {
     return false;
   }
@@ -2627,7 +2608,7 @@ std::optional<KitEntry::Layout> VariantWorkbench::CaptureKitLayout(
 
       const auto *actualArmor =
           RE::TESForm::LookupByID<RE::TESObjectARMO>(actualRow.equipped.formID);
-      if (armor::IsSosTngGenitalArmor(actualArmor)) {
+      if (armor::IsSosTngInternalArmor(actualArmor)) {
         continue;
       }
 
@@ -2832,7 +2813,7 @@ bool VariantWorkbench::ApplyKitLayout(
 
       const auto *actualArmor =
           RE::TESForm::LookupByID<RE::TESObjectARMO>(row.equipped.formID);
-      if (armor::IsSosTngGenitalArmor(actualArmor)) {
+      if (armor::IsSosTngInternalArmor(actualArmor)) {
         continue;
       }
 

@@ -28,7 +28,11 @@ bool BuildCatalogItem(const RE::FormID a_formID, EquipmentWidgetItem &a_item) {
 
   if (const auto *armorForm = form->As<RE::TESObjectARMO>()) {
     a_item.hasArmorAddons = armor::HasArmorAddons(armorForm);
-    a_item.slotMask = armor::GetArmorWorkbenchSlotMask(armorForm);
+    // Keep the ARMO's complete occupied-slot identity on the catalog item.
+    // Row placement has its own workbench normalization; storing that
+    // projection here permanently discarded secondary slots (notably Hair on
+    // a 31+42 helmet) from registered appearances and HT2 matching.
+    a_item.slotMask = armor::GetArmorDisplaySlotMask(armorForm);
     a_item.slotText =
         armor::JoinStrings(armor::GetArmorSlotLabels(a_item.slotMask));
     return true;

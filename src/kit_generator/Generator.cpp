@@ -1,6 +1,7 @@
 #include "Generator.h"
 
 #include "Localization.h"
+#include "Utf8Path.h"
 
 #if defined(SFS_PERSONAL_KIT_COMPLETION)
 #include "../../private/personal_kit_completion/PersonalKitCompletion.h"
@@ -3702,24 +3703,50 @@ std::string SafeFilename(std::string a_name) {
   return a_name.empty() ? "Kit" : a_name;
 }
 
-std::filesystem::path PathFromUtf8(const std::string_view a_value) {
-  const auto *begin = reinterpret_cast<const char8_t *>(a_value.data());
-  return std::filesystem::path(
-      std::u8string(begin, begin + a_value.size()));
+std::filesystem::path SafeFilenameStem(const std::string &a_displayName) {
+  auto stem = sfs::utf8::PathFromUtf8(SafeFilename(a_displayName));
+#if defined(_WIN32)
+  // Reserve room under the legacy full-path boundary for the fixed kit
+  // directory and collision suffix. MO2/VFS and some game-side consumers can
+  // still encounter that boundary even on long-path-aware Windows installs.
+  constexpr std::size_t kMaximumStemLength = 140;
+  auto native = stem.native();
+  if (native.size() > kMaximumStemLength) {
+    native.resize(kMaximumStemLength);
+    if (!native.empty() && native.back() >= 0xD800 &&
+        native.back() <= 0xDBFF) {
+      native.pop_back();
+    }
+    while (!native.empty() &&
+           (native.back() == L'.' || native.back() == L' ')) {
+      native.pop_back();
+    }
+    stem = std::filesystem::path(native);
+  }
+#endif
+  return stem.empty() ? std::filesystem::path(L"Kit") : stem;
+}
+
+std::filesystem::path WithCollisionSuffix(
+    const std::filesystem::path &a_stem, const std::size_t a_index) {
+  auto result = a_stem;
+  result += sfs::utf8::PathFromUtf8(std::format(" {}", a_index));
+  return result;
 }
 
 std::filesystem::path UniqueOutputPath(const std::filesystem::path &a_root,
                                        const std::string &a_displayName) {
-  const auto stem = PathFromUtf8(SafeFilename(a_displayName));
+  const auto stem = SafeFilenameStem(a_displayName);
   auto candidate = a_root / stem;
   candidate += L".json";
   if (!std::filesystem::exists(candidate)) {
     return candidate;
   }
   for (std::size_t index = 2;; ++index) {
-    candidate = a_root / PathFromUtf8(
-                             std::format("{} {}", SafeFilename(a_displayName),
-                                         index));
+    // Clamp the user/plugin-provided stem once, then append the collision
+    // identity. Re-clamping the combined text can remove the suffix from a
+    // long name and make this loop probe the same path forever.
+    candidate = a_root / WithCollisionSuffix(stem, index);
     candidate += L".json";
     if (!std::filesystem::exists(candidate)) {
       return candidate;
@@ -4764,8 +4791,10 @@ std::size_t Generator::CreateKitFiles(std::string &a_error) {
   }
 
   std::size_t written = 0;
-  try {
-    for (const auto &kit : generatedKits_) {
+  std::size_t failed = 0;
+  std::string firstError;
+  for (const auto &kit : generatedKits_) {
+    try {
       if (kit.candidates.empty()) {
         continue;
       }
@@ -4787,7 +4816,8 @@ std::size_t Generator::CreateKitFiles(std::string &a_error) {
       if (!stream.is_open()) {
         throw std::runtime_error(
             Localization::Get().Format("error.open_output",
-                                       outputPath.string()));
+                                       sfs::utf8::PathToUtf8String(
+                                           outputPath)));
       }
       stream << BuildKitJson(displayName, candidate).dump(
           2, ' ', false, nlohmann::json::error_handler_t::replace);
@@ -4795,12 +4825,20 @@ std::size_t Generator::CreateKitFiles(std::string &a_error) {
       if (!stream.good()) {
         throw std::runtime_error(
             Localization::Get().Format("error.write_output",
-                                       outputPath.string()));
+                                       sfs::utf8::PathToUtf8String(
+                                           outputPath)));
       }
       ++written;
+    } catch (const std::exception &exception) {
+      ++failed;
+      if (firstError.empty()) {
+        firstError = exception.what();
+      }
     }
-  } catch (const std::exception &exception) {
-    a_error = exception.what();
+  }
+  if (failed != 0) {
+    a_error = Localization::Get().Format("error.files_skipped", failed,
+                                         firstError);
   }
   return written;
 }

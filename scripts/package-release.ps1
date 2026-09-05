@@ -124,6 +124,7 @@ $sourceDocs = @(
     'RELEASE-NOTES-v1.5.3.md', 'RELEASE-NOTES-v1.5.3-ko.md',
     'RELEASE-NOTES-v1.5.4.md', 'RELEASE-NOTES-v1.5.4-ko.md',
     'RELEASE-NOTES-v1.5.5.md', 'RELEASE-NOTES-v1.5.5-ko.md',
+    'RELEASE-NOTES-v1.5.6.md', 'RELEASE-NOTES-v1.5.6-ko.md',
     'BodyMorph-v1.5.5-Regression-Checks.md',
     'RaceMenu-ABI-Audit.md'
 )

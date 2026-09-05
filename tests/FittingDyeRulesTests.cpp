@@ -6,6 +6,10 @@
 
 namespace {
 using sfs::native::dye::rules::IsCharacterBaseComponent;
+using sfs::native::dye::rules::DrawHookInstallAction;
+using sfs::native::dye::rules::IsRendererContextMatch;
+using sfs::native::dye::rules::ResolveDrawHookInstallAction;
+using sfs::native::dye::rules::ShouldInspectRendererTintPass;
 
 void Require(const bool a_condition, const std::string_view a_message) {
   if (!a_condition) {
@@ -71,12 +75,58 @@ void TestOutfitComponentsRemainDyeableCandidates() {
               "Dress", "textures/armor/example/cbbe_dress.dds"),
           "A family-labelled outfit diffuse must not be mistaken for a base body");
 
+  for (const auto &[shape, texture] : {
+           std::pair{"CBBE Corset", "textures/armor/cbbe/corset_d.dds"},
+           std::pair{"3BA Dress", "textures/armor/3ba/dress_d.dds"},
+           std::pair{"3BBB Sleeve", "textures/armor/3bbb/sleeve_d.dds"},
+           std::pair{"BHUNP Coat", "textures/armor/bhunp/coat_d.dds"},
+           std::pair{"UNP Stockings", "textures/armor/unp/stockings_d.dds"},
+           std::pair{"UBE 2.0 Corset", "textures/!UBE/outfits/corset_d.dds"},
+           std::pair{"UBE_Dress", "textures/!UBE/outfits/dress_d.dds"},
+           std::pair{"SAM Armor", "textures/armor/sam/armor_d.dds"},
+       }) {
+    Require(!IsCharacterBaseComponent(shape, texture),
+            "Body-family labels on outfit components must remain dyeable");
+  }
+
   for (const auto shape : {"XF-Femme Flame Top", "UV1_Bra",
                            "CorsetTop"}) {
     Require(!IsCharacterBaseComponent(
                 shape, "textures/!UBE/outfits/example_basecolor.dds"),
             "UBE outfit components under the race-specific path must remain dyeable");
   }
+}
+
+void TestDrawHookContextReplacementRules() {
+  Require(ResolveDrawHookInstallAction(false, false, false) ==
+              DrawHookInstallAction::Install,
+          "A new D3D11 context vtable must receive its own guarded hook");
+  Require(ResolveDrawHookInstallAction(true, true, true) ==
+              DrawHookInstallAction::Reuse,
+          "An already registered context vtable must be reused idempotently");
+  Require(ResolveDrawHookInstallAction(false, true, true) ==
+              DrawHookInstallAction::RejectUnknownOwnership &&
+              ResolveDrawHookInstallAction(false, true, false) ==
+                  DrawHookInstallAction::RejectUnknownOwnership,
+          "An untracked SFS-looking or partial hook must fail closed");
+  Require(ResolveDrawHookInstallAction(true, false, false) ==
+              DrawHookInstallAction::UseExistingChainOrShaderBindingFallback &&
+              ResolveDrawHookInstallAction(true, true, false) ==
+                  DrawHookInstallAction::UseExistingChainOrShaderBindingFallback,
+          "A displaced registered chain must be preserved and use the scoped fallback");
+}
+
+void TestDormantRendererFastPath() {
+  Require(!ShouldInspectRendererTintPass(false, false),
+          "Dormant Dye hooks must not enter the renderer map/mutex path");
+  Require(ShouldInspectRendererTintPass(true, false) &&
+              ShouldInspectRendererTintPass(false, true) &&
+              ShouldInspectRendererTintPass(true, true),
+          "Durable dyes and amber previews must activate renderer inspection");
+  Require(IsRendererContextMatch(0x1000, 0x1000) &&
+              !IsRendererContextMatch(0x1000, 0x2000) &&
+              !IsRendererContextMatch(0, 0),
+          "Dye substitution must never cross a D3D context boundary");
 }
 } // namespace
 
@@ -86,6 +136,8 @@ int main() {
     TestVanillaBodyComponentsAreExcluded();
     TestUbeRaceSpecificComponentsAreExcluded();
     TestOutfitComponentsRemainDyeableCandidates();
+    TestDrawHookContextReplacementRules();
+    TestDormantRendererFastPath();
     std::cout << "FittingDyeRulesTests passed\n";
     return 0;
   } catch (const std::exception &error) {

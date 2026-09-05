@@ -18,17 +18,14 @@ void ResetRuntimeState();
 void ObserveGlobalStateChanged(RE::TESGlobal *a_global);
 void ObserveActorSpellChanged(RE::Actor *a_actor, RE::SpellItem *a_spell);
 
-// Returns the real Hair (31) partition which must be released from Skyrim's
-// worn mask while HT2 is hiding a managed, still-equipped headgear ARMO.  The
-// optional displayed-fitting mask keeps a visible registered slot-31 wig in
-// control of Hair.  This is a renderer-only answer: it never changes the
-// actor's inventory, ARMO, HT2 variant, or virtual-token catalog.
-[[nodiscard]] std::uint32_t GetActualHairSlotReleaseMask(
-    RE::Actor *a_actor, std::uint32_t a_displayedFittingSlotMask = 0);
-
 // Reconciles one actor only. queueRefresh=false is used from an already-running
 // SFS actor refresh so DAVE/DAV/native is never invoked recursively.
 void SynchronizeActor(RE::Actor *a_actor, bool a_queueRefresh);
 void SynchronizePlayer(bool a_queueRefresh);
+
+// Returns the renderer-only Hair (31) release used by the proven v1.5.0 HT2
+// path. It never equips, unequips, or edits the actor's real armor.
+[[nodiscard]] std::uint32_t GetActualHairSlotReleaseMask(
+    RE::Actor *a_actor, std::uint32_t a_displayedFittingSlotMask = 0);
 
 } // namespace sfs::native::helmet_toggle

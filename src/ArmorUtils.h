@@ -18,6 +18,8 @@ std::uint64_t GetArmorDisplaySlotMask(const RE::TESObjectARMO *a_armor);
 std::uint64_t GetArmorWorkbenchSlotMask(const RE::TESObjectARMO *a_armor);
 bool HasArmorAddons(const RE::TESObjectARMO *a_armor);
 bool IsSosTngGenitalArmor(const RE::TESObjectARMO *a_armor);
+bool IsTngGenitalCoverArmor(const RE::TESObjectARMO *a_armor);
+bool IsSosTngInternalArmor(const RE::TESObjectARMO *a_armor);
 std::vector<std::string>
 GetArmorAddonSlotLabels(const RE::TESObjectARMO *a_armor);
 std::string GetPluginName(const RE::TESForm *a_form);

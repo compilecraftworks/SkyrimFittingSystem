@@ -10,6 +10,7 @@
 #include "native/DisplayedBodyCondition.h"
 #include "native/FittingDye.h"
 #include "native/GridInventoryIntegration.h"
+#include "native/GenitalCompatibility.h"
 #include "native/HelmetToggle2Integration.h"
 #include "native/OpenAnimationReplacerIntegration.h"
 #include "native/RaceMenuBodyMorph.h"
@@ -25,10 +26,16 @@
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
   switch (a_message->type) {
   case SKSE::MessagingInterface::kPostLoad:
+    // SKSE stores one callback per (sender, listener plugin) pair. Register
+    // named integrations first; the later unfiltered Grid registration then
+    // skips those senders instead of occupying their callback slot.
     sfs::native::smoothcam::RegisterInterfaceListener();
+    sfs::native::grid_inventory::RegisterMessageListener(
+        SKSE::GetMessagingInterface());
     sfs::native::oar::RegisterConditions();
     break;
   case SKSE::MessagingInterface::kDataLoaded:
+    sfs::native::genital_compatibility::InitializeEnvironment();
     sfs::kit_generator::Generator::Get().SnapshotLoadedArmorForms();
     sfs::poc::InitializeVirtualWornTokens();
     sfs::poc::InitializeDeviousDevicesHider();
@@ -96,10 +103,6 @@ SKSEPlugin_Load(const SKSE::LoadInterface *a_skse) {
   logger::info("{} build {}", Plugin::NAME, Plugin::VERSION_STRING);
 
   messaging->RegisterListener("SKSE", SKSEMessageHandler);
-  // Grid Inventory's Costume state is a plugin broadcast, not an SKSE
-  // lifecycle message. Keep its unfiltered listener separate so normal SKSE
-  // lifecycle dispatch remains exactly as before.
-  sfs::native::grid_inventory::RegisterMessageListener(messaging);
 
   if (auto *papyrus = SKSE::GetPapyrusInterface()) {
     papyrus->Register(sfs::papyrus::Register);

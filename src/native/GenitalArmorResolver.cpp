@@ -1,6 +1,7 @@
 #include "native/GenitalArmorResolver.h"
 
 #include "native/ArmorSkinning.h"
+#include "native/GenitalCompatibility.h"
 
 #include <mutex>
 #include <unordered_map>
@@ -133,7 +134,8 @@ void ForgetGenitalArmor(RE::Actor *a_actor) {
 }
 
 void RequestGenitalArmorResolution(RE::Actor *a_actor, const bool a_force) {
-  if (!a_actor) {
+  if (!a_actor ||
+      !sfs::native::genital_compatibility::IsSosInstalled()) {
     return;
   }
 
@@ -156,6 +158,9 @@ void RequestGenitalArmorResolution(RE::Actor *a_actor, const bool a_force) {
       dataHandler
           ? dataHandler->LookupForm(0x1EDA4, "Schlongs of Skyrim.esp")
           : nullptr;
+  if (!apiForm) {
+    apiForm = RE::TESForm::LookupByEditorID<RE::TESQuest>("SOS_Misc");
+  }
   auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
   auto *handlePolicy = vm ? vm->GetObjectHandlePolicy() : nullptr;
   if (!apiForm || !vm || !handlePolicy) {

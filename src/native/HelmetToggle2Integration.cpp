@@ -4,6 +4,7 @@
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
+#include "native/HelmetToggle2Rules.h"
 #include "ui/Menu.h"
 
 #include <SKSE/SKSE.h>
@@ -16,39 +17,6 @@
 
 namespace {
 constexpr auto kHelmetTogglePluginName = "Helmet Toggle 2.esp";
-constexpr std::uint32_t kPlayerManagedSlotMask = 0x02005001;
-constexpr std::uint32_t kNpcManagedSlotMask = 0x00005001;
-constexpr std::uint32_t kHairSlotMask = 0x00000002;
-
-[[nodiscard]] constexpr std::uint32_t ProjectActualArmorSlotMask(
-    const std::uint32_t a_armorSlotMask, const bool a_player) {
-  return a_armorSlotMask &
-         (a_player ? kPlayerManagedSlotMask : kNpcManagedSlotMask);
-}
-
-static_assert(ProjectActualArmorSlotMask(0x00001002, true) == 0x00001000);
-static_assert(ProjectActualArmorSlotMask(0x00001003, true) == 0x00001001);
-static_assert(ProjectActualArmorSlotMask(0x00000003, true) == 0x00000001);
-static_assert(ProjectActualArmorSlotMask(0x00000002, true) == 0);
-static_assert(ProjectActualArmorSlotMask(0x02000000, true) == 0x02000000);
-static_assert(ProjectActualArmorSlotMask(0x02000000, false) == 0);
-
-[[nodiscard]] constexpr std::uint32_t ComputeActualHairSlotReleaseMask(
-    const bool a_hidden, const std::uint32_t a_managedActualArmorSlotMask,
-    const std::uint32_t a_displayedFittingSlotMask) {
-  return a_hidden &&
-                 (a_managedActualArmorSlotMask & kHairSlotMask) != 0 &&
-                 (a_displayedFittingSlotMask & kHairSlotMask) == 0
-             ? kHairSlotMask
-             : 0;
-}
-
-static_assert(ComputeActualHairSlotReleaseMask(true, 0x00001002, 0) ==
-              kHairSlotMask);
-static_assert(ComputeActualHairSlotReleaseMask(true, 0x00001002,
-                                               kHairSlotMask) == 0);
-static_assert(ComputeActualHairSlotReleaseMask(false, 0x00001002, 0) == 0);
-static_assert(ComputeActualHairSlotReleaseMask(true, 0x00001000, 0) == 0);
 
 struct HelmetToggleForms {
   RE::TESGlobal *helmetState{nullptr};
@@ -79,6 +47,8 @@ std::mutex g_actorStateMutex;
 std::unordered_set<RE::FormID> g_hiddenActors;
 std::mutex g_managedActorMutex;
 std::unordered_set<RE::FormID> g_managedNpcActors;
+std::mutex g_controllerMaskMutex;
+std::unordered_map<RE::FormID, std::uint32_t> g_lastVisibleControllerMasks;
 std::mutex g_signalTaskMutex;
 std::unordered_map<RE::FormID, std::uint64_t> g_latestSignalTask;
 std::atomic_uint64_t g_nextSignalTask{0};
@@ -157,8 +127,17 @@ template <class T>
 }
 
 struct ManagedActualHeadgearSlots {
-  std::uint32_t controllerMask{0};
   std::uint32_t armorMask{0};
+  std::uint32_t controllerMask{0};
+  bool observedManagedHeadgear{false};
+  struct Observation {
+    RE::FormID armorFormID{0};
+    std::uint32_t armorMask{0};
+    std::uint32_t addonMask{0};
+    std::uint32_t queryMask{0};
+  };
+  std::array<Observation, 5> observations{};
+  std::size_t observationCount{0};
 };
 
 [[nodiscard]] ManagedActualHeadgearSlots
@@ -169,7 +148,6 @@ GetManagedActualHeadgearSlots(RE::Actor *a_actor) {
 
   constexpr std::array<std::uint32_t, 5> kQuerySlots{30, 31, 42, 44, 55};
   const bool player = IsPlayer(a_actor);
-  std::unordered_set<RE::FormID> visited;
   ManagedActualHeadgearSlots result;
   for (const auto slot : kQuerySlots) {
     if (!player && slot == 55) {
@@ -178,18 +156,39 @@ GetManagedActualHeadgearSlots(RE::Actor *a_actor) {
     const auto queryMask = sfs::armor::GetArmorSlotMask(slot);
     auto *armor = a_actor->GetWornArmor(
         static_cast<RE::BGSBipedObjectForm::BipedObjectSlot>(queryMask));
-    if (!armor || !visited.insert(armor->GetFormID()).second ||
-        !IsManagedHeadgear(armor, slot)) {
+    if (!armor || !IsManagedHeadgear(armor, slot)) {
       continue;
     }
+    result.observedManagedHeadgear = true;
 
-    // HT2 deduplicates the ARMO by query order. Read the surviving ARMO's
-    // complete slot mask so a vanilla 31+42 helmet still controls registered
-    // slot 42 while pure slot 31 deliberately controls nothing in SFS.
     const auto armorMask =
         static_cast<std::uint32_t>(armor->GetSlotMask().underlying());
     result.armorMask |= armorMask;
-    result.controllerMask |= ProjectActualArmorSlotMask(armorMask, player);
+    ManagedActualHeadgearSlots::Observation *observation = nullptr;
+    for (std::size_t index = 0; index < result.observationCount; ++index) {
+      if (result.observations[index].armorFormID == armor->GetFormID()) {
+        observation = &result.observations[index];
+        break;
+      }
+    }
+    if (!observation) {
+      if (result.observationCount >= result.observations.size()) {
+        continue;
+      }
+      observation = &result.observations[result.observationCount++];
+      observation->armorFormID = armor->GetFormID();
+      observation->armorMask = armorMask;
+      observation->addonMask = static_cast<std::uint32_t>(
+          sfs::armor::GetArmorAddonSlotMask(armor));
+    }
+    observation->queryMask |= static_cast<std::uint32_t>(queryMask);
+  }
+
+  for (std::size_t index = 0; index < result.observationCount; ++index) {
+    const auto &observation = result.observations[index];
+    result.controllerMask |=
+        sfs::native::helmet_toggle::rules::ResolveObservedControllerMask(
+            observation.armorMask, observation.queryMask, player);
   }
   return result;
 }
@@ -212,6 +211,34 @@ void SetActorHiddenState(RE::Actor *a_actor, const bool a_hidden) {
   }
   std::lock_guard lock(g_actorStateMutex);
   return g_hiddenActors.contains(a_actor->GetFormID());
+}
+
+[[nodiscard]] std::uint32_t ResolveActorControllerMask(
+    const RE::FormID a_actorFormID, const bool a_hidden,
+    const ManagedActualHeadgearSlots &a_observed) {
+  std::lock_guard lock(g_controllerMaskMutex);
+  const auto cached = g_lastVisibleControllerMasks.find(a_actorFormID);
+  const auto cachedMask = cached != g_lastVisibleControllerMasks.end()
+                              ? cached->second
+                              : 0;
+  const auto resolved =
+      sfs::native::helmet_toggle::rules::ResolveSignalControllerMask(
+          a_hidden, a_observed.controllerMask,
+          a_observed.observedManagedHeadgear, cachedMask);
+
+  // A visible observation is authoritative. The same applies when a managed
+  // item is still queryable during the hidden transition. A managed pure-31
+  // helmet resolves to the semantic registered-headgear controller mask,
+  // whereas a non-headgear Hair item never reaches this observation path.
+  if (!a_hidden || a_observed.observedManagedHeadgear) {
+    if (a_observed.controllerMask != 0) {
+      g_lastVisibleControllerMasks.insert_or_assign(
+          a_actorFormID, a_observed.controllerMask);
+    } else {
+      g_lastVisibleControllerMasks.erase(a_actorFormID);
+    }
+  }
+  return resolved;
 }
 
 [[nodiscard]] bool HasResolvedMonitorOwnershipForm() {
@@ -276,24 +303,22 @@ void ApplyActorState(RE::Actor *a_actor, const bool a_hidden,
   const bool hasAppearances =
       menu->GetWorkbench().HasRegisteredAppearancesForActor(actorFormID);
   const bool canRenderNow = a_queueRefresh && a_actor->Is3DLoaded();
-  const auto displayedBeforeForHair =
+  const auto displayedBefore =
       canRenderNow && hasAppearances
           ? sfs::native::GetDisplayedFittingSlotMask(a_actor)
           : 0;
+  const auto observedHeadgear = GetManagedActualHeadgearSlots(a_actor);
   const auto hairReleaseBefore =
       canRenderNow
-          ? ComputeActualHairSlotReleaseMask(
-                wasHidden, GetManagedActualHeadgearSlots(a_actor).armorMask,
-                displayedBeforeForHair)
+          ? sfs::native::helmet_toggle::rules::
+                ComputeActualHairSlotReleaseMask(
+                    wasHidden, observedHeadgear.armorMask, displayedBefore)
           : 0;
   SetActorHiddenState(a_actor, a_hidden);
-  const auto displayedBefore =
-      canRenderNow && hasAppearances ? displayedBeforeForHair : 0;
-
   std::uint32_t fittingMask = 0;
-  std::uint32_t controllerMask = 0;
+  const auto controllerMask = ResolveActorControllerMask(
+      actorFormID, a_hidden, observedHeadgear);
   if (a_hidden && hasAppearances) {
-    controllerMask = GetManagedActualHeadgearSlots(a_actor).controllerMask;
     if (controllerMask != 0) {
       fittingMask =
           menu->GetWorkbench().GetHeadgearToggleFittingSlotMaskForActor(
@@ -304,29 +329,41 @@ void ApplyActorState(RE::Actor *a_actor, const bool a_hidden,
   const bool stateChanged =
       sfs::native::ReplaceHeadgearToggleFittingSlotsSuppressed(a_actor,
                                                                fittingMask);
+  if (a_queueRefresh) {
+    logger::info("HT2 actor-local signal actor={:08X} hidden={} "
+                 "observed={} observedManaged={} resolved={} fitting={}",
+                 actorFormID, a_hidden, observedHeadgear.controllerMask,
+                 observedHeadgear.observedManagedHeadgear, controllerMask,
+                 fittingMask);
+    for (std::size_t index = 0;
+         index < observedHeadgear.observationCount; ++index) {
+      const auto &observation = observedHeadgear.observations[index];
+      logger::info("HT2 actual headgear actor={:08X} armor={:08X} "
+                   "armoSlots={:08X} armaSlots={:08X} queriedSlots={:08X}",
+                   actorFormID, observation.armorFormID,
+                   observation.armorMask, observation.addonMask,
+                   observation.queryMask);
+    }
+  }
   if (!canRenderNow) {
     return;
   }
 
   const auto displayedAfter =
       hasAppearances ? sfs::native::GetDisplayedFittingSlotMask(a_actor) : 0;
-  const auto managedActualSlots = GetManagedActualHeadgearSlots(a_actor);
-  const auto hairReleaseAfter = ComputeActualHairSlotReleaseMask(
-      a_hidden, managedActualSlots.armorMask, displayedAfter);
   const bool fittingDisplayChanged =
       stateChanged && displayedBefore != displayedAfter;
-  const bool actualHairDisplayChanged = hairReleaseBefore != hairReleaseAfter;
-  if (actualHairDisplayChanged) {
-    logger::info("HT2 actor-local actual Hair render actor={:08X} hidden={} "
-                 "actualMask={:08X} releaseMask={:08X}",
-                 actorFormID, a_hidden, managedActualSlots.armorMask,
-                 hairReleaseAfter);
-  }
+  const auto hairReleaseAfter =
+      sfs::native::helmet_toggle::rules::ComputeActualHairSlotReleaseMask(
+          a_hidden, observedHeadgear.armorMask, displayedAfter);
+  const bool actualHairDisplayChanged =
+      hairReleaseBefore != hairReleaseAfter;
   if (fittingDisplayChanged || actualHairDisplayChanged) {
-    logger::debug("HT2 actor-local fitting refresh actor={:08X} hidden={} "
-                  "controller={:08X} fitting={:08X} hairRelease={:08X}",
-                  actorFormID, a_hidden, controllerMask, fittingMask,
-                  hairReleaseAfter);
+    logger::info("HT2 actor-local fitting refresh actor={:08X} hidden={} "
+                 "controller={:08X} fitting={:08X} displayedBefore={:08X} "
+                 "displayedAfter={:08X} hairRelease={:08X}",
+                 actorFormID, a_hidden, controllerMask, fittingMask,
+                 displayedBefore, displayedAfter, hairReleaseAfter);
     sfs::native::QueueArmorRefreshFor(a_actor);
   }
 }
@@ -447,20 +484,14 @@ void ResetRuntimeState() {
     g_managedNpcActors.clear();
   }
   {
+    std::lock_guard lock(g_controllerMaskMutex);
+    g_lastVisibleControllerMasks.clear();
+  }
+  {
     std::lock_guard lock(g_signalTaskMutex);
     g_latestSignalTask.clear();
   }
   sfs::native::ClearAllHeadgearToggleFittingSlotStates();
-}
-
-std::uint32_t GetActualHairSlotReleaseMask(
-    RE::Actor *a_actor, const std::uint32_t a_displayedFittingSlotMask) {
-  if (!IsAvailable() || !IsActorHidden(a_actor)) {
-    return 0;
-  }
-  return ComputeActualHairSlotReleaseMask(
-      true, GetManagedActualHeadgearSlots(a_actor).armorMask,
-      a_displayedFittingSlotMask);
 }
 
 void ObserveGlobalStateChanged(RE::TESGlobal *a_global) {
@@ -507,5 +538,15 @@ void SynchronizeActor(RE::Actor *a_actor, const bool a_queueRefresh) {
 
 void SynchronizePlayer(const bool a_queueRefresh) {
   SynchronizeActor(RE::PlayerCharacter::GetSingleton(), a_queueRefresh);
+}
+
+std::uint32_t GetActualHairSlotReleaseMask(
+    RE::Actor *a_actor, const std::uint32_t a_displayedFittingSlotMask) {
+  if (!IsAvailable() || !IsActorHidden(a_actor)) {
+    return 0;
+  }
+  return rules::ComputeActualHairSlotReleaseMask(
+      true, GetManagedActualHeadgearSlots(a_actor).armorMask,
+      a_displayedFittingSlotMask);
 }
 } // namespace sfs::native::helmet_toggle

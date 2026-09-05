@@ -2,6 +2,7 @@
 
 #include "ArmorUtils.h"
 #include "ConditionMaterializer.h"
+#include "TngGenitalCoverRules.h"
 #include "conditions/Status.h"
 #include "native/ArmorSkinning.h"
 #include "native/ArmorRefreshRules.h"
@@ -9,6 +10,7 @@
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingDye.h"
 #include "native/FittingSlotState.h"
+#include "native/GenitalCompatibility.h"
 #include "native/GenitalArmorResolver.h"
 #include "native/HelmetToggle2Integration.h"
 #include "native/RaceMenuBodyMorph.h"
@@ -535,6 +537,12 @@ BuildArmorClassificationText(
       RE::BGSBipedObjectForm::BipedObjectSlot::kModPelvisSecondary));
 }
 
+[[nodiscard]] bool ActorSkinUsesGenitalSlot(RE::Actor *a_actor) {
+  const auto *skin = a_actor ? a_actor->GetSkin() : nullptr;
+  return skin != nullptr &&
+         (sfs::armor::GetArmorDisplaySlotMask(skin) & GenitalSlotMask()) != 0;
+}
+
 [[nodiscard]] std::uint32_t PelvisPrimarySlotMask() {
   return static_cast<std::uint32_t>(std::to_underlying(
       RE::BGSBipedObjectForm::BipedObjectSlot::kModPelvisPrimary));
@@ -580,6 +588,14 @@ struct RuntimeKeywords {
   [[nodiscard]] bool HasAny() const {
     return sosRevealing || sosConcealing || sosUnderwear || tngRevealing ||
            tngCovering || tngUnderwear;
+  }
+
+  [[nodiscard]] bool HasSos() const {
+    return sosRevealing || sosConcealing || sosUnderwear;
+  }
+
+  [[nodiscard]] bool HasTng() const {
+    return tngRevealing || tngCovering || tngUnderwear;
   }
 };
 
@@ -684,11 +700,17 @@ ResolveArmorGenitalKeywordOverride(const RE::TESObjectARMO *a_armor);
            ArmorGenitalKeywordDisposition::kReveal;
   }
 
+  const auto environment =
+      sfs::native::genital_compatibility::GetEnvironment();
   const bool isFemale = IsActorFemale(a_actor);
-  return HasKeywordEditorID(a_armor, "SOS_Revealing") ||
-         HasKeywordEditorID(a_armor, "TNG_Revealing") ||
-         (isFemale && HasKeywordEditorID(a_armor, "TNG_RevealingOnlyWomen")) ||
-         (!isFemale && HasKeywordEditorID(a_armor, "TNG_RevealingOnlyMen"));
+  return (environment.sosInstalled &&
+          HasKeywordEditorID(a_armor, "SOS_Revealing")) ||
+         (environment.tngInstalled &&
+          (HasKeywordEditorID(a_armor, "TNG_Revealing") ||
+           (isFemale &&
+            HasKeywordEditorID(a_armor, "TNG_RevealingOnlyWomen")) ||
+           (!isFemale &&
+            HasKeywordEditorID(a_armor, "TNG_RevealingOnlyMen"))));
 }
 
 [[nodiscard]] bool
@@ -703,10 +725,14 @@ IsExplicitGenitalCoveringArmor(const RE::TESObjectARMO *a_armor) {
            ArmorGenitalKeywordDisposition::kConceal;
   }
 
-  return HasKeywordEditorID(a_armor, "SOS_Concealing") ||
-         HasKeywordEditorID(a_armor, "SOS_Underwear") ||
-         HasKeywordEditorID(a_armor, "TNG_Covering") ||
-         HasKeywordEditorID(a_armor, "TNG_Underwear");
+  const auto environment =
+      sfs::native::genital_compatibility::GetEnvironment();
+  return (environment.sosInstalled &&
+          (HasKeywordEditorID(a_armor, "SOS_Concealing") ||
+           HasKeywordEditorID(a_armor, "SOS_Underwear"))) ||
+         (environment.tngInstalled &&
+          (HasKeywordEditorID(a_armor, "TNG_Covering") ||
+           HasKeywordEditorID(a_armor, "TNG_Underwear")));
 }
 
 [[nodiscard]] bool IsGenitalCoveringArmor(RE::Actor *a_actor,
@@ -720,6 +746,11 @@ IsExplicitGenitalCoveringArmor(const RE::TESObjectARMO *a_armor) {
     return true;
   }
 
+  const auto environment =
+      sfs::native::genital_compatibility::GetEnvironment();
+  if (!environment.tngInstalled) {
+    return false;
+  }
   const bool isFemale = IsActorFemale(a_actor);
   return a_armor &&
          ((isFemale && HasKeywordEditorID(a_armor, "TNG_RevealingOnlyMen")) ||
@@ -1049,7 +1080,7 @@ IsLikelyUpperOnlyBodyArmor(const RE::TESObjectARMO *a_armor) {
 
 [[nodiscard]] ArmorGenitalKeywordOverride
 ResolveArmorGenitalKeywordOverride(const RE::TESObjectARMO *a_armor) {
-  if (!a_armor || sfs::armor::IsSosTngGenitalArmor(a_armor)) {
+  if (!a_armor || sfs::armor::IsSosTngInternalArmor(a_armor)) {
     return {};
   }
 
@@ -1094,12 +1125,15 @@ void SynchronizeArmorClassificationKeywordsImpl(RE::TESObjectARMO *a_armor) {
   // classification is needed for normal equipment, vanilla-slot matching,
   // and the contextual virtual-token view.  Only the token transaction and
   // expanded-slot suppression lifecycle are gated by ModSettingsSlots.
-  if (!a_armor || sfs::armor::IsSosTngGenitalArmor(a_armor)) {
+  if (!a_armor || sfs::armor::IsSosTngInternalArmor(a_armor)) {
     return;
   }
 
   const auto keywords = LookupRuntimeKeywords();
-  if (!keywords.HasAny()) {
+  const auto environment =
+      sfs::native::genital_compatibility::GetEnvironment();
+  if ((!environment.sosInstalled || !keywords.HasSos()) &&
+      (!environment.tngInstalled || !keywords.HasTng())) {
     return;
   }
 
@@ -1113,18 +1147,24 @@ void SynchronizeArmorClassificationKeywordsImpl(RE::TESObjectARMO *a_armor) {
   const bool shouldMarkUnderwear =
       shouldMaterializeCovering && sfsOverride.underwear;
 
-  SynchronizeSFSOwnedRuntimeKeyword(a_armor, keywords.sosRevealing,
-                                    shouldReveal);
-  SynchronizeSFSOwnedRuntimeKeyword(a_armor, keywords.tngRevealing,
-                                    shouldReveal);
-  SynchronizeSFSOwnedRuntimeKeyword(a_armor, keywords.sosConcealing,
-                                    shouldMaterializeCovering);
-  SynchronizeSFSOwnedRuntimeKeyword(a_armor, keywords.tngCovering,
-                                    shouldMaterializeCovering);
-  SynchronizeSFSOwnedRuntimeKeyword(a_armor, keywords.sosUnderwear,
-                                    shouldMarkUnderwear);
-  SynchronizeSFSOwnedRuntimeKeyword(a_armor, keywords.tngUnderwear,
-                                    shouldMarkUnderwear);
+  SynchronizeSFSOwnedRuntimeKeyword(
+      a_armor, keywords.sosRevealing,
+      environment.sosInstalled && shouldReveal);
+  SynchronizeSFSOwnedRuntimeKeyword(
+      a_armor, keywords.tngRevealing,
+      environment.tngInstalled && shouldReveal);
+  SynchronizeSFSOwnedRuntimeKeyword(
+      a_armor, keywords.sosConcealing,
+      environment.sosInstalled && shouldMaterializeCovering);
+  SynchronizeSFSOwnedRuntimeKeyword(
+      a_armor, keywords.tngCovering,
+      environment.tngInstalled && shouldMaterializeCovering);
+  SynchronizeSFSOwnedRuntimeKeyword(
+      a_armor, keywords.sosUnderwear,
+      environment.sosInstalled && shouldMarkUnderwear);
+  SynchronizeSFSOwnedRuntimeKeyword(
+      a_armor, keywords.tngUnderwear,
+      environment.tngInstalled && shouldMarkUnderwear);
 }
 
 void QueueArmorClassificationMigrationRefreshes() {
@@ -1241,8 +1281,12 @@ void QueueArmorClassificationMigrationRefreshes() {
     return sfsOverride.disposition ==
            ArmorGenitalKeywordDisposition::kReveal;
   }
-  return HasKeywordEditorID(a_armor, "SOS_Revealing") ||
-         HasKeywordEditorID(a_armor, "TNG_Revealing");
+  const auto environment =
+      sfs::native::genital_compatibility::GetEnvironment();
+  return (environment.sosInstalled &&
+          HasKeywordEditorID(a_armor, "SOS_Revealing")) ||
+         (environment.tngInstalled &&
+          HasKeywordEditorID(a_armor, "TNG_Revealing"));
 }
 
 [[nodiscard]] bool
@@ -1283,7 +1327,7 @@ GetSkinningSlotMask(const RE::TESObjectARMO *a_armor,
                                         const RE::TESObjectARMO *a_armor) {
   sfs::native::SynchronizeArmorClassificationKeywords(
       const_cast<RE::TESObjectARMO *>(a_armor));
-  if (!a_armor || IsGenitalArmor(a_armor) ||
+  if (!a_armor || sfs::armor::IsSosTngInternalArmor(a_armor) ||
       IsGenitalCoveringArmor(a_actor, a_armor)) {
     return false;
   }
@@ -1295,7 +1339,7 @@ GetSkinningSlotMask(const RE::TESObjectARMO *a_armor,
                                          const RE::TESObjectARMO *a_armor) {
   sfs::native::SynchronizeArmorClassificationKeywords(
       const_cast<RE::TESObjectARMO *>(a_armor));
-  if (!a_armor || IsGenitalArmor(a_armor) ||
+  if (!a_armor || sfs::armor::IsSosTngInternalArmor(a_armor) ||
       IsGenitalRevealingArmor(a_actor, a_armor)) {
     return false;
   }
@@ -1308,7 +1352,7 @@ GetSkinningSlotMask(const RE::TESObjectARMO *a_armor,
 [[nodiscard]] bool
 ShouldVisibleArmorConcealGenitals(RE::Actor *a_actor,
                                   const RE::TESObjectARMO *a_armor) {
-  if (!a_armor || IsGenitalArmor(a_armor) ||
+  if (!a_armor || sfs::armor::IsSosTngInternalArmor(a_armor) ||
       IsGenitalRevealingArmor(a_actor, a_armor)) {
     return false;
   }
@@ -1429,7 +1473,10 @@ IsRealArmorVisibleInDisplaySet([[maybe_unused]] RE::Actor *a_actor,
   std::vector<const RE::TESObjectARMO *> visibleArmors;
   visibleArmors.reserve(a_equippedArmors.size());
   for (const auto *armor : a_equippedArmors) {
-    if (IsRealArmorVisibleInDisplaySet(a_actor, a_displaySet, armor)) {
+    // TNG_GenitalCover is renderer state. It must remain available to the worn
+    // mask path below, but must never vote that the actor's outfit conceals.
+    if (!sfs::armor::IsTngGenitalCoverArmor(armor) &&
+        IsRealArmorVisibleInDisplaySet(a_actor, a_displaySet, armor)) {
       visibleArmors.push_back(armor);
     }
   }
@@ -1547,20 +1594,38 @@ BuildDisplaySet(RE::Actor *a_actor,
   }
 
   const auto equippedArmors = CollectEquippedArmors(a_actor);
+  const auto genitalEnvironment =
+      sfs::native::genital_compatibility::GetEnvironment();
   const auto *resolvedGenitalArmor =
       sfs::native::GetResolvedGenitalArmor(a_actor);
-  if (!resolvedGenitalArmor) {
+  if (genitalEnvironment.sosInstalled && !resolvedGenitalArmor) {
     sfs::native::RequestGenitalArmorResolution(a_actor);
   }
   displaySet.genitalArmorEquipped =
       std::ranges::any_of(equippedArmors, [](const auto *a_armor) {
         return IsGenitalArmor(a_armor);
       });
+  const bool tngCoverEquipped =
+      std::ranges::any_of(equippedArmors, [](const auto *a_armor) {
+        return sfs::armor::IsTngGenitalCoverArmor(a_armor);
+      });
+  const bool actorSkinUsesGenitalSlot = ActorSkinUsesGenitalSlot(a_actor);
+  const bool playerSosKeywordFallback =
+      genitalEnvironment.sosInstalled && IsPlayerActor(a_actor) &&
+      LookupRuntimeKeywords().HasSos();
+  const bool sosCompatibilityAvailable =
+      sfs::native::genital_compatibility::rules::
+          IsSosCompatibilityAvailable(
+              genitalEnvironment, resolvedGenitalArmor != nullptr,
+              displaySet.genitalArmorEquipped,
+              playerSosKeywordFallback);
+  const bool tngCompatibilityAvailable =
+      sfs::native::genital_compatibility::rules::
+          IsTngCompatibilityAvailable(genitalEnvironment,
+                                      actorSkinUsesGenitalSlot,
+                                      tngCoverEquipped);
   displaySet.genitalCompatibilityAvailable =
-      resolvedGenitalArmor ||
-      (IsPlayerActor(a_actor) ? (displaySet.genitalArmorEquipped ||
-                                 LookupRuntimeKeywords().HasAny())
-                              : displaySet.genitalArmorEquipped);
+      sosCompatibilityAvailable || tngCompatibilityAvailable;
 
   std::uint32_t occupiedDisplaySlots = 0;
   std::uint32_t forceVisibleRealSlotMask = 0;
@@ -1841,7 +1906,7 @@ BuildDisplaySet(RE::Actor *a_actor,
   const auto hiddenRealArmorRequiresGenitalCorrection =
       displaySet.genitalCompatibilityAvailable &&
       std::ranges::any_of(equippedArmors, [&](const auto *armor) {
-        return armor && !IsGenitalArmor(armor) &&
+        return armor && !sfs::armor::IsSosTngInternalArmor(armor) &&
                !IsRealArmorVisibleInDisplaySet(a_actor, displaySet, armor) &&
                (ShouldRevealGenitals(a_actor, armor) ||
                 ShouldVisibleArmorConcealGenitals(a_actor, armor));
@@ -1854,17 +1919,39 @@ BuildDisplaySet(RE::Actor *a_actor,
       visibleRealArmorsRevealGenitals || visibleRealArmorsConcealGenitals ||
       hiddenRealArmorRequiresGenitalCorrection;
 
+  const auto tngCoverProjection =
+      sfs::armor::rules::ResolveGenitalCoverProjection(
+          displaySet.genitalCorrectionActive &&
+              sfs::armor::rules::ShouldApplyGenitalCoverProjection(
+                  genitalEnvironment.tngInstalled,
+                  actorSkinUsesGenitalSlot, tngCoverEquipped),
+          displaySet.concealGenitals);
   if (displaySet.concealGenitals) {
     for (const auto *armor : equippedArmors) {
       if (IsGenitalArmor(armor)) {
         displaySet.hiddenArmorFormIDs.insert(armor->GetFormID());
       }
     }
-  } else if (displaySet.genitalCorrectionActive &&
-             !displaySet.genitalArmorEquipped && resolvedGenitalArmor &&
-             !displaySet.Contains(resolvedGenitalArmor)) {
-    displaySet.armors.push_back(resolvedGenitalArmor);
-    displaySet.slotMask |= GetSkinningSlotMask(resolvedGenitalArmor, true);
+    // TNG places its genital geometry in the actor skin and normally equips a
+    // blank slot-52 armor based on actual equipment. Registered appearances
+    // need the same partition blocker even when the actual outfit is revealing.
+    if (tngCoverProjection.occupyGenitalSlot) {
+      displaySet.slotMask |= GenitalSlotMask();
+    }
+  } else if (displaySet.genitalCorrectionActive) {
+    // Conversely, an equipped TNG blocker reflects actual gear and must not
+    // keep the skin hidden when the effective SFS appearance is revealing.
+    for (const auto *armor : equippedArmors) {
+      if (tngCoverProjection.hideEquippedCover &&
+          sfs::armor::IsTngGenitalCoverArmor(armor)) {
+        displaySet.hiddenArmorFormIDs.insert(armor->GetFormID());
+      }
+    }
+    if (!displaySet.genitalArmorEquipped && resolvedGenitalArmor &&
+        !displaySet.Contains(resolvedGenitalArmor)) {
+      displaySet.armors.push_back(resolvedGenitalArmor);
+      displaySet.slotMask |= GetSkinningSlotMask(resolvedGenitalArmor, true);
+    }
   }
 
   displaySet.active = displaySet.active || displaySet.genitalCorrectionActive ||
@@ -2915,20 +3002,30 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
 
   if (sfs::native::dave::IsDynamicArmorVariantsLoaded() &&
       sfs::native::dave::IsApiReady()) {
-    std::uint32_t result = 0;
-    if (displaySet.genitalCorrectionActive) {
-      result = displaySet.slotMask |
-               CollectVisibleWornSlotMask(a_target, displaySet);
-    } else {
-      result = a_baseWornMask | displaySet.slotMask;
-    }
-    result = PreserveUnmanagedHeadgearWornMask(
-        actor, displaySet, a_baseWornMask, result);
+    // The chained DAVE GetWornMask result is already resolved through all
+    // active variants. In particular, HT2's overrideHead=showAll removes the
+    // real helmet's Hair bit here. Rebuilding visible actual equipment from
+    // raw ARMO masks during genital correction would put that bit back and
+    // make the actor bald. SFS-owned genital/actual hiding is also represented
+    // by the DAVE variant synchronized before RefreshActor, so only merge the
+    // registered-appearance projection.
+    const auto hiddenWornSlots =
+        CollectHiddenWornSlotMask(a_target, displaySet);
+    const auto visibleWornSlots =
+        CollectVisibleWornSlotMask(a_target, displaySet);
+    const auto sfsHiddenWornSlots =
+        sfs::native::refresh_rules::ResolveSfsHiddenWornSlotMask(
+            hiddenWornSlots, visibleWornSlots);
+    const auto result =
+        sfs::native::refresh_rules::MergeDaveResolvedWornMask(
+            a_baseWornMask, displaySet.slotMask, sfsHiddenWornSlots);
     logger::debug("SFS DAVE native: worn-mask actor={:08X} base={:08X} "
                   "displaySlot={:08X} hiddenSlot={:08X} result={:08X} "
+                  "sfsHiddenWorn={:08X} hairRelease={:08X} "
                   "genitalCorrection={} apiReady=true",
                   actor ? actor->GetFormID() : 0, a_baseWornMask,
                   displaySet.slotMask, displaySet.hiddenSlotMask, result,
+                  sfsHiddenWornSlots, releasedActualHairSlotMask,
                   displaySet.genitalCorrectionActive);
     return result & ~releasedActualHairSlotMask;
   }

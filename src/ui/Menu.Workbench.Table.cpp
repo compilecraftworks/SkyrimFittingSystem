@@ -2367,7 +2367,7 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 RE::TESForm::LookupByID<RE::TESObjectARMO>(
                     actualRow.equipped.formID);
             const bool sosTngControlledActual =
-                armor::IsSosTngGenitalArmor(actualArmor);
+                armor::IsSosTngInternalArmor(actualArmor);
             const bool ddRenderedDevice =
                 sfs::poc::IsDeviousDevicesRenderedDevice(actualArmor);
             const bool alwaysVisibleActual =
@@ -2910,6 +2910,10 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
               if (headgearToggleHidden) {
                 changed |= workbench_.SetOverrideHeadgearToggleManualVisible(
                     overrideRowIndex, overrideIndex, true);
+                if (overrideItem.hidden) {
+                  changed |= workbench_.SetOverrideHidden(
+                      overrideRowIndex, overrideIndex, false);
+                }
               } else if (virtualTokenHidden || ddHiderHidden) {
                 changed |= workbench_.SetOverrideHidden(overrideRowIndex,
                                                         overrideIndex, false);
@@ -2939,6 +2943,10 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
               if (headgearToggleHidden) {
                 changed |= workbench_.SetOverrideHeadgearToggleManualVisible(
                     overrideRowIndex, overrideIndex, true);
+                if (overrideItem.hidden) {
+                  changed |= workbench_.SetOverrideHidden(
+                      overrideRowIndex, overrideIndex, false);
+                }
               } else if (virtualTokenHidden || ddHiderHidden) {
                 changed |= workbench_.SetOverrideHidden(overrideRowIndex,
                                                         overrideIndex, false);

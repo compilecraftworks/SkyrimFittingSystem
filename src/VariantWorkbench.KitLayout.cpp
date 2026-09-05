@@ -55,7 +55,7 @@ bool VariantWorkbench::AppendOverrideItem(
     const bool a_allowRestrictedPreview) {
   if (a_overrideArmor == nullptr ||
       (!a_allowRestrictedPreview &&
-       (armor::IsSosTngGenitalArmor(a_overrideArmor) ||
+       (armor::IsSosTngInternalArmor(a_overrideArmor) ||
         IsAppearanceRegistrationProtectedSlotMask(
             armor::GetArmorDisplaySlotMask(a_overrideArmor))))) {
     return false;
@@ -87,7 +87,7 @@ VariantWorkbench::ResolveKitLayoutOverrideArmors(
             armor::LookupByIdentifier<RE::TESObjectARMO>(identifier);
         overrideArmor != nullptr &&
         (a_allowRestrictedPreview ||
-         (!armor::IsSosTngGenitalArmor(overrideArmor) &&
+         (!armor::IsSosTngInternalArmor(overrideArmor) &&
           !IsAppearanceRegistrationProtectedSlotMask(
               armor::GetArmorDisplaySlotMask(overrideArmor))))) {
       overrideArmors.push_back(overrideArmor);

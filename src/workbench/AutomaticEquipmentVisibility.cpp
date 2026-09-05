@@ -668,7 +668,7 @@ std::uint64_t GetAutomaticEquipmentControlSlotMask(
   }
   const auto bodySlot = Slot(32);
   const auto genitalSlot = Slot(49);
-  if (!armor::IsSosTngGenitalArmor(a_armor) &&
+  if (!armor::IsSosTngInternalArmor(a_armor) &&
       (slotMask & (bodySlot | genitalSlot)) == (bodySlot | genitalSlot)) {
     slotMask &= ~genitalSlot;
   }

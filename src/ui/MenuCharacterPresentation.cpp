@@ -9,7 +9,9 @@
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cmath>
+#include <mutex>
 #include <numbers>
 
 namespace sfs::ui {
@@ -29,11 +31,41 @@ constexpr float kRightFacingCorrection = -0.35f;
 constexpr float kMouseRotationRadiansPerPixel = 0.003f;
 constexpr float kMaxMouseRotationRadiansPerFrame = 0.060f;
 
+std::atomic_bool g_cameraUpdateQueued{false};
+std::atomic<menu_interaction::CameraZoomUpdate> g_pendingCameraZoomUpdate{
+    menu_interaction::CameraZoomUpdate::Refresh};
+std::atomic<float> g_savedTargetZoom{0.0f};
+std::atomic<float> g_savedCurrentZoom{0.0f};
+std::atomic_bool g_presentationProjectionActive{false};
+std::mutex g_fovRestoreLock;
+RE::NiPointer<RE::NiCamera> g_presentationFovCamera;
+RE::NiPointer<RE::NiCamera> g_restoreFovCamera;
+RE::NiFrustum g_restoreViewFrustum{};
+bool g_restoreViewFrustumSaved{false};
+
 void ApplyMenuWorldFov(RE::PlayerCamera *a_camera) {
   if (a_camera != nullptr) {
-    a_camera->worldFOV = kMenuWorldFov;
+    a_camera->GetRuntimeData2().worldFOV = kMenuWorldFov;
   }
   RE::DrawWorld::GetSingleton().worldFOV = kMenuWorldFov;
+}
+
+void RestorePendingViewFrustum() {
+  RE::NiPointer<RE::NiCamera> savedCamera;
+  RE::NiFrustum savedFrustum{};
+  bool saved{false};
+  {
+    const std::scoped_lock lock(g_fovRestoreLock);
+    savedCamera = g_restoreFovCamera;
+    savedFrustum = g_restoreViewFrustum;
+    saved = g_restoreViewFrustumSaved;
+    g_restoreFovCamera.reset();
+    g_restoreViewFrustum = {};
+    g_restoreViewFrustumSaved = false;
+  }
+  if (saved && savedCamera != nullptr) {
+    savedCamera->GetRuntimeData2().viewFrustum = savedFrustum;
+  }
 }
 
 bool ApplyMenuViewFrustum(RE::NiCamera *a_camera) {
@@ -151,6 +183,107 @@ RE::ThirdPersonState *GetThirdPersonState(RE::PlayerCamera *a_camera) {
                           : nullptr;
 }
 
+void QueueCameraUpdate(
+    const menu_interaction::CameraZoomUpdate a_zoomUpdate =
+        menu_interaction::CameraZoomUpdate::Refresh,
+    const float a_savedTargetZoom = 0.0f,
+    const float a_savedCurrentZoom = 0.0f,
+    RE::NiCamera *a_savedFovCamera = nullptr,
+    const RE::NiFrustum *a_savedViewFrustum = nullptr) noexcept {
+  using menu_interaction::CameraZoomUpdate;
+  using menu_interaction::CameraZoomValues;
+
+  if (a_zoomUpdate == CameraZoomUpdate::RestoreSaved) {
+    g_savedTargetZoom.store(a_savedTargetZoom, std::memory_order_release);
+    g_savedCurrentZoom.store(a_savedCurrentZoom, std::memory_order_release);
+    const std::scoped_lock lock(g_fovRestoreLock);
+    g_restoreFovCamera.reset(a_savedFovCamera);
+    g_restoreViewFrustumSaved =
+        a_savedFovCamera != nullptr && a_savedViewFrustum != nullptr;
+    if (g_restoreViewFrustumSaved) {
+      g_restoreViewFrustum = *a_savedViewFrustum;
+    }
+  }
+
+  // A rotation-only refresh must not erase a pending snap or restore. A newer
+  // substantive request represents the newer menu state and therefore wins.
+  if (a_zoomUpdate != CameraZoomUpdate::Refresh) {
+    g_pendingCameraZoomUpdate.store(a_zoomUpdate, std::memory_order_release);
+  }
+  if (g_cameraUpdateQueued.exchange(true, std::memory_order_acq_rel)) {
+    return;
+  }
+
+  const auto update = [] {
+    g_cameraUpdateQueued.store(false, std::memory_order_release);
+    const auto requestedZoomUpdate = g_pendingCameraZoomUpdate.exchange(
+        CameraZoomUpdate::Refresh, std::memory_order_acq_rel);
+    auto *camera = RE::PlayerCamera::GetSingleton();
+    if (camera == nullptr) {
+      if (requestedZoomUpdate == CameraZoomUpdate::RestoreSaved) {
+        RestorePendingViewFrustum();
+      }
+      return;
+    }
+
+    // Skyrim must first derive targetZoomOffset from the temporary menu
+    // distance. A paused menu otherwise freezes currentZoomOffset at the
+    // pre-menu value and frames differently from an unpaused menu.
+    camera->Update();
+    auto *thirdPersonState = GetThirdPersonState(camera);
+    if (thirdPersonState != nullptr &&
+        requestedZoomUpdate != CameraZoomUpdate::Refresh) {
+      const CameraZoomValues live{thirdPersonState->targetZoomOffset,
+                                  thirdPersonState->currentZoomOffset};
+      const CameraZoomValues saved{
+          g_savedTargetZoom.load(std::memory_order_acquire),
+          g_savedCurrentZoom.load(std::memory_order_acquire)};
+      const auto resolved = menu_interaction::ResolveCameraZoomUpdate(
+          requestedZoomUpdate, live, saved);
+      thirdPersonState->targetZoomOffset = resolved.target;
+      thirdPersonState->currentZoomOffset = resolved.current;
+      if (requestedZoomUpdate == CameraZoomUpdate::SnapCurrentToTarget) {
+        camera->Update();
+      }
+    }
+
+    if (requestedZoomUpdate == CameraZoomUpdate::RestoreSaved) {
+      RestorePendingViewFrustum();
+    } else if (g_presentationProjectionActive.load(
+                   std::memory_order_acquire)) {
+      ApplyMenuWorldFov(camera);
+      RE::NiPointer<RE::NiCamera> ownedFovCamera;
+      {
+        const std::scoped_lock lock(g_fovRestoreLock);
+        ownedFovCamera = g_presentationFovCamera;
+      }
+      if (auto *activeCamera = GetActiveNiCamera(camera);
+          ownedFovCamera != nullptr &&
+          activeCamera == ownedFovCamera.get()) {
+        static_cast<void>(ApplyMenuViewFrustum(activeCamera));
+      }
+    }
+
+    if (requestedZoomUpdate == CameraZoomUpdate::SnapCurrentToTarget &&
+        thirdPersonState != nullptr) {
+      auto *ui = RE::UI::GetSingleton();
+      logger::info(
+          "SFS menu camera synchronized: targetZoom={}, currentZoom={}, "
+          "worldFov={}, paused={}",
+          thirdPersonState->targetZoomOffset,
+          thirdPersonState->currentZoomOffset,
+          camera->GetRuntimeData2().worldFOV,
+          ui != nullptr && ui->GameIsPaused());
+    }
+  };
+
+  if (auto *tasks = SKSE::GetTaskInterface(); tasks != nullptr) {
+    tasks->AddTask(update);
+  } else {
+    update();
+  }
+}
+
 bool CanPresentActor(RE::PlayerCharacter *a_player, RE::Actor *a_actor,
                      RE::PlayerCamera *a_camera,
                      RE::ThirdPersonState *a_thirdPersonState) {
@@ -178,7 +311,6 @@ struct MenuCharacterPresentation::State {
 
   bool active{false};
   bool rotating{false};
-  bool cameraCommitPending{false};
   MenuCharacterSide side{MenuCharacterSide::Disabled};
   MenuCharacterSide requestedSide{MenuCharacterSide::Disabled};
   RE::ActorHandle presentedActorHandle{};
@@ -196,6 +328,7 @@ struct MenuCharacterPresentation::State {
   RE::NiFrustum viewFrustum{};
   bool viewFrustumSaved{false};
   float targetZoomOffset{0.0f};
+  float currentZoomOffset{0.0f};
   float pitchZoomOffset{0.0f};
   float worldFov{0.0f};
   float drawWorldFov{0.0f};
@@ -265,15 +398,16 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
   state_->actorAngleZ = presentedActor->data.angle.z;
   state_->actorPitchModified = presentedActor == player;
   state_->targetZoomOffset = thirdPersonState->targetZoomOffset;
+  state_->currentZoomOffset = thirdPersonState->currentZoomOffset;
   state_->pitchZoomOffset = thirdPersonState->pitchZoomOffset;
-  state_->worldFov = camera->worldFOV;
+  state_->worldFov = camera->GetRuntimeData2().worldFOV;
   state_->drawWorldFov = RE::DrawWorld::GetSingleton().worldFOV;
   state_->freeRotationEnabled = thirdPersonState->freeRotationEnabled;
   state_->toggleAnimCam = thirdPersonState->toggleAnimCam;
   state_->side = a_side;
   state_->rotating = false;
-  state_->cameraCommitPending = true;
   state_->active = true;
+  g_presentationProjectionActive.store(true, std::memory_order_release);
 
   camera->cameraTarget = requestedActorHandle;
   auto cameraTargetHandle = requestedActorHandle.native_handle();
@@ -342,9 +476,18 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
     state_->viewFrustum = niCamera->GetRuntimeData2().viewFrustum;
     state_->viewFrustumSaved = true;
   }
-  // ProcessMessage(kShow) runs before Skyrim finishes registering this menu's
-  // pause state. The first camera Update is committed from the ordinary menu
-  // render frame instead, after the pause flag/count has settled.
+  {
+    const std::scoped_lock lock(g_fovRestoreLock);
+    g_presentationFovCamera = state_->fovCamera;
+    g_restoreFovCamera.reset();
+    g_restoreViewFrustum = {};
+    g_restoreViewFrustumSaved = false;
+  }
+  ApplyMenuWorldFov(camera);
+  if (state_->viewFrustumSaved && state_->fovCamera != nullptr) {
+    static_cast<void>(ApplyMenuViewFrustum(state_->fovCamera.get()));
+  }
+  QueueCameraUpdate(menu_interaction::CameraZoomUpdate::SnapCurrentToTarget);
   presentedActor->Update3DPosition(true);
   logger::debug("Applied SFS menu character presentation: side={}, actor={:08X}",
                 static_cast<std::uint8_t>(a_side),
@@ -352,12 +495,12 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
 }
 
 void MenuCharacterPresentation::Restore() {
+  g_presentationProjectionActive.store(false, std::memory_order_release);
   if (state_ == nullptr) {
     return;
   }
   state_->requestedSide = MenuCharacterSide::Disabled;
   state_->requestedActorHandle.reset();
-  state_->cameraCommitPending = false;
   if (!state_->active) {
     native::smoothcam::ReleaseCameraControl();
     return;
@@ -400,6 +543,7 @@ void MenuCharacterPresentation::Restore() {
     thirdPersonState->posOffsetActual = state_->posOffsetActual;
     thirdPersonState->freeRotation = state_->freeRotation;
     thirdPersonState->targetZoomOffset = state_->targetZoomOffset;
+    thirdPersonState->currentZoomOffset = state_->currentZoomOffset;
     thirdPersonState->pitchZoomOffset = state_->pitchZoomOffset;
     thirdPersonState->freeRotationEnabled = state_->freeRotationEnabled;
     thirdPersonState->toggleAnimCam = state_->toggleAnimCam;
@@ -413,11 +557,22 @@ void MenuCharacterPresentation::Restore() {
 
   RE::DrawWorld::GetSingleton().worldFOV = state_->drawWorldFov;
   if (camera != nullptr) {
-    camera->worldFOV = state_->worldFov;
-    camera->Update();
+    camera->GetRuntimeData2().worldFOV = state_->worldFov;
   }
   if (state_->viewFrustumSaved && state_->fovCamera != nullptr) {
     state_->fovCamera->GetRuntimeData2().viewFrustum = state_->viewFrustum;
+  }
+  if (camera != nullptr) {
+    QueueCameraUpdate(
+        menu_interaction::CameraZoomUpdate::RestoreSaved,
+        state_->targetZoomOffset, state_->currentZoomOffset,
+        state_->fovCamera.get(),
+        state_->viewFrustumSaved ? std::addressof(state_->viewFrustum)
+                                 : nullptr);
+  }
+  {
+    const std::scoped_lock lock(g_fovRestoreLock);
+    g_presentationFovCamera.reset();
   }
 
   state_->originalCameraState = nullptr;
@@ -429,7 +584,6 @@ void MenuCharacterPresentation::Restore() {
   state_->actorPitchModified = false;
   state_->side = MenuCharacterSide::Disabled;
   state_->rotating = false;
-  state_->cameraCommitPending = false;
   state_->worldFov = 0.0f;
   state_->drawWorldFov = 0.0f;
   state_->fovCamera.reset();
@@ -500,21 +654,6 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
     auto cameraTargetHandle = state_->presentedActorHandle.native_handle();
     thirdPersonState->SetCameraHandle(cameraTargetHandle);
   }
-  if (menu_interaction::ShouldCommitCharacterCamera(
-          state_->active, state_->cameraCommitPending, true)) {
-    // camera->Update() may rebuild the third-person offsets from the active
-    // camera mode. Reassert the SFS values immediately so the first paused and
-    // unpaused frames use the same completed framing.
-    ApplyMenuWorldFov(camera);
-    camera->Update();
-    thirdPersonState->posOffsetExpected = state_->desiredPosOffset;
-    thirdPersonState->posOffsetActual = state_->desiredPosOffset;
-    state_->cameraCommitPending = false;
-    auto *ui = RE::UI::GetSingleton();
-    logger::debug("Committed SFS menu camera framing: actor={:08X}, paused={}",
-                  presentedActor->GetFormID(),
-                  ui != nullptr && ui->GameIsPaused());
-  }
   if (auto *niCamera = GetActiveNiCamera(camera); niCamera != nullptr) {
     if (state_->viewFrustumSaved && state_->fovCamera.get() == niCamera) {
       static_cast<void>(ApplyMenuViewFrustum(niCamera));
@@ -548,7 +687,7 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
       thirdPersonState->freeRotation.x =
           NormalizeAngle(thirdPersonState->freeRotation.x - delta);
     }
-    camera->Update();
+    QueueCameraUpdate();
   } else {
     presentedActor->SetHeading(
         NormalizeAngle(presentedActor->data.angle.z + delta));
@@ -557,7 +696,7 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
           NormalizeAngle(thirdPersonState->freeRotation.x - delta);
     }
     presentedActor->Update3DPosition(true);
-    camera->Update();
+    QueueCameraUpdate();
   }
 
   ApplyMenuWorldFov(camera);

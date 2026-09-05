@@ -2,11 +2,13 @@
 
 #include "ArmorUtils.h"
 #include "ConditionMaterializer.h"
+#include "TngGenitalCoverRules.h"
 #include "conditions/Status.h"
 #include "conditions/Validation.h"
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
 #include "native/FittingSlotState.h"
+#include "native/GenitalCompatibility.h"
 #include "native/GenitalArmorResolver.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/SOSStorageSync.h"
@@ -322,6 +324,33 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
     QueueConditionRefreshForActor(actor);
     return RE::BSEventNotifyControl::kContinue;
   }
+
+  // TNG equips its non-playable TNG_GenitalCover as an invisible slot-52
+  // renderer blocker. It is neither user gear nor the genital addon. Never
+  // publish it to the workbench, virtual-token, DD, or actual-equipment strip
+  // pipelines. A display-only refresh is sufficient when this actor already
+  // has SFS state and keeps the event actor-local for players and NPCs.
+  if (sfs::armor::IsTngGenitalCoverArmor(armor)) {
+    auto *menu = sfs::Menu::GetSingleton();
+    const auto actorFormID = actor->GetFormID();
+    const bool hasWorkbenchDisplayState =
+        menu != nullptr && menu->IsGameDataLoaded() &&
+        menu->GetWorkbench().HasDisplayStateForActor(actorFormID);
+    const auto *player = RE::PlayerCharacter::GetSingleton();
+    const bool isPlayer =
+        player != nullptr && player->GetFormID() == actorFormID;
+    if (sfs::armor::rules::ShouldRefreshForGenitalCoverEvent(
+            sfs::native::genital_compatibility::IsTngInstalled(), isPlayer,
+            sfs::native::HasFittingSlotState(actor),
+            hasWorkbenchDisplayState)) {
+      QueueActorRefresh(actorFormID, false);
+    }
+    logger::debug("Ignored TNG internal genital-cover equipment event "
+                  "actor={:08X} armor={:08X} equipped={}",
+                  actorFormID, armor->GetFormID(), a_event->equipped);
+    return RE::BSEventNotifyControl::kContinue;
+  }
+
   sfs::poc::HandleVirtualWornTokenEquipEvent(
       actor, const_cast<RE::TESObjectARMO *>(armor), a_event->equipped);
   sfs::poc::ObserveDeviousDevicesRenderedDeviceEquipEvent(
@@ -679,6 +708,40 @@ void EquipmentRefreshEventSink::PollConditionState() {
     return;
   }
 
+  // Materialization is independent of the actor passed to TESCondition::IsTrue.
+  // Snapshot each distinct condition once per poll, then release the editor
+  // state lock before touching actor state. This keeps a shared condition used
+  // by several NPCs from repeating cache/status work and prevents engine
+  // evaluation from holding up condition editing in the UI.
+  std::unordered_set<std::string> distinctConditionIDs;
+  for (const auto &[_, conditionIDs] : tracked) {
+    distinctConditionIDs.insert(conditionIDs.begin(), conditionIDs.end());
+  }
+  std::unordered_map<std::string, std::shared_ptr<RE::TESCondition>>
+      materializedConditions;
+  materializedConditions.reserve(distinctConditionIDs.size());
+  {
+    auto conditionStateLock = menu->AcquireConditionStateLock();
+    auto &conditions = menu->GetConditions();
+    for (const auto &conditionID : distinctConditionIDs) {
+      std::shared_ptr<RE::TESCondition> condition;
+      if (const auto *definition =
+              sfs::conditions::FindDefinitionById(conditions, conditionID);
+          definition != nullptr &&
+          sfs::conditions::IsWorkbenchSelectable(*definition) &&
+          sfs::conditions::EvaluateDefinitionStatus(*definition, conditions)
+              .IsActive()) {
+        if (const auto materialized =
+                sfs::conditions::MaterializeConditionById(conditionID,
+                                                           conditions);
+            materialized.has_value()) {
+          condition = materialized->condition;
+        }
+      }
+      materializedConditions.emplace(conditionID, std::move(condition));
+    }
+  }
+
   std::unordered_set<RE::FormID> observedActors;
   observedActors.reserve(tracked.size());
   for (auto &[actorFormID, conditionIDs] : tracked) {
@@ -699,22 +762,12 @@ void EquipmentRefreshEventSink::PollConditionState() {
     std::vector<std::string> sortedConditionIDs(conditionIDs.begin(),
                                                 conditionIDs.end());
     std::ranges::sort(sortedConditionIDs);
-    auto conditionStateLock = menu->AcquireConditionStateLock();
-    auto &conditions = menu->GetConditions();
     for (const auto &conditionID : sortedConditionIDs) {
       bool active = false;
-      if (const auto *definition =
-              sfs::conditions::FindDefinitionById(conditions, conditionID);
-          definition != nullptr &&
-          sfs::conditions::IsWorkbenchSelectable(*definition) &&
-          sfs::conditions::EvaluateDefinitionStatus(*definition, conditions)
-              .IsActive()) {
-        if (const auto materialized =
-                sfs::conditions::MaterializeConditionById(conditionID,
-                                                           conditions);
-            materialized.has_value() && materialized->condition) {
-          active = materialized->condition->IsTrue(actor, actor);
-        }
+      if (const auto materialized = materializedConditions.find(conditionID);
+          materialized != materializedConditions.end() &&
+          materialized->second) {
+        active = materialized->second->IsTrue(actor, actor);
       }
       signature.conditionTruthHash = HashConditionTruth(
           signature.conditionTruthHash, conditionID, active);

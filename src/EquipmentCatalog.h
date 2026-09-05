@@ -177,6 +177,8 @@ private:
   std::vector<std::string> outfitPlugins_;
   std::vector<std::string> kitCollections_;
   std::unordered_map<RE::FormID, ArmorMetadata> armorMetadataCache_;
+  std::unordered_map<std::string, RE::TESObjectARMO *>
+      kitArmorByPluginEditorID_;
   std::unordered_map<RE::FormID, ResolvedReferenceCollection> leveledListCache_;
   std::unordered_map<RE::FormID, std::size_t> gearIndexByFormID_;
   std::unordered_map<RE::FormID, std::size_t> outfitIndexByFormID_;

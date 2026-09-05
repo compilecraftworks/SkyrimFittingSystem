@@ -6,6 +6,8 @@
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
+#include "native/GenitalCompatibility.h"
+#include "native/PapyrusObserverInstallRules.h"
 #include "native/SexLabPPlusRules.h"
 #include "poc/DeviousDevicesHiderPoC.h"
 #include "runtime/RuntimeLayouts.h"
@@ -2861,16 +2863,30 @@ BuildEffectiveSourceKeywords(RE::TESObjectARMO *a_source) {
                SosTngClassificationKeyword::kOther;
   });
 
+  const auto genitalEnvironment =
+      sfs::native::genital_compatibility::GetEnvironment();
   if (sfsOverride.disposition ==
       sfs::native::ArmorGenitalKeywordDisposition::kReveal) {
-    AppendKeywordByEditorID(effective, "SOS_Revealing");
-    AppendKeywordByEditorID(effective, "TNG_Revealing");
+    if (genitalEnvironment.sosInstalled) {
+      AppendKeywordByEditorID(effective, "SOS_Revealing");
+    }
+    if (genitalEnvironment.tngInstalled) {
+      AppendKeywordByEditorID(effective, "TNG_Revealing");
+    }
   } else {
-    AppendKeywordByEditorID(effective, "SOS_Concealing");
-    AppendKeywordByEditorID(effective, "TNG_Covering");
+    if (genitalEnvironment.sosInstalled) {
+      AppendKeywordByEditorID(effective, "SOS_Concealing");
+    }
+    if (genitalEnvironment.tngInstalled) {
+      AppendKeywordByEditorID(effective, "TNG_Covering");
+    }
     if (sfsOverride.underwear) {
-      AppendKeywordByEditorID(effective, "SOS_Underwear");
-      AppendKeywordByEditorID(effective, "TNG_Underwear");
+      if (genitalEnvironment.sosInstalled) {
+        AppendKeywordByEditorID(effective, "SOS_Underwear");
+      }
+      if (genitalEnvironment.tngInstalled) {
+        AppendKeywordByEditorID(effective, "TNG_Underwear");
+      }
     }
   }
   return effective;
@@ -3588,6 +3604,39 @@ void PatchSelectedNativesInType(RE::BSScript::ObjectTypeInfo *a_type,
   }
 }
 
+[[nodiscard]] std::size_t InspectFullyLinkedSexLabPPlusAliasMembers(
+    RE::BSScript::ObjectTypeInfo *a_type) {
+  if (!a_type || !a_type->IsLinked()) {
+    return 0;
+  }
+
+  std::size_t discovered = 0;
+  std::size_t patched = 0;
+  if (auto *functions = a_type->GetMemberFuncIter()) {
+    for (std::uint32_t index = 0; index < a_type->GetNumMemberFuncs();
+         ++index) {
+      auto *function = functions[index].func.get();
+      if (!function || !function->GetIsNative()) {
+        continue;
+      }
+      const auto target =
+          ClassifyNative(static_cast<NativeFunctionBase *>(function));
+      if (target != TargetNative::SexLabPPlusStripByData &&
+          target != TargetNative::SexLabPPlusStripByDataEx) {
+        continue;
+      }
+      ++discovered;
+      if (PatchSelectedNativeFunction(function)) {
+        ++patched;
+      }
+    }
+  }
+  logger::info("SexLab P+ post-link virtual-token observer scan "
+               "type=sslActorAlias discovered={} newlyHooked={}",
+               discovered, patched);
+  return discovered;
+}
+
 void QueuePostLinkTypeInspection(
     RE::BSScript::IVirtualMachine *a_vm, const std::string_view a_className,
     const std::uint8_t a_attempt = 0) {
@@ -3655,6 +3704,24 @@ void QueuePostLinkTypeInspection(
           logger::info("Generic post-link Papyrus observer attached {} "
                        "equipment native(s) from '{}'",
                        patchedCount, className);
+        }
+        if (sfs::native::papyrus_observer::rules::
+                ShouldInspectPostLinkMembers(className)) {
+          // The generic safety boundary remains unchanged: every other type
+          // is globals-only here. P+ declares its real strip entry points as
+          // sslActorAlias empty-state member natives, so revisit only that
+          // exact, now fully linked member table. Both observers are
+          // independently idempotent.
+          const auto discovered =
+              InspectFullyLinkedSexLabPPlusAliasMembers(type.get());
+          sfs::native::external_equipment::
+              InspectFullyLinkedSexLabPPlusAlias(type.get());
+          if (sfs::native::papyrus_observer::rules::
+                  ShouldRetryPostLinkMemberInspection(
+                      className, discovered, attempt,
+                      kScriptTypeInspectionMaxAttempts)) {
+            QueuePostLinkTypeInspection(a_vm, className, attempt + 1);
+          }
         }
       }
     });

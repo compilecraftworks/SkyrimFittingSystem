@@ -1,0 +1,5 @@
+Improved Fitting Dye for UBE, CBBE/3BA, and UNP/BHUNP outfits and renderer chains including Community Shaders, ENB, ReShade, and upscalers.
+Fixed Helmet Toggle 2 handling for real equipment, registered headgear, and head/hair visibility.
+Fixed late SexLab P+ StripByData/StripByDataEx integration while preserving Mod-Configured, Vanilla, Direct, and actor-local behavior.
+Separated SOS/TNG internal genital and cover forms from normal armor handling.
+Improved Modex/SFS kit compatibility, missing-piece filtering, Unicode kit creation, scrollbar drag persistence, menu camera re-entry, custom-condition negation, and kit input.

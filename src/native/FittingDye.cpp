@@ -4,6 +4,7 @@
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -133,14 +134,28 @@ struct WorldTintTarget {
 };
 
 struct ActiveRenderPass {
+  struct RestoredShaderResource {
+    UINT slot{0};
+    ComPtr<ID3D11ShaderResourceView> view;
+  };
+
   RE::BSRenderPass *pass{nullptr};
-  ID3D11DeviceContext *context{nullptr};
+  ComPtr<ID3D11DeviceContext> context;
   ComPtr<ID3D11ShaderResourceView> originalView;
   ComPtr<ID3D11ShaderResourceView> tintedView;
+  std::vector<UINT> shadowShaderResourceSlots;
+  std::vector<RestoredShaderResource> scopedShaderResources;
 };
 
 std::mutex g_worldTintMutex;
 std::unordered_map<std::uintptr_t, WorldTintTarget> g_worldTintTargets;
+// BSLighting SetupGeometry is a renderer hot path even when the user has
+// never used Fitting Dye. Keep the hook dormant without taking the map mutex
+// or growing the render-pass stack until a durable tint or amber preview is
+// actually armed. A racing first/last pass may be deferred by one draw only;
+// the guarded map remains the authoritative state.
+std::atomic_bool g_worldTintTargetsActive{false};
+std::atomic_bool g_worldTintPreviewActive{false};
 
 // This state deliberately contains only durable game identifiers and stable
 // renderer names. Renderer/material addresses are process-local and must
@@ -168,8 +183,6 @@ std::unordered_map<RE::FormID, SavedWorldTintAppearances> g_savedWorldTints;
 std::mutex g_savedWorldTintRestoreQueueMutex;
 std::unordered_set<RE::FormID> g_queuedSavedWorldTintRestores;
 std::atomic<std::uint64_t> g_savedWorldTintRestoreGeneration{0};
-
-[[nodiscard]] ComPtr<ID3D11DeviceContext> SnapshotHookedContext();
 
 [[nodiscard]] bool IsDyeableRendererShape(const RenderedShapeInfo &a_shape) {
   return IsDyeableAppearanceComponent(a_shape);
@@ -271,6 +284,8 @@ void ClearRuntimeWorldTintsForActor(const RE::FormID a_actorFormID) {
                 [a_actorFormID](const auto &a_entry) {
                   return a_entry.second.actorFormID == a_actorFormID;
                 });
+  g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
+                                 std::memory_order_release);
 }
 
 [[nodiscard]] std::vector<SavedWorldTintRestoreItem>
@@ -335,18 +350,11 @@ void RestoreSavedWorldTintsForActor(RE::Actor *a_actor) {
     if (!source) {
       continue;
     }
-    auto context = SnapshotHookedContext();
-    if (!context) {
-      ComPtr<ID3D11Device> sourceDevice;
-      source->GetDevice(sourceDevice.GetAddressOf());
-      if (!sourceDevice) {
-        continue;
-      }
-      sourceDevice->GetImmediateContext(context.GetAddressOf());
-    }
     ComPtr<ID3D11Device> device;
-    if (context) {
-      context->GetDevice(device.GetAddressOf());
+    ComPtr<ID3D11DeviceContext> context;
+    source->GetDevice(device.GetAddressOf());
+    if (device) {
+      device->GetImmediateContext(context.GetAddressOf());
     }
     if (!device || !context) {
       continue;
@@ -419,18 +427,56 @@ using DrawIndexedFn = void(STDMETHODCALLTYPE *)(ID3D11DeviceContext *, UINT,
 using DrawFn = void(STDMETHODCALLTYPE *)(ID3D11DeviceContext *, UINT, UINT);
 std::array<SetupGeometryFn, 3> g_originalSetupGeometry{};
 std::array<RestoreGeometryFn, 3> g_originalRestoreGeometry{};
-std::atomic<DrawIndexedFn> g_originalDrawIndexed{nullptr};
-std::atomic<DrawFn> g_originalDraw{nullptr};
-ID3D11DeviceContext *g_hookedContext{nullptr};
+constexpr std::size_t kMaxDrawHookVtables = 8;
+struct DrawHookEntry {
+  std::atomic<std::uintptr_t *> vtable{nullptr};
+  std::atomic<DrawIndexedFn> originalDrawIndexed{nullptr};
+  std::atomic<DrawFn> originalDraw{nullptr};
+  std::atomic_bool substitutionObserved{false};
+  std::atomic_bool displacementReported{false};
+};
+struct DrawHookFunctions {
+  DrawIndexedFn drawIndexed{nullptr};
+  DrawFn draw{nullptr};
+  std::atomic_bool *substitutionObserved{nullptr};
+};
+std::array<DrawHookEntry, kMaxDrawHookVtables> g_drawHookEntries{};
 std::mutex g_contextHookMutex;
+std::atomic_bool g_rendererStateSubstitutionObserved{false};
 
-ComPtr<ID3D11DeviceContext> SnapshotHookedContext() {
-  std::scoped_lock lock(g_contextHookMutex);
-  ComPtr<ID3D11DeviceContext> context;
-  if (g_hookedContext) {
-    context = g_hookedContext;
+[[nodiscard]] DrawHookFunctions
+LookupDrawHookFunctions(ID3D11DeviceContext *a_context) {
+  struct ThreadCache {
+    std::uintptr_t *vtable{nullptr};
+    DrawHookFunctions functions{};
+  };
+  thread_local ThreadCache cache;
+
+  auto *vtable = a_context
+                     ? *reinterpret_cast<std::uintptr_t **>(a_context)
+                     : nullptr;
+  if (!vtable) {
+    return {};
   }
-  return context;
+  if (cache.vtable == vtable && cache.functions.drawIndexed &&
+      cache.functions.draw) {
+    return cache.functions;
+  }
+  for (auto &entry : g_drawHookEntries) {
+    if (entry.vtable.load(std::memory_order_acquire) != vtable) {
+      continue;
+    }
+    cache = {
+        .vtable = vtable,
+        .functions = {
+            .drawIndexed =
+                entry.originalDrawIndexed.load(std::memory_order_acquire),
+            .draw = entry.originalDraw.load(std::memory_order_acquire),
+            .substitutionObserved =
+                std::addressof(entry.substitutionObserved)}};
+    return cache.functions;
+  }
+  return {};
 }
 
 [[nodiscard]] bool CompileShader(const char *a_source, const char *a_entry,
@@ -632,14 +678,21 @@ float4 PS(float4 position : SV_POSITION, float2 uv : TEXCOORD0) : SV_TARGET {
 
 template <class DrawCall>
 void DrawWithTintIfSelected(ID3D11DeviceContext *a_context,
+                            std::atomic_bool *a_substitutionObserved,
                             DrawCall &&a_draw) {
   if (g_activeRenderPasses.empty()) {
     a_draw();
     return;
   }
   const auto &active = g_activeRenderPasses.back();
-  if (active.context != a_context || !active.originalView ||
-      !active.tintedView) {
+  if (!active.context || !active.originalView || !active.tintedView) {
+    a_draw();
+    return;
+  }
+
+  if (!rules::IsRendererContextMatch(
+          reinterpret_cast<std::uintptr_t>(active.context.Get()),
+          reinterpret_cast<std::uintptr_t>(a_context))) {
     a_draw();
     return;
   }
@@ -649,22 +702,34 @@ void DrawWithTintIfSelected(ID3D11DeviceContext *a_context,
       rawViews{};
   a_context->PSGetShaderResources(
       0, static_cast<UINT>(rawViews.size()), rawViews.data());
-  std::vector<std::pair<UINT, ComPtr<ID3D11ShaderResourceView>>> restored;
+  std::array<ComPtr<ID3D11ShaderResourceView>,
+             D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT>
+      heldViews{};
+  std::array<UINT, D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT>
+      restoredSlots{};
+  std::size_t restoredCount = 0;
   for (UINT slot = 0; slot < rawViews.size(); ++slot) {
-    ComPtr<ID3D11ShaderResourceView> original;
-    original.Attach(rawViews[slot]);
-    if (original.Get() != active.originalView.Get()) {
+    heldViews[slot].Attach(rawViews[slot]);
+    if (heldViews[slot].Get() != active.originalView.Get()) {
       continue;
     }
     ID3D11ShaderResourceView *tinted = active.tintedView.Get();
     a_context->PSSetShaderResources(slot, 1, &tinted);
-    restored.emplace_back(slot, std::move(original));
+    restoredSlots[restoredCount++] = slot;
   }
 
   a_draw();
-  for (const auto &[slot, original] : restored) {
-    ID3D11ShaderResourceView *view = original.Get();
+  for (std::size_t index = 0; index < restoredCount; ++index) {
+    const auto slot = restoredSlots[index];
+    ID3D11ShaderResourceView *view = heldViews[slot].Get();
     a_context->PSSetShaderResources(slot, 1, &view);
+  }
+  if (restoredCount != 0 && a_substitutionObserved &&
+      !a_substitutionObserved->exchange(true, std::memory_order_acq_rel)) {
+    logger::info("Fitting Dye: verified draw-time diffuse substitution for "
+                 "context vtable {:X}",
+                 reinterpret_cast<std::uintptr_t>(
+                     *reinterpret_cast<std::uintptr_t **>(a_context)));
   }
 }
 
@@ -672,11 +737,12 @@ void STDMETHODCALLTYPE DrawIndexedHook(ID3D11DeviceContext *a_context,
                                        const UINT a_indexCount,
                                        const UINT a_startIndex,
                                        const INT a_baseVertex) {
-  const auto original = g_originalDrawIndexed.load(std::memory_order_acquire);
+  const auto functions = LookupDrawHookFunctions(a_context);
+  const auto original = functions.drawIndexed;
   if (!original) {
     return;
   }
-  DrawWithTintIfSelected(a_context, [&] {
+  DrawWithTintIfSelected(a_context, functions.substitutionObserved, [&] {
     original(a_context, a_indexCount, a_startIndex, a_baseVertex);
   });
 }
@@ -684,29 +750,100 @@ void STDMETHODCALLTYPE DrawIndexedHook(ID3D11DeviceContext *a_context,
 void STDMETHODCALLTYPE DrawHook(ID3D11DeviceContext *a_context,
                                 const UINT a_vertexCount,
                                 const UINT a_startVertex) {
-  const auto original = g_originalDraw.load(std::memory_order_acquire);
+  const auto functions = LookupDrawHookFunctions(a_context);
+  const auto original = functions.draw;
   if (!original) {
     return;
   }
-  DrawWithTintIfSelected(a_context,
+  DrawWithTintIfSelected(a_context, functions.substitutionObserved,
                          [&] { original(a_context, a_vertexCount, a_startVertex); });
+}
+
+void BindTintForCurrentRenderPass(ActiveRenderPass &a_active) {
+  if (!a_active.context || !a_active.originalView || !a_active.tintedView) {
+    return;
+  }
+
+  // BSLighting records material textures in Skyrim's RendererShadowState and
+  // flushes that cache immediately before drawing. Replacing only the live
+  // D3D11 binding is therefore not sufficient: the pending cache flush can
+  // restore the original diffuse, especially when a later renderer owns the
+  // Draw hook. Keep both views in agreement for this exact render pass and
+  // restore both at RestoreGeometry. No NiTexture, material, NIF, or durable
+  // appearance data is changed.
+  if (auto *shadowState = RE::BSGraphics::RendererShadowState::GetSingleton()) {
+    auto &runtime = shadowState->GetRuntimeData();
+    for (UINT slot = 0; slot < std::size(runtime.PSTexture); ++slot) {
+      if (runtime.PSTexture[slot] != a_active.originalView.Get()) {
+        continue;
+      }
+      runtime.PSTexture[slot] = a_active.tintedView.Get();
+      runtime.PSResourceModifiedBits |= (1u << slot);
+      a_active.shadowShaderResourceSlots.push_back(slot);
+    }
+  }
+
+  std::array<ID3D11ShaderResourceView *,
+             D3D11_COMMONSHADER_INPUT_RESOURCE_SLOT_COUNT>
+      rawViews{};
+  a_active.context->PSGetShaderResources(
+      0, static_cast<UINT>(rawViews.size()), rawViews.data());
+  for (UINT slot = 0; slot < rawViews.size(); ++slot) {
+    ComPtr<ID3D11ShaderResourceView> current;
+    current.Attach(rawViews[slot]);
+    if (current.Get() != a_active.originalView.Get()) {
+      continue;
+    }
+    ID3D11ShaderResourceView *tinted = a_active.tintedView.Get();
+    a_active.context->PSSetShaderResources(slot, 1, &tinted);
+    a_active.scopedShaderResources.push_back(
+        {.slot = slot, .view = std::move(current)});
+  }
+
+  if ((!a_active.shadowShaderResourceSlots.empty() ||
+       !a_active.scopedShaderResources.empty()) &&
+      !g_rendererStateSubstitutionObserved.exchange(true,
+                                                     std::memory_order_acq_rel)) {
+    logger::info(
+        "Fitting Dye: verified actor-pass diffuse substitution in Skyrim's "
+        "renderer state and D3D11 binding");
+  }
+}
+
+void RestoreRenderPassTint(ActiveRenderPass &a_active) {
+  if (auto *shadowState = RE::BSGraphics::RendererShadowState::GetSingleton()) {
+    auto &runtime = shadowState->GetRuntimeData();
+    for (const auto slot : a_active.shadowShaderResourceSlots) {
+      if (slot >= std::size(runtime.PSTexture) ||
+          runtime.PSTexture[slot] != a_active.tintedView.Get()) {
+        continue;
+      }
+      runtime.PSTexture[slot] = a_active.originalView.Get();
+      runtime.PSResourceModifiedBits |= (1u << slot);
+    }
+  }
+  a_active.shadowShaderResourceSlots.clear();
+
+  if (a_active.context) {
+    for (const auto &resource : a_active.scopedShaderResources) {
+      ID3D11ShaderResourceView *currentRaw = nullptr;
+      a_active.context->PSGetShaderResources(resource.slot, 1, &currentRaw);
+      ComPtr<ID3D11ShaderResourceView> current;
+      current.Attach(currentRaw);
+      if (current.Get() != a_active.tintedView.Get()) {
+        continue;
+      }
+      ID3D11ShaderResourceView *view = resource.view.Get();
+      a_active.context->PSSetShaderResources(resource.slot, 1, &view);
+    }
+  }
+  a_active.scopedShaderResources.clear();
 }
 
 [[nodiscard]] bool InstallDrawHooks(ID3D11DeviceContext *a_context,
                                     std::string &a_status) {
   if (!a_context) {
     a_status = "The game D3D11 context is unavailable.";
-    return false;
-  }
-
-  std::scoped_lock lock(g_contextHookMutex);
-  if (g_hookedContext == a_context &&
-      g_originalDrawIndexed.load(std::memory_order_acquire) &&
-      g_originalDraw.load(std::memory_order_acquire)) {
-    return true;
-  }
-  if (g_hookedContext) {
-    a_status = "The game replaced its D3D11 context after the Dye hook was installed.";
     return false;
   }
 
@@ -724,43 +861,167 @@ void STDMETHODCALLTYPE DrawHook(ID3D11DeviceContext *a_context,
   const auto replacementDrawIndexed =
       reinterpret_cast<std::uintptr_t>(DrawIndexedHook);
   const auto replacementDraw = reinterpret_cast<std::uintptr_t>(DrawHook);
-  if (originalDrawIndexed == replacementDrawIndexed ||
-      originalDraw == replacementDraw) {
-    a_status = "The D3D11 draw hook is already owned by Fitting Dye.";
+
+  std::scoped_lock lock(g_contextHookMutex);
+  DrawHookEntry *registeredEntry = nullptr;
+  DrawHookEntry *availableEntry = nullptr;
+  for (auto &entry : g_drawHookEntries) {
+    auto *registeredVtable = entry.vtable.load(std::memory_order_acquire);
+    if (registeredVtable == vtable) {
+      registeredEntry = std::addressof(entry);
+      break;
+    }
+    if (!registeredVtable && !availableEntry) {
+      availableEntry = std::addressof(entry);
+    }
+  }
+  const auto action = rules::ResolveDrawHookInstallAction(
+      registeredEntry != nullptr,
+      originalDrawIndexed == replacementDrawIndexed,
+      originalDraw == replacementDraw);
+  if (action == rules::DrawHookInstallAction::Reuse) {
+    return true;
+  }
+  if (action == rules::DrawHookInstallAction::RejectUnknownOwnership) {
+    a_status = "An untracked or partially installed Fitting Dye D3D11 hook was detected.";
     return false;
   }
+  if (action ==
+      rules::DrawHookInstallAction::UseExistingChainOrShaderBindingFallback) {
+    if (registeredEntry &&
+        !registeredEntry->displacementReported.exchange(
+            true, std::memory_order_acq_rel)) {
+      logger::info(
+          "Fitting Dye: a later renderer owns the D3D11 Draw slots; "
+          "preserving its chain and enabling the scoped BSLighting fallback");
+    }
+    return true;
+  }
+  if (!availableEntry) {
+    a_status = "Too many distinct D3D11 context vtables were presented to Fitting Dye.";
+    return false;
+  }
+
+  availableEntry->originalDrawIndexed.store(
+      reinterpret_cast<DrawIndexedFn>(originalDrawIndexed),
+      std::memory_order_release);
+  availableEntry->originalDraw.store(reinterpret_cast<DrawFn>(originalDraw),
+                                     std::memory_order_release);
+  availableEntry->substitutionObserved.store(false,
+                                             std::memory_order_release);
+  availableEntry->displacementReported.store(false,
+                                             std::memory_order_release);
+  availableEntry->vtable.store(vtable, std::memory_order_release);
   if (!REL::safe_write(reinterpret_cast<std::uintptr_t>(drawIndexedSlot),
                        std::addressof(replacementDrawIndexed),
                        sizeof(replacementDrawIndexed),
                        std::addressof(originalDrawIndexed),
                        sizeof(originalDrawIndexed))) {
+    availableEntry->vtable.store(nullptr, std::memory_order_release);
+    availableEntry->originalDrawIndexed.store(nullptr,
+                                              std::memory_order_release);
+    availableEntry->originalDraw.store(nullptr, std::memory_order_release);
+    availableEntry->substitutionObserved.store(false,
+                                               std::memory_order_release);
+    availableEntry->displacementReported.store(false,
+                                               std::memory_order_release);
     a_status = "The D3D11 draw vtable changed before Dye could hook it.";
     return false;
   }
   if (!REL::safe_write(reinterpret_cast<std::uintptr_t>(drawSlot),
                        std::addressof(replacementDraw), sizeof(replacementDraw),
                        std::addressof(originalDraw), sizeof(originalDraw))) {
-    REL::safe_write(reinterpret_cast<std::uintptr_t>(drawIndexedSlot),
-                    std::addressof(originalDrawIndexed),
-                    sizeof(originalDrawIndexed),
-                    std::addressof(replacementDrawIndexed),
-                    sizeof(replacementDrawIndexed));
+    const bool rolledBack = REL::safe_write(
+        reinterpret_cast<std::uintptr_t>(drawIndexedSlot),
+        std::addressof(originalDrawIndexed), sizeof(originalDrawIndexed),
+        std::addressof(replacementDrawIndexed),
+        sizeof(replacementDrawIndexed));
+    if (rolledBack) {
+      availableEntry->vtable.store(nullptr, std::memory_order_release);
+      availableEntry->originalDrawIndexed.store(nullptr,
+                                                std::memory_order_release);
+      availableEntry->originalDraw.store(nullptr, std::memory_order_release);
+      availableEntry->substitutionObserved.store(false,
+                                                 std::memory_order_release);
+      availableEntry->displacementReported.store(false,
+                                                 std::memory_order_release);
+    }
     a_status = "The D3D11 Draw hook vtable changed before Dye could hook it.";
     return false;
   }
 
-  g_originalDrawIndexed.store(
-      reinterpret_cast<DrawIndexedFn>(originalDrawIndexed),
-      std::memory_order_release);
-  g_originalDraw.store(reinterpret_cast<DrawFn>(originalDraw),
-                       std::memory_order_release);
-  g_hookedContext = a_context;
-  logger::info("Fitting Dye: installed guarded D3D11 draw hooks");
+  logger::info("Fitting Dye: installed guarded D3D11 draw hooks for context "
+               "vtable {:X}",
+               reinterpret_cast<std::uintptr_t>(vtable));
   return true;
+}
+
+[[nodiscard]] bool InstallRelevantDrawHooks(
+    ID3D11DeviceContext *a_sourceContext,
+    ID3D11DeviceContext *a_fallbackContext, std::string &a_status) {
+  auto *renderer = RE::BSGraphics::Renderer::GetSingleton();
+  auto *rendererContext =
+      renderer ? reinterpret_cast<ID3D11DeviceContext *>(
+                     renderer->GetRuntimeData().context)
+               : nullptr;
+  std::array<ID3D11DeviceContext *, 3> candidates{
+      rendererContext, a_sourceContext, a_fallbackContext};
+  std::array<ID3D11DeviceContext *, 3> inspected{};
+  std::size_t inspectedCount = 0;
+  for (auto *context : candidates) {
+    if (!context || std::ranges::find(inspected, context) != inspected.end()) {
+      continue;
+    }
+    inspected[inspectedCount++] = context;
+    if (!InstallDrawHooks(context, a_status)) {
+      return false;
+    }
+  }
+  if (inspectedCount == 0) {
+    a_status = "No live D3D11 context is available for Fitting Dye.";
+    return false;
+  }
+  return true;
+}
+
+struct SourceGpuBinding {
+  ComPtr<ID3D11Device> device;
+  ComPtr<ID3D11DeviceContext> context;
+};
+
+[[nodiscard]] bool ResolveSourceGpuBinding(
+    ID3D11ShaderResourceView *a_sourceView, ID3D11Device *a_fallbackDevice,
+    ID3D11DeviceContext *a_fallbackContext, SourceGpuBinding &a_binding,
+    std::string &a_status) {
+  if (a_sourceView) {
+    a_sourceView->GetDevice(a_binding.device.GetAddressOf());
+  }
+  if (!a_binding.device && a_fallbackDevice) {
+    a_binding.device = a_fallbackDevice;
+  }
+  if (a_binding.device) {
+    a_binding.device->GetImmediateContext(a_binding.context.GetAddressOf());
+  }
+  if (!a_binding.context && a_fallbackContext) {
+    a_binding.context = a_fallbackContext;
+  }
+  if (!a_binding.device || !a_binding.context) {
+    a_status = "The selected diffuse GPU device/context is unavailable.";
+    return false;
+  }
+  return InstallRelevantDrawHooks(a_binding.context.Get(), a_fallbackContext,
+                                  a_status);
 }
 
 void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
                        RE::BSRenderPass *a_pass, std::uint32_t a_flags) {
+  if (!rules::ShouldInspectRendererTintPass(
+          g_worldTintTargetsActive.load(std::memory_order_acquire),
+          g_worldTintPreviewActive.load(std::memory_order_acquire))) {
+    g_originalSetupGeometry[a_vtableIndex](a_shader, a_pass, a_flags);
+    return;
+  }
+
   ActiveRenderPass active{.pass = a_pass};
   if (a_pass && a_pass->shaderProperty) {
     std::scoped_lock lock(g_worldTintMutex);
@@ -781,7 +1042,7 @@ void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
               worldTint.rendererTextureAddress &&
           reinterpret_cast<std::uintptr_t>(rendererTexture->resourceView) ==
               worldTint.sourceViewAddress) {
-        active.context = worldTint.context.Get();
+        active.context = worldTint.context;
         active.originalView = rendererTexture->resourceView;
         active.tintedView = worldTint.tintedView;
       }
@@ -791,6 +1052,7 @@ void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
     const auto now = std::chrono::steady_clock::now();
     if (g_worldTintPreview && now >= g_worldTintPreview->expiresAt) {
       g_worldTintPreview.reset();
+      g_worldTintPreviewActive.store(false, std::memory_order_release);
     }
     if (g_worldTintPreview &&
         g_worldTintPreview->target.geometryAddress == geometryAddress) {
@@ -811,18 +1073,41 @@ void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
     g_activeRenderPasses.push_back(std::move(active));
   }
   g_originalSetupGeometry[a_vtableIndex](a_shader, a_pass, a_flags);
+  if (a_pass && !g_activeRenderPasses.empty()) {
+    const auto activePass = std::ranges::find_if(
+        g_activeRenderPasses | std::views::reverse,
+        [a_pass](const ActiveRenderPass &a_active) {
+          return a_active.pass == a_pass;
+        });
+    if (activePass != g_activeRenderPasses.rend()) {
+      BindTintForCurrentRenderPass(*activePass);
+    }
+  }
 }
 
 void RestoreGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
                          RE::BSRenderPass *a_pass, std::uint32_t a_flags) {
+  if (!g_activeRenderPasses.empty()) {
+    const auto activeBeforeRestore = std::ranges::find_if(
+        g_activeRenderPasses | std::views::reverse,
+        [a_pass](const ActiveRenderPass &a_active) {
+          return a_active.pass == a_pass;
+        });
+    if (activeBeforeRestore != g_activeRenderPasses.rend()) {
+      RestoreRenderPassTint(*activeBeforeRestore);
+    }
+  }
   g_originalRestoreGeometry[a_vtableIndex](a_shader, a_pass, a_flags);
-  const auto active = std::ranges::find_if(
+  if (g_activeRenderPasses.empty()) {
+    return;
+  }
+  const auto activeAfterRestore = std::ranges::find_if(
       g_activeRenderPasses | std::views::reverse,
       [a_pass](const ActiveRenderPass &a_active) {
         return a_active.pass == a_pass;
       });
-  if (active != g_activeRenderPasses.rend()) {
-    g_activeRenderPasses.erase(std::next(active).base());
+  if (activeAfterRestore != g_activeRenderPasses.rend()) {
+    g_activeRenderPasses.erase(std::next(activeAfterRestore).base());
   }
 }
 
@@ -912,19 +1197,20 @@ bool ConfigureWorldTints(
       return false;
     }
   }
-  if (!InstallDrawHooks(a_context, a_status)) {
-    return false;
-  }
-
   std::vector<WorldTintTarget> targets;
   targets.reserve(a_shapes.size());
   for (const auto &shape : a_shapes) {
+    auto *sourceView = reinterpret_cast<ID3D11ShaderResourceView *>(
+        shape.diffuseShaderResourceAddress);
+    SourceGpuBinding binding;
+    if (!ResolveSourceGpuBinding(sourceView, a_device, a_context, binding,
+                                 a_status)) {
+      return false;
+    }
     ComPtr<ID3D11ShaderResourceView> tintedView;
-    if (!CreateTintedView(
-            a_device, a_context,
-            reinterpret_cast<ID3D11ShaderResourceView *>(
-                shape.diffuseShaderResourceAddress),
-            a_red, a_green, a_blue, tintedView, a_status)) {
+    if (!CreateTintedView(binding.device.Get(), binding.context.Get(),
+                          sourceView, a_red, a_green, a_blue, tintedView,
+                          a_status)) {
       return false;
     }
     targets.push_back({
@@ -938,7 +1224,7 @@ bool ConfigureWorldTints(
         .componentDiffuseTexture = component.diffuseTexture,
         .componentScenePath = component.scenePath,
         .color = {.red = a_red, .green = a_green, .blue = a_blue},
-        .context = a_context,
+        .context = binding.context,
         .tintedView = std::move(tintedView)});
   }
   {
@@ -954,6 +1240,8 @@ bool ConfigureWorldTints(
     for (auto &target : targets) {
       g_worldTintTargets[target.geometryAddress] = std::move(target);
     }
+    g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
+                                   std::memory_order_release);
   }
   a_status = std::format(
       "World tint armed for {} linked renderer shape(s), including any verified first-person counterpart.",
@@ -981,17 +1269,19 @@ bool PreviewWorldTint(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
     a_status = "The selected component is no longer present in this actor's current 3D.";
     return false;
   }
-  if (!InstallDrawHooks(a_context, a_status)) {
+  auto *sourceView = reinterpret_cast<ID3D11ShaderResourceView *>(
+      a_shape.diffuseShaderResourceAddress);
+  SourceGpuBinding binding;
+  if (!ResolveSourceGpuBinding(sourceView, a_device, a_context, binding,
+                               a_status)) {
     return false;
   }
   ComPtr<ID3D11ShaderResourceView> previewView;
   // Bright amber deliberately differs from normal dye choices and lasts only
   // long enough to identify the selected geometry in the world.
-  if (!CreateTintedView(
-          a_device, a_context,
-          reinterpret_cast<ID3D11ShaderResourceView *>(
-              a_shape.diffuseShaderResourceAddress),
-          2.0f, 1.65f, 0.18f, previewView, a_status)) {
+  if (!CreateTintedView(binding.device.Get(), binding.context.Get(),
+                        sourceView, 2.0f, 1.65f, 0.18f, previewView,
+                        a_status)) {
     return false;
   }
   const auto now = std::chrono::steady_clock::now();
@@ -1004,10 +1294,11 @@ bool PreviewWorldTint(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
                        a_shape.diffuseRendererTextureAddress,
                    .sourceViewAddress = a_shape.diffuseShaderResourceAddress,
                    .color = {.red = 2.0f, .green = 1.65f, .blue = 0.18f},
-                   .context = a_context,
+                   .context = binding.context,
                    .tintedView = std::move(previewView)},
         .beganAt = now,
         .expiresAt = now + std::chrono::milliseconds(1200)};
+    g_worldTintPreviewActive.store(true, std::memory_order_release);
   }
   a_status = "Selected component is flashing in the world.";
   return true;
@@ -1016,6 +1307,7 @@ bool PreviewWorldTint(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
 void ClearWorldTintPreview() {
   std::scoped_lock lock(g_worldTintMutex);
   g_worldTintPreview.reset();
+  g_worldTintPreviewActive.store(false, std::memory_order_release);
 }
 
 void ClearWorldTints(const RE::FormID a_actorFormID,
@@ -1030,13 +1322,18 @@ void ClearWorldTints(const RE::FormID a_actorFormID,
            target.componentDiffuseTexture == a_component.diffuseTexture &&
            target.componentScenePath == a_component.scenePath;
   });
+  g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
+                                 std::memory_order_release);
   g_worldTintPreview.reset();
+  g_worldTintPreviewActive.store(false, std::memory_order_release);
 }
 
 void ClearWorldTint() {
   std::scoped_lock lock(g_worldTintMutex);
   g_worldTintTargets.clear();
+  g_worldTintTargetsActive.store(false, std::memory_order_release);
   g_worldTintPreview.reset();
+  g_worldTintPreviewActive.store(false, std::memory_order_release);
 }
 
 std::optional<WorldTintColor>

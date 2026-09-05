@@ -407,6 +407,8 @@ public:
   [[nodiscard]] bool
   HasRegisteredAppearancesForActor(RE::FormID a_actorFormID) const;
   [[nodiscard]] bool
+  HasDisplayStateForActor(RE::FormID a_actorFormID) const;
+  [[nodiscard]] bool
   HasActualEquipmentLinkedAppearancesForActor(RE::FormID a_actorFormID) const;
   [[nodiscard]] std::uint64_t
   GetActualEquipmentLinkedSlotMaskForActor(RE::FormID a_actorFormID) const;

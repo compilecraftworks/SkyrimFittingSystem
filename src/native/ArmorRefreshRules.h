@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace sfs::native::refresh_rules {
 
 enum class Backend {
@@ -52,6 +54,28 @@ struct Plan {
           .queuePoseSync = work,
           .queueDyeRestore = work,
           .queueHighHeelSync = work};
+}
+
+// A slot shared by hidden and still-visible actual armor is not exclusively
+// owned by SFS's hidden set and must remain under DAVE's control.
+[[nodiscard]] inline constexpr std::uint32_t
+ResolveSfsHiddenWornSlotMask(
+    const std::uint32_t a_hiddenActualSlotMask,
+    const std::uint32_t a_visibleActualSlotMask) noexcept {
+  return a_hiddenActualSlotMask & ~a_visibleActualSlotMask;
+}
+
+// DAVE's GetWornMask result already contains every active per-actor variant,
+// including HT2 and SOS/TNG head/genital policy. Never reconstruct visible
+// actual equipment from raw ARMO masks. Remove only slots exclusively owned by
+// actual armor which SFS itself hides, then add the registered appearances.
+[[nodiscard]] inline constexpr std::uint32_t
+MergeDaveResolvedWornMask(const std::uint32_t a_daveWornMask,
+                          const std::uint32_t a_displayedFittingSlotMask,
+                          const std::uint32_t a_sfsHiddenWornSlotMask = 0)
+    noexcept {
+  return (a_daveWornMask & ~a_sfsHiddenWornSlotMask) |
+         a_displayedFittingSlotMask;
 }
 
 } // namespace sfs::native::refresh_rules

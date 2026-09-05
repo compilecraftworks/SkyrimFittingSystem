@@ -551,6 +551,7 @@
     "kit_generator.error.merge_failed": "Kit merge failed: {}",
     "kit_generator.error.create_folder": "Could not create kit folder: {}",
     "kit_generator.error.open_output": "Could not open output file: {}",
-    "kit_generator.error.write_output": "Could not write output file: {}"
+    "kit_generator.error.write_output": "Could not write output file: {}",
+    "kit_generator.error.files_skipped": "Skipped {} kit file(s); first error: {}"
   }
 }

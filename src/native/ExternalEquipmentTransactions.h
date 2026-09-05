@@ -24,6 +24,11 @@ struct EquipmentEventResult {
 // observer never changes arguments, return values, inventory, or equipment;
 // it only marks the TESEquipEvents causally produced by an external script.
 bool RegisterPapyrusObserver(RE::BSScript::IVirtualMachine *a_vm);
+// Rechecks only the empty-state member-native table of a fully linked
+// sslActorAlias. This closes the P+ load-order window without broadening the
+// generic post-link scan which intentionally remains global-only.
+void InspectFullyLinkedSexLabPPlusAlias(
+    RE::BSScript::ObjectTypeInfo *a_type);
 // Enables three exact post-call observations used by the built-in HT2 bridge:
 // GlobalVariable.SetValue plus Actor.AddSpell/RemoveSpell. The dispatch path
 // immediately rejects every receiver/form except HT2's resolved signal forms.

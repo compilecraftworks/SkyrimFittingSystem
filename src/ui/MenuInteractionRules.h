@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 namespace sfs::ui::menu_interaction {
 
 struct CatalogReleaseState {
@@ -21,13 +23,29 @@ ShouldClearCatalogSelection(const CatalogReleaseState &a_state) noexcept {
          a_state.pointerOverWindow && !a_state.pointerOverItem;
 }
 
-[[nodiscard]] inline constexpr bool ShouldCommitCharacterCamera(
-    const bool a_presentationActive, const bool a_commitPending,
-    const bool a_thirdPersonCameraReady) noexcept {
-  // MenuHost receives kShow before the engine has finished registering the
-  // menu's pause flag/count. Defer the one camera Update until the first normal
-  // rendered menu frame, when the active third-person state is stable.
-  return a_presentationActive && a_commitPending && a_thirdPersonCameraReady;
+enum class CameraZoomUpdate : std::uint8_t {
+  Refresh,
+  SnapCurrentToTarget,
+  RestoreSaved,
+};
+
+struct CameraZoomValues {
+  float target{0.0f};
+  float current{0.0f};
+};
+
+[[nodiscard]] inline constexpr CameraZoomValues ResolveCameraZoomUpdate(
+    const CameraZoomUpdate a_update, const CameraZoomValues a_live,
+    const CameraZoomValues a_saved = {}) noexcept {
+  switch (a_update) {
+  case CameraZoomUpdate::SnapCurrentToTarget:
+    return {a_live.target, a_live.target};
+  case CameraZoomUpdate::RestoreSaved:
+    return a_saved;
+  case CameraZoomUpdate::Refresh:
+  default:
+    return a_live;
+  }
 }
 
 } // namespace sfs::ui::menu_interaction

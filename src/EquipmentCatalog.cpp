@@ -166,6 +166,7 @@ void EquipmentCatalog::StartRefreshFromGame(const RefreshMode a_mode) {
     outfits_.clear();
     kits_.clear();
     armorMetadataCache_.clear();
+    kitArmorByPluginEditorID_.clear();
     gearPlugins_.clear();
     gearSlots_.clear();
     outfitPlugins_.clear();
@@ -195,6 +196,8 @@ void EquipmentCatalog::StartRefreshFromGame(const RefreshMode a_mode) {
 
     for (auto *armor : dataHandler->GetFormArray<RE::TESObjectARMO>()) {
       state.armors.push_back(armor);
+      sfs::catalog::IndexKitArmorForm(armor,
+                                      kitArmorByPluginEditorID_);
     }
     for (auto *outfit : dataHandler->GetFormArray<RE::BGSOutfit>()) {
       state.outfits.push_back(outfit);
@@ -265,7 +268,8 @@ void EquipmentCatalog::StartRefreshFromGame(const RefreshMode a_mode) {
                         if (auto entry = sfs::catalog::BuildKitEntry(
                                 state.kitPaths[a_index].rootPath,
                                 state.kitPaths[a_index].filePath,
-                                armorMetadataCache_)) {
+                                armorMetadataCache_,
+                                kitArmorByPluginEditorID_)) {
                           kits_.push_back(std::move(*entry));
                         }
                       } catch (const std::exception &exception) {

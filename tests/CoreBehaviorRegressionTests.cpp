@@ -1,8 +1,12 @@
 #include "native/ArmorRefreshRules.h"
 #include "native/ExternalEquipmentTransactionRules.h"
 #include "native/FittingSlotStateRules.h"
+#include "native/GenitalCompatibilityRules.h"
+#include "native/HelmetToggle2Rules.h"
+#include "native/PapyrusObserverInstallRules.h"
 #include "native/RegisteredAppearanceMorphRules.h"
 #include "native/SexLabPPlusRules.h"
+#include "TngGenitalCoverRules.h"
 #include "ui/MenuCharacterRotationRules.h"
 #include "ui/MenuInteractionRules.h"
 #include "workbench/ExternalStripLinkRules.h"
@@ -90,6 +94,28 @@ void TestStripLinkPolicies() {
          "Locked/protected appearances must never enter external stripping");
 }
 
+void TestPapyrusPostLinkInspectionBoundary() {
+  using sfs::native::papyrus_observer::rules::
+      ShouldInspectPostLinkMembers;
+  using sfs::native::papyrus_observer::rules::
+      ShouldRetryPostLinkMemberInspection;
+  Expect(ShouldInspectPostLinkMembers("sslActorAlias") &&
+             ShouldInspectPostLinkMembers("SSLACTORALIAS"),
+         "Only the exact P+ alias type must permit delayed member inspection");
+  Expect(!ShouldInspectPostLinkMembers("sslActorLibrary") &&
+             !ShouldInspectPostLinkMembers("Actor") &&
+             !ShouldInspectPostLinkMembers("FormArray") &&
+             !ShouldInspectPostLinkMembers("sslActorAliasExtra"),
+         "Generic and similarly named Papyrus types must remain globals-only");
+  Expect(ShouldRetryPostLinkMemberInspection("sslActorAlias", 0, 0, 4) &&
+             ShouldRetryPostLinkMemberInspection("sslActorAlias", 0, 2, 4),
+         "A linked P+ alias with no published strip member must retry");
+  Expect(!ShouldRetryPostLinkMemberInspection("sslActorAlias", 1, 0, 4) &&
+             !ShouldRetryPostLinkMemberInspection("sslActorAlias", 0, 3, 4) &&
+             !ShouldRetryPostLinkMemberInspection("FormArray", 0, 0, 4),
+         "Published P+ members and generic types must not create retry loops");
+}
+
 void TestVanillaAnchorResolution() {
   using namespace sfs::workbench;
   const auto body = EquipmentSlotMask(32);
@@ -130,6 +156,74 @@ void TestActorLocalModSettingsState() {
   Expect(actors[0x1234].virtualTokenSuppressedSlotMask == feet &&
              GetEffectiveHeadgearSuppressedMask(actors[0x1234]) == body,
          "HT2 and ModSettings actor-local layers must remain independent");
+
+  const auto circlet = std::uint32_t{1} << 12;
+  SetHeadgearSuppressed(actors[0x1234], circlet, true);
+  SetVirtualTokenSuppressed(actors[0x1234], feet, false);
+  Expect(actors[0x1234].virtualTokenSuppressedSlotMask == 0 &&
+             GetEffectiveHeadgearSuppressedMask(actors[0x1234]) ==
+                 (body | circlet),
+         "External redress must not release the same actor's independent HT2 headgear suppression");
+
+  const auto hair = std::uint32_t{1} << 1;
+  SetVirtualTokenSuppressed(actors[0x1234], hair, true);
+  SetHeadgearSuppressed(actors[0x1234], circlet, false);
+  Expect(actors[0x1234].virtualTokenSuppressedSlotMask == hair &&
+             GetEffectiveHeadgearSuppressedMask(actors[0x1234]) == body,
+         "HT2 show must not release ModSettings suppression, including pure Hair appearances");
+}
+
+void TestHelmetToggleAppearanceBoundary() {
+  using namespace sfs::native::helmet_toggle::rules;
+  constexpr auto head = std::uint32_t{1} << 0;
+  constexpr auto hair = std::uint32_t{1} << 1;
+  constexpr auto body = std::uint32_t{1} << 2;
+  constexpr auto circlet = std::uint32_t{1} << 12;
+  constexpr auto face = std::uint32_t{1} << 14;
+  constexpr auto playerExtra = std::uint32_t{1} << 25;
+
+  Expect(ProjectActualArmorSlotMask(hair | circlet, true) == circlet &&
+             ProjectActualArmorSlotMask(head | hair | circlet, true) ==
+                 (head | circlet) &&
+             ProjectActualArmorSlotMask(playerExtra, false) == 0,
+         "HT2 actual-equipment projection must exclude Hair and player-only slot 55 from NPCs");
+  Expect(ResolveObservedControllerMask(head, head | hair | circlet, true) ==
+             (head | circlet),
+         "HT2 query coverage must recover multi-slot headgear without leaking Hair");
+  Expect(ResolveObservedControllerMask(hair, hair, true) == 0 &&
+             ResolveObservedControllerMask(hair, hair, false) == 0,
+         "A pure Hair item must retain v1.5.0 behavior and never become a headgear controller by itself");
+  Expect(ResolveRegisteredAppearanceSuppressionSlots(hair, circlet, false) ==
+             0,
+         "A pure registered Hair appearance must never follow HT2");
+  Expect(ResolveRegisteredAppearanceSuppressionSlots(
+             hair, kPlayerManagedActualSlotMask, false) == 0,
+         "A managed pure-31 real helmet must not suppress a pure registered Hair appearance");
+  Expect(ResolveRegisteredAppearanceSuppressionSlots(hair | circlet, circlet,
+                                                      false) == circlet,
+         "A registered Hair+Circlet card must follow HT2 through Circlet only");
+  Expect(ResolveRegisteredAppearanceSuppressionSlots(body | circlet, circlet,
+                                                      false) == circlet,
+         "HT2 must not leak a multi-slot card's unrelated body bit into actor-wide suppression");
+  Expect(ResolveRegisteredAppearanceSuppressionSlots(circlet, circlet,
+                                                      false) == circlet &&
+             ResolveRegisteredAppearanceSuppressionSlots(face, face, false) ==
+                 face,
+         "Registered Circlet and managed face headgear must follow the matching HT2 actual controller");
+  Expect(ResolveRegisteredAppearanceSuppressionSlots(circlet, circlet, true) ==
+             0,
+         "Locked registered appearances must remain protected from HT2 suppression");
+  Expect(ComputeActualHairSlotReleaseMask(true, hair | circlet, 0) == hair &&
+             ComputeActualHairSlotReleaseMask(true, hair | circlet, hair) ==
+                 0 &&
+             ComputeActualHairSlotReleaseMask(false, hair | circlet, 0) == 0,
+         "The proven v1.5.0 renderer-only Hair release must remain scoped to HT2 hidden state");
+  Expect(ResolveSignalControllerMask(true, 0, false, circlet) == circlet,
+         "Animated HT2 hide must reuse only the same actor's last visible controller mask");
+  Expect(ResolveSignalControllerMask(true, 0, true, circlet) == 0,
+         "An observed pure Hair item must not inherit a stale Circlet controller");
+  Expect(ResolveSignalControllerMask(false, head, true, circlet) == head,
+         "A shown-state observation must replace the cached controller");
 }
 
 void TestActorLocalActualEquipmentTransactions() {
@@ -183,7 +277,7 @@ void TestSexLabPPlusStripContract() {
   Expect(kStripHelmet == 0x01 && kStripGloves == 0x02 &&
              kStripBoots == 0x04 && kStripDefault == 0x80 &&
              kStripAll == 0xFF,
-         "SexLab P+ v2.12 SE/AE StripData bits must stay exact");
+         "SexLab P+ v2.12/v2.18 SE/AE StripData bits must stay exact");
 
   const std::vector<std::int32_t> defaults{
       static_cast<std::int32_t>(body | extension), 1};
@@ -329,6 +423,111 @@ void TestRefreshBackends() {
                          "Native equipment refresh must retain follow-ups");
   Expect(BuildPlan({}).backend == Backend::None,
          "Unavailable native process must fail closed");
+
+  constexpr auto head = std::uint32_t{1} << 0;
+  constexpr auto hair = std::uint32_t{1} << 1;
+  constexpr auto body = std::uint32_t{1} << 2;
+  constexpr auto circlet = std::uint32_t{1} << 12;
+  constexpr auto genitals = std::uint32_t{1} << 22;
+  constexpr auto hands = std::uint32_t{1} << 3;
+  const auto ht2ResolvedActualMask = body | hands;
+  Expect(MergeDaveResolvedWornMask(ht2ResolvedActualMask, 0) ==
+             ht2ResolvedActualMask,
+         "DAVE/HT2-cleared actual head, hair, and circlet bits must not be reconstructed from raw ARMO slots");
+  Expect(MergeDaveResolvedWornMask(ht2ResolvedActualMask, hair) ==
+             (ht2ResolvedActualMask | hair),
+         "A pure registered Hair appearance must remain independent of HT2 actual equipment");
+  Expect(MergeDaveResolvedWornMask(ht2ResolvedActualMask, head | circlet) ==
+             (ht2ResolvedActualMask | head | circlet),
+         "Only displayed registered headgear slots may extend DAVE's actual-equipment result");
+  Expect(MergeDaveResolvedWornMask(body, 0) == body,
+         "A genital slot removed by SFS's DAVE conceal variant must stay removed");
+  Expect(MergeDaveResolvedWornMask(body, genitals) == (body | genitals),
+         "SOS/TNG reveal correction must still add the resolved genital display slot");
+  const auto rawShownHelmet = head | hair | circlet;
+  Expect(MergeDaveResolvedWornMask(body | rawShownHelmet, 0,
+                                  rawShownHelmet) == body,
+         "SFS-hidden actual HT2 headgear must release its head ownership without rebuilding DAVE state");
+  Expect(MergeDaveResolvedWornMask(body | rawShownHelmet, circlet,
+                                  rawShownHelmet) == (body | circlet),
+         "A displayed registered Circlet may replace only its own slot after the SFS-hidden real helmet is removed");
+  Expect(ResolveSfsHiddenWornSlotMask(head | hair | circlet, hair) ==
+             (head | circlet),
+         "A slot still used by visible actual armor must not be removed with another SFS-hidden armor");
+}
+
+void TestTngGenitalCoverIsolation() {
+  using namespace sfs::armor::rules;
+  constexpr auto slot52 = kGenitalSlotMask;
+  constexpr auto slot32 = std::uint64_t{1} << 2;
+
+  Expect(IsTngGenitalCoverIdentity(slot52, "thenewgentleman.esp",
+                                   "tng_genitalcover", "") &&
+             IsTngGenitalCoverIdentity(slot52, "tofu merged.esp",
+                                       "tng_genitalcover", ""),
+         "The exact TNG cover token must be excluded even after a plugin merge");
+  Expect(!IsTngGenitalCoverIdentity(slot32, "thenewgentleman.esp",
+                                    "tng_genitalcover", "") &&
+             !IsTngGenitalCoverIdentity(slot52, "userarmor.esp",
+                                        "custom_genitalcover", "Genital Cover"),
+         "TNG cover isolation must require slot 52 and must not hide user armors by name");
+
+  auto projection = ResolveGenitalCoverProjection(false, false);
+  Expect(!projection.hideEquippedCover && !projection.occupyGenitalSlot,
+         "Without SFS genital correction, TNG must retain sole control of its blocker");
+  projection = ResolveGenitalCoverProjection(true, true);
+  Expect(!projection.hideEquippedCover && projection.occupyGenitalSlot,
+         "A concealing registered appearance must occupy slot 52 without exposing the internal token");
+  projection = ResolveGenitalCoverProjection(true, false);
+  Expect(projection.hideEquippedCover && !projection.occupyGenitalSlot,
+         "A revealing registered appearance must hide only TNG's equipped blocker");
+
+  Expect(!ShouldApplyGenitalCoverProjection(false, true, false) &&
+             !ShouldApplyGenitalCoverProjection(false, false, true),
+         "A custom or SOS slot-52 skin must never enable TNG projection when TNG is absent");
+  Expect(ShouldApplyGenitalCoverProjection(true, true, false) &&
+             ShouldApplyGenitalCoverProjection(true, false, true) &&
+             !ShouldApplyGenitalCoverProjection(true, false, false),
+         "TNG projection must require its installation and actor-local skin or cover evidence");
+
+  Expect(ShouldRefreshForGenitalCoverEvent(true, true, false, false) &&
+             ShouldRefreshForGenitalCoverEvent(true, false, true, false) &&
+             ShouldRefreshForGenitalCoverEvent(true, false, false, true),
+         "TNG cover changes must refresh the player and only state-owning NPCs");
+  Expect(!ShouldRefreshForGenitalCoverEvent(true, false, false, false) &&
+             !ShouldRefreshForGenitalCoverEvent(false, true, true, true),
+         "TNG cover changes must not scan unrelated NPCs or run without TNG");
+}
+
+void TestGenitalCompatibilityEnvironmentIsolation() {
+  using namespace sfs::native::genital_compatibility::rules;
+
+  constexpr Environment none{};
+  constexpr Environment sosOnly{.sosInstalled = true,
+                                .tngInstalled = false};
+  constexpr Environment tngOnly{.sosInstalled = false,
+                                .tngInstalled = true};
+  constexpr Environment both{.sosInstalled = true, .tngInstalled = true};
+
+  Expect(!IsSosCompatibilityAvailable(none, true, true, true) &&
+             !IsTngCompatibilityAvailable(none, true, true),
+         "Genital compatibility must remain disabled when neither runtime is installed");
+
+  Expect(IsSosCompatibilityAvailable(sosOnly, true, false, false) &&
+             IsSosCompatibilityAvailable(sosOnly, false, true, false) &&
+             IsSosCompatibilityAvailable(sosOnly, false, false, true) &&
+             !IsTngCompatibilityAvailable(sosOnly, true, true),
+         "An SOS-only environment must keep every established SOS evidence path without enabling TNG");
+
+  Expect(!IsSosCompatibilityAvailable(tngOnly, true, true, true) &&
+             IsTngCompatibilityAvailable(tngOnly, true, false) &&
+             IsTngCompatibilityAvailable(tngOnly, false, true) &&
+             !IsTngCompatibilityAvailable(tngOnly, false, false),
+         "A TNG-only environment must use only TNG skin or cover evidence and never inherit SOS state");
+
+  Expect(IsSosCompatibilityAvailable(both, true, false, false) &&
+             IsTngCompatibilityAvailable(both, false, true),
+         "When both runtimes are installed their decisions must remain independent and available");
 }
 
 void TestPausedCharacterRotationIsolation() {
@@ -367,30 +566,46 @@ void TestCatalogScrollbarReleaseIsolation() {
          "A catalog row must own its release without a second global clear");
 }
 
-void TestMenuCameraCommitTiming() {
-  using sfs::ui::menu_interaction::ShouldCommitCharacterCamera;
-  Expect(!ShouldCommitCharacterCamera(true, true, false),
-         "Camera commit must wait until third person is ready");
-  Expect(ShouldCommitCharacterCamera(true, true, true),
-         "Pending camera framing must commit on the first ready menu frame");
-  Expect(!ShouldCommitCharacterCamera(true, false, true),
-         "Stable framing must not issue redundant camera commits");
-  Expect(!ShouldCommitCharacterCamera(false, true, true),
-         "Closed presentation state must never commit camera work");
+void TestMenuCameraZoomSynchronization() {
+  using sfs::ui::menu_interaction::CameraZoomUpdate;
+  using sfs::ui::menu_interaction::CameraZoomValues;
+  using sfs::ui::menu_interaction::ResolveCameraZoomUpdate;
+
+  constexpr CameraZoomValues live{32.0f, 7.0f};
+  constexpr CameraZoomValues saved{-4.0f, 11.0f};
+  const auto snapped = ResolveCameraZoomUpdate(
+      CameraZoomUpdate::SnapCurrentToTarget, live, saved);
+  Expect(snapped.target == 32.0f && snapped.current == 32.0f,
+         "Menu camera activation must snap current zoom to Skyrim's target");
+
+  const auto restored = ResolveCameraZoomUpdate(
+      CameraZoomUpdate::RestoreSaved, live, saved);
+  Expect(restored.target == -4.0f && restored.current == 11.0f,
+         "Menu camera close must restore target and current zoom independently");
+
+  const auto refreshed =
+      ResolveCameraZoomUpdate(CameraZoomUpdate::Refresh, live, saved);
+  Expect(refreshed.target == live.target && refreshed.current == live.current,
+         "Rotation-only camera refresh must not change zoom state");
 }
+
 } // namespace
 
 int main() {
   TestStripLinkPolicies();
+  TestPapyrusPostLinkInspectionBoundary();
   TestVanillaAnchorResolution();
   TestActorLocalModSettingsState();
+  TestHelmetToggleAppearanceBoundary();
   TestActorLocalActualEquipmentTransactions();
   TestSexLabPPlusStripContract();
   TestBodyMorphActivity();
   TestRefreshBackends();
+  TestTngGenitalCoverIsolation();
+  TestGenitalCompatibilityEnvironmentIsolation();
   TestPausedCharacterRotationIsolation();
   TestCatalogScrollbarReleaseIsolation();
-  TestMenuCameraCommitTiming();
+  TestMenuCameraZoomSynchronization();
 
   if (g_failures != 0) {
     std::cerr << g_failures << " core behavior regression test(s) failed\n";

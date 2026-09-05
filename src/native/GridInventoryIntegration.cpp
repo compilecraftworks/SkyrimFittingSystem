@@ -110,7 +110,7 @@ void OnGridInventoryMessage(SKSE::MessagingInterface::Message *a_message) {
 }
 } // namespace
 
-void RegisterMessageListener(SKSE::MessagingInterface *a_messaging) {
+void RegisterMessageListener(const SKSE::MessagingInterface *a_messaging) {
   if (a_messaging == nullptr) {
     logger::warn("[GRID COSTUME] SKSE messaging interface unavailable");
     return;

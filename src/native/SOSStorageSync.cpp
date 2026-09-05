@@ -1,6 +1,7 @@
 #include "native/SOSStorageSync.h"
 
 #include "native/ArmorSkinning.h"
+#include "native/GenitalCompatibility.h"
 
 #include <array>
 #include <atomic>
@@ -174,6 +175,13 @@ void DispatchListEntry(const std::shared_ptr<SyncRequest> &a_request,
 
 namespace sfs::native {
 void RequestSOSStorageSync() {
+  if (!sfs::native::genital_compatibility::IsSosInstalled()) {
+    ++g_syncGeneration;
+    ClearSOSUserArmorLists();
+    logger::debug("Skipped SOS Storage sync: SOS runtime is not installed");
+    return;
+  }
+
   auto request = std::make_shared<SyncRequest>();
   request->generation = ++g_syncGeneration;
   DispatchListCount(request, 0);

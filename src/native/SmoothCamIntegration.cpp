@@ -126,8 +126,11 @@ namespace sfs::native::smoothcam {
 
 void RegisterInterfaceListener() {
   const std::scoped_lock lock(g_interfaceMutex);
-  if (g_listenerRegistered ||
-      ::GetModuleHandleW(kSmoothCamModuleName) == nullptr) {
+  if (g_listenerRegistered) {
+    return;
+  }
+  if (::GetModuleHandleW(kSmoothCamModuleName) == nullptr) {
+    logger::info("SmoothCam camera-control API unavailable: module not loaded");
     return;
   }
   auto *messaging = SKSE::GetMessagingInterface();
@@ -135,6 +138,9 @@ void RegisterInterfaceListener() {
       messaging->RegisterListener(kSmoothCamPluginName,
                                   OnSmoothCamMessage)) {
     g_listenerRegistered = true;
+    logger::info("Registered SmoothCam camera-control response listener");
+  } else {
+    logger::warn("Failed to register SmoothCam camera-control response listener");
   }
 }
 
@@ -150,9 +156,10 @@ void RequestInterface() {
   InterfaceRequest request;
   PluginCommand command;
   command.commandStructure = std::addressof(request);
-  static_cast<void>(messaging->Dispatch(0, std::addressof(command),
-                                        sizeof(command),
-                                        kSmoothCamPluginName));
+  const bool dispatched = messaging->Dispatch(
+      0, std::addressof(command), sizeof(command), kSmoothCamPluginName);
+  logger::info("Requested SmoothCam V2 camera-control API: dispatched={}",
+               dispatched);
 }
 
 bool AcquireCameraControl() {

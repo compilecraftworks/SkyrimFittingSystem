@@ -567,6 +567,7 @@
     "kit_generator.error.merge_failed": "키트 병합에 실패했습니다: {}",
     "kit_generator.error.create_folder": "키트 폴더를 만들 수 없습니다: {}",
     "kit_generator.error.open_output": "출력 파일을 열 수 없습니다: {}",
-    "kit_generator.error.write_output": "출력 파일을 저장할 수 없습니다: {}"
+    "kit_generator.error.write_output": "출력 파일을 저장할 수 없습니다: {}",
+    "kit_generator.error.files_skipped": "키트 파일 {}개를 건너뛰었습니다. 첫 오류: {}"
   }
 }

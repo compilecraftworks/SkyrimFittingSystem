@@ -8,6 +8,8 @@
 #endif
 #undef private
 
+#include "catalog/KitJsonRules.h"
+
 #if defined(SFS_INTEGRATED_KIT_GENERATOR_TEST)
 namespace kit_generator_under_test = sfs::kit_generator;
 #else
@@ -903,6 +905,48 @@ void TestMultiMerge() {
   generator.state_.store(kit_generator_under_test::ScanState::Ready,
                          std::memory_order_release);
 }
+
+void TestUnicodeKitOutputPath() {
+  std::string malformedName = "Armor ";
+  malformedName.push_back(static_cast<char>(0xFF));
+  malformedName += " 이름";
+  const auto sanitized = sfs::utf8::Sanitize(malformedName);
+  Require(sanitized.find("\xEF\xBF\xBD") != std::string::npos,
+          "Invalid plugin text bytes must be replaced before Windows path conversion");
+  const auto path = SafeFilenameStem(malformedName);
+  Require(!path.empty(),
+          "Malformed plugin text must still produce a usable kit filename");
+
+  const auto longPath = SafeFilenameStem(std::string(400, 'A'));
+#if defined(_WIN32)
+  Require(longPath.native().size() <= 140,
+          "Generated kit filename stems must stay within the Windows path budget");
+#endif
+  const auto collisionPath = WithCollisionSuffix(longPath, 2);
+  Require(collisionPath != longPath &&
+              sfs::utf8::PathToUtf8String(collisionPath).ends_with(" 2"),
+          "A long generated filename must retain its collision identity");
+}
+
+void TestModexKitItemCompatibilityRules() {
+  using namespace sfs::catalog::kit_json;
+
+  Require(IsItemEquipped(nlohmann::json::object()),
+          "Legacy kit items without Equipped must remain enabled");
+  Require(IsItemEquipped({{"Equipped", true}}) &&
+              !IsItemEquipped({{"Equipped", false}}) &&
+              !IsItemEquipped({{"Equipped", "false"}}),
+          "Modex Equipped=false and invalid explicit states must not become appearances");
+  Require(GetItemPluginName({{"Plugin", "Armor Pack.esp"}})
+                  .value_or("") == "Armor Pack.esp" &&
+              !GetItemPluginName(nlohmann::json::object()),
+          "Modex item plugin identity must be retained when present");
+  Require(MakePluginEditorIDKey("Armor Pack.ESP", "SharedArmor") ==
+              MakePluginEditorIDKey("armor pack.esp", "sharedarmor") &&
+              MakePluginEditorIDKey("Other.esp", "SharedArmor") !=
+                  MakePluginEditorIDKey("Armor Pack.esp", "SharedArmor"),
+          "Kit lookup keys must be case-insensitive without crossing plugins");
+}
 } // namespace
 
 int main() {
@@ -928,6 +972,8 @@ int main() {
     TestIsolatedSlotsStayOutsideMultiSlotDynamicProgramming();
 #endif
     TestMultiMerge();
+    TestUnicodeKitOutputPath();
+    TestModexKitItemCompatibilityRules();
     std::cout << "Generator logic regression tests passed\n";
     return 0;
   } catch (const std::exception &exception) {

@@ -567,6 +567,7 @@
     "kit_generator.error.merge_failed": "套件合并失败：{}",
     "kit_generator.error.create_folder": "无法创建套件文件夹：{}",
     "kit_generator.error.open_output": "无法打开输出文件：{}",
-    "kit_generator.error.write_output": "无法写入输出文件：{}"
+    "kit_generator.error.write_output": "无法写入输出文件：{}",
+    "kit_generator.error.files_skipped": "已跳过 {} 个套件文件；首个错误：{}"
   }
 }

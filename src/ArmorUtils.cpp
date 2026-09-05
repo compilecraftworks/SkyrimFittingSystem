@@ -1,4 +1,5 @@
 #include "ArmorUtils.h"
+#include "TngGenitalCoverRules.h"
 #include "ui/Localization.h"
 
 #include <algorithm>
@@ -228,7 +229,7 @@ std::uint64_t GetArmorWorkbenchSlotMask(const RE::TESObjectARMO *a_armor) {
       std::to_underlying(RE::BGSBipedObjectForm::BipedObjectSlot::kHair));
   const auto circletSlot = static_cast<std::uint64_t>(
       std::to_underlying(RE::BGSBipedObjectForm::BipedObjectSlot::kCirclet));
-  if (!IsSosTngGenitalArmor(a_armor) && (slotMask & bodySlot) != 0 &&
+  if (!IsSosTngInternalArmor(a_armor) && (slotMask & bodySlot) != 0 &&
       (slotMask & genitalSlot) != 0) {
     slotMask &= ~genitalSlot;
   }
@@ -250,9 +251,17 @@ bool HasArmorAddons(const RE::TESObjectARMO *a_armor) {
                              });
 }
 
-bool IsSosTngGenitalArmor(const RE::TESObjectARMO *a_armor) {
+namespace {
+enum class SosTngArmorKind : std::uint8_t {
+  kOrdinary,
+  kGenitalAddon,
+  kTngCover,
+};
+
+[[nodiscard]] SosTngArmorKind
+ClassifySosTngArmor(const RE::TESObjectARMO *a_armor) {
   if (!a_armor) {
-    return false;
+    return SosTngArmorKind::kOrdinary;
   }
 
   const auto genitalSlot = static_cast<std::uint64_t>(std::to_underlying(
@@ -260,38 +269,67 @@ bool IsSosTngGenitalArmor(const RE::TESObjectARMO *a_armor) {
   const auto slotMask =
       GetArmorDisplaySlotMask(a_armor) | a_armor->GetSlotMask().underlying();
   if ((slotMask & genitalSlot) == 0) {
-    return false;
-  }
-
-  if (HasKeywordEditorID(a_armor, "SOS_Genitals")) {
-    return true;
+    return SosTngArmorKind::kOrdinary;
   }
 
   const auto pluginName = ToLower(GetPluginName(a_armor));
   const auto editorID = ToLower(GetEditorID(a_armor));
   const auto displayName = ToLower(GetDisplayName(a_armor));
+  if (rules::IsTngGenitalCoverIdentity(slotMask, pluginName, editorID,
+                                       displayName)) {
+    return SosTngArmorKind::kTngCover;
+  }
+  if (editorID.empty() &&
+      pluginName.find("thenewgentleman") != std::string::npos &&
+      RE::TESForm::LookupByEditorID<RE::TESObjectARMO>(
+          "TNG_GenitalCover") == a_armor) {
+    return SosTngArmorKind::kTngCover;
+  }
+
+  if (HasKeywordEditorID(a_armor, "SOS_Genitals")) {
+    return SosTngArmorKind::kGenitalAddon;
+  }
+
+  // Preserve the established boundary for user armors whose name merely says
+  // "genital cover". Only TNG's exact internal blocker is hidden from SFS.
   if (editorID.find("genitalcover") != std::string::npos ||
       displayName.find("genital cover") != std::string::npos) {
-    return false;
+    return SosTngArmorKind::kOrdinary;
   }
 
   if (editorID.find("genital") != std::string::npos ||
       editorID.find("schlong") != std::string::npos ||
       displayName.find("genital") != std::string::npos ||
       displayName.find("schlong") != std::string::npos) {
-    return true;
+    return SosTngArmorKind::kGenitalAddon;
   }
 
   if (pluginName.find("schlongs of skyrim") != std::string::npos &&
       (editorID.find("genital") != std::string::npos ||
        editorID.find("schlong") != std::string::npos ||
        displayName.find("schlong") != std::string::npos)) {
-    return true;
+    return SosTngArmorKind::kGenitalAddon;
   }
 
-  return pluginName.find("thenewgentleman") != std::string::npos &&
-         editorID.starts_with("tng_genital") &&
-         editorID.find("cover") == std::string::npos;
+  if (pluginName.find("thenewgentleman") != std::string::npos &&
+      editorID.starts_with("tng_genital") &&
+      editorID.find("cover") == std::string::npos) {
+    return SosTngArmorKind::kGenitalAddon;
+  }
+  return SosTngArmorKind::kOrdinary;
+}
+} // namespace
+
+bool IsSosTngGenitalArmor(const RE::TESObjectARMO *a_armor) {
+  return ClassifySosTngArmor(a_armor) == SosTngArmorKind::kGenitalAddon;
+}
+
+bool IsTngGenitalCoverArmor(const RE::TESObjectARMO *a_armor) {
+  return ClassifySosTngArmor(a_armor) == SosTngArmorKind::kTngCover;
+}
+
+bool IsSosTngInternalArmor(const RE::TESObjectARMO *a_armor) {
+  return ClassifySosTngArmor(a_armor) != SosTngArmorKind::kOrdinary;
 }
 
 std::vector<std::string>

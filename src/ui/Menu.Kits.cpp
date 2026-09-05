@@ -165,7 +165,7 @@ bool Menu::DrawKitTab() {
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(0, 0, 0, 0));
         const bool selected = browser.selectedKey == kit.id;
-        ImGui::Selectable(
+        const bool rowPressed = ImGui::Selectable(
             ("##kit-row-hit-" + std::to_string(rowIndex)).c_str(), selected,
             ImGuiSelectableFlags_SpanAllColumns |
                 ImGuiSelectableFlags_AllowOverlap |
@@ -219,10 +219,13 @@ bool Menu::DrawKitTab() {
               ThemeConfig::GetSingleton()->GetColorU32("TABLE_HOVER", 0.12f));
         }
 
+        // Let the Selectable's own ButtonBehavior classify the press. Sampling
+        // only the global mouse state made fast second clicks easier to lose
+        // while a complex kit preview refreshed the actor between clicks.
         const bool doubleClicked =
-            rowHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
+            rowPressed && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
         const bool releasedOnRow =
-            ImGui::IsMouseReleased(ImGuiMouseButton_Left) && rowHovered;
+            rowPressed && ImGui::IsMouseReleased(ImGuiMouseButton_Left);
         if (doubleClicked) {
           rowClicked = true;
           AddKitEntryToWorkbench(kit);
