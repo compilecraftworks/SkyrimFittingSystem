@@ -95,5 +95,5 @@ trampoline safety boundary introduced by v1.4.5.
   Kit Generator, BodyFamily, conditions, condition drag/drop, Fitting Dye, kit
   navigation, final nudity/footwear, IED routing and trampoline decoding, core behavior, RaceMenu ABI versions,
   cross-feature morph tracking, and source ownership checks.
-- Rendered behavior and optional-mod ownership still require the documented
-  SE/AE in-game matrix before release.
+- Automated verification does not replace the documented SE/AE in-game matrix
+  for rendered behavior and optional-mod ownership.
