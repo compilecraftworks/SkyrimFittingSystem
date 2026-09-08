@@ -91,10 +91,21 @@ public:
   static Generator &Get();
 
   void SnapshotLoadedArmorForms();
-  [[nodiscard]] std::vector<PluginSource> &PluginSources();
   [[nodiscard]] const std::vector<PluginSource> &PluginSources() const;
+  [[nodiscard]] bool SetPluginSourceSelected(std::size_t a_index,
+                                             bool a_selected);
+  void SetAllPluginSourcesSelected(bool a_selected);
   [[nodiscard]] const std::vector<GeneratedKit> &GeneratedKits() const;
-  [[nodiscard]] std::vector<GeneratedKit> &GeneratedKits();
+  [[nodiscard]] bool RenameGeneratedKit(std::size_t a_kitIndex,
+                                        std::string a_name);
+  [[nodiscard]] bool ResetGeneratedKitDraftCandidate(std::size_t a_kitIndex);
+  [[nodiscard]] bool SetGeneratedKitDraftCandidate(
+      std::size_t a_kitIndex, std::size_t a_candidateIndex);
+  [[nodiscard]] bool SelectGeneratedKitCandidate(
+      std::size_t a_kitIndex, std::size_t a_candidateIndex);
+  [[nodiscard]] bool ReplaceGeneratedCandidateItems(
+      std::size_t a_kitIndex, std::size_t a_candidateIndex,
+      std::vector<ArmorRecord> a_items);
   [[nodiscard]] ProgressSnapshot GetProgressSnapshot() const;
   [[nodiscard]] bool StartScan(bool a_includeSafetyPrefix);
   void CancelScan();

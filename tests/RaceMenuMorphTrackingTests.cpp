@@ -184,6 +184,29 @@ int main() {
   Check(morph.writes[player.id] == beforeHidden + 1, "visibility restore must replay missed update");
   checkBoth("visibility restore without OnAttach");
 
+  // Every feature below ultimately requests the same actor-local display
+  // refresh. Re-publishing an unchanged final display must preserve the
+  // remembered roots even when the backend retains them and emits no OnAttach.
+  // This sequence locks the historical cross-feature regression where work on
+  // HT2, dye, or paused camera handling accidentally disabled live BodyMorph.
+  for (const auto *featureRefresh : {
+           "equipment/outfit/condition display refresh",
+           "kit and generator preview refresh",
+           "protected/shield slot refresh",
+           "Helmet Toggle 2 refresh",
+           "fitting dye restore refresh",
+           "paused camera/pose refresh",
+           "Virtual Token Mod-Configured strip/redress refresh",
+           "Vanilla-slot strip/redress refresh",
+           "Direct+Mod-Configured strip/redress refresh",
+           "Direct+Vanilla strip/redress refresh",
+           "SexLab P+ adapter refresh",
+           "Devious Devices adapter refresh",
+           "DAVE/DAV/native backend refresh"}) {
+    publish(player, false);
+    checkBoth(featureRefresh);
+  }
+
   playerNode.parent = nullptr;
   const auto beforeDetached = morph.writes[player.id];
   QueueUpdateModelWeightAppearanceSync(player.id); SKSE::tasks.Drain();

@@ -4,19 +4,20 @@
 #include "ConditionMaterializer.h"
 #include "TngGenitalCoverRules.h"
 #include "conditions/Status.h"
-#include "native/ArmorSkinning.h"
 #include "native/ArmorRefreshRules.h"
 #include "native/DaveIntegration.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingDye.h"
 #include "native/FittingSlotState.h"
+#include "native/FinalRenderedOutfitRules.h"
 #include "native/GenitalCompatibility.h"
 #include "native/GenitalArmorResolver.h"
 #include "native/HelmetToggle2Integration.h"
+#include "native/IedVisitorRoutingRules.h"
 #include "native/RaceMenuBodyMorph.h"
 #include "native/RegisteredAppearanceMorphRules.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/Menu.h"
 #include "workbench/AppearanceSlotProtection.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
@@ -1706,7 +1707,7 @@ BuildDisplaySet(RE::Actor *a_actor,
           const auto conditionalActual =
               conditionalVisibility.actual.find(row.equipped.formID);
           const bool ddOrdinaryVisible =
-              sfs::poc::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
+              sfs::devious_devices::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
                   a_actor->GetFormID(), row.equipped.formID);
           const bool hideEquipped =
               conditionalActual != conditionalVisibility.actual.end()
@@ -1770,7 +1771,7 @@ BuildDisplaySet(RE::Actor *a_actor,
                 !overrideItem.locked && !allowRestrictedPreview &&
                 a_applyTemporarySuppression &&
                 (overrideVisualSlotMask & suppressedFittingSlots) == 0 &&
-                sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
+                sfs::virtual_tokens::IsVirtualWornTokenAppearanceSuppressed(
                     a_actor->GetFormID(), armor->GetFormID(),
                     overrideVisualSlotMask);
 
@@ -1831,7 +1832,7 @@ BuildDisplaySet(RE::Actor *a_actor,
       menu->GetWorkbench().IsNativePreviewReplacingRowsForActor(actorFormID);
   if (a_applyTemporarySuppression) {
     suppressedFittingSlots |=
-        sfs::poc::CalculateDeviousDevicesHiderSuppressedFittingSlotMask(
+        sfs::devious_devices::CalculateDeviousDevicesHiderSuppressedFittingSlotMask(
             a_actor, previewRows, previewReplacesRows,
             suppressedFittingSlots);
   }
@@ -1846,7 +1847,7 @@ BuildDisplaySet(RE::Actor *a_actor,
       const auto conditionalActual =
           conditionalVisibility.actual.find(row.equipped.formID);
       const bool ddOrdinaryVisible =
-          sfs::poc::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
+          sfs::devious_devices::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
               a_actor->GetFormID(), row.equipped.formID);
       const bool hideEquipped =
           conditionalActual != conditionalVisibility.actual.end()
@@ -2737,7 +2738,7 @@ CollectActiveFittingArmors(
                 !overrideItem.locked && !allowRestrictedPreview &&
                 !a_ignoreVirtualTokenSuppression &&
                 (slotMask & suppressedFittingSlots) == 0 &&
-                sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
+                sfs::virtual_tokens::IsVirtualWornTokenAppearanceSuppressed(
                     a_actor->GetFormID(), armor->GetFormID(), slotMask);
             if (slotMask == 0 || appearanceTicketSuppressed ||
                 (!overrideItem.locked && !allowRestrictedPreview &&
@@ -2764,7 +2765,7 @@ CollectActiveFittingArmors(
       menu->GetWorkbench().IsNativePreviewReplacingRowsForActor(actorFormID);
   if (!a_ignoreVirtualTokenSuppression) {
     suppressedFittingSlots |=
-        sfs::poc::CalculateDeviousDevicesHiderSuppressedFittingSlotMask(
+        sfs::devious_devices::CalculateDeviousDevicesHiderSuppressedFittingSlotMask(
             a_actor, previewRows, previewReplacesRows,
             suppressedFittingSlots);
   }
@@ -2836,7 +2837,49 @@ std::uint32_t GetActiveFittingSlotMask(RE::Actor *a_actor) {
 }
 
 std::uint32_t GetDisplayedFittingSlotMask(RE::Actor *a_actor) {
-  return BuildDisplaySet(a_actor).slotMask;
+  return GetFinalRenderedOutfitSnapshot(a_actor).additionalSlotMask;
+}
+
+FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(
+    RE::Actor *a_actor) {
+  FinalRenderedOutfitSnapshot snapshot;
+  if (!a_actor) {
+    return snapshot;
+  }
+
+  const auto displaySet = BuildDisplaySet(a_actor);
+  snapshot.managedBySfs = displaySet.active;
+  snapshot.additionalSlotMask = displaySet.slotMask;
+  snapshot.visibleAdditionalArmors = displaySet.armors;
+
+  const auto equippedArmors = CollectEquippedArmors(a_actor);
+  snapshot.visibleActualArmors =
+      CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
+  for (const auto *armor : snapshot.visibleActualArmors) {
+    if (armor) {
+      snapshot.visibleActualSlotMask |= static_cast<std::uint32_t>(
+          sfs::armor::GetArmorDisplaySlotMask(armor));
+    }
+  }
+  return snapshot;
+}
+
+const RE::TESObjectARMO *GetDisplayedFittingArmorForSlot(
+    RE::Actor *a_actor, const std::uint32_t a_slotMask) {
+  if (!a_actor || a_slotMask == 0) {
+    return nullptr;
+  }
+
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
+  const auto found = std::ranges::find_if(
+      snapshot.visibleAdditionalArmors,
+      [a_slotMask](const RE::TESObjectARMO *a_armor) {
+        return a_armor &&
+               (static_cast<std::uint32_t>(
+                    sfs::armor::GetArmorDisplaySlotMask(a_armor)) &
+                a_slotMask) != 0;
+      });
+  return found != snapshot.visibleAdditionalArmors.end() ? *found : nullptr;
 }
 
 std::optional<bool>
@@ -2853,15 +2896,13 @@ GetDisplayedBodyKeywordState(RE::Actor *a_actor,
     return std::nullopt;
   }
 
-  const auto displaySet = BuildDisplaySet(a_actor);
-  if (!displaySet.active) {
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
+  if (!snapshot.managedBySfs) {
     return std::nullopt;
   }
 
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
-  const auto visibleRealArmors =
-      CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
-  if (std::ranges::any_of(visibleRealArmors, [a_keyword](const auto *a_armor) {
+  if (std::ranges::any_of(snapshot.visibleActualArmors,
+                          [a_keyword](const auto *a_armor) {
         return a_armor && a_armor->HasKeyword(a_keyword);
       })) {
     return true;
@@ -2870,7 +2911,8 @@ GetDisplayedBodyKeywordState(RE::Actor *a_actor,
   const auto bodyMask = static_cast<std::uint32_t>(
       sfs::armor::GetArmorSlotMask(32));
   return std::ranges::any_of(
-      displaySet.armors, [&](const RE::TESObjectARMO *a_armor) {
+      snapshot.visibleAdditionalArmors,
+      [&](const RE::TESObjectARMO *a_armor) {
         if (!a_armor) {
           return false;
         }
@@ -3144,15 +3186,21 @@ void VisitWornItemsWithHiddenRealEquipmentFilter(
   auto *target = a_target ? a_target : a_inventory->owner;
   auto *actor = target ? target->As<RE::Actor>() : nullptr;
   const auto displaySet = BuildDisplaySet(actor);
-  if (!displaySet.active ||
-      CollectHiddenWornSlotMask(target, displaySet) == 0) {
+  const auto filterRequired =
+      displaySet.active &&
+      CollectHiddenWornSlotMask(target, displaySet) != 0;
+  const auto iedChainTarget = g_iedVisitWornItemsChainTarget.load();
+  const auto route = sfs::native::ied::rules::ResolveVisitorRoute(
+      filterRequired, a_visitWornItems, iedChainTarget);
+  if (route == sfs::native::ied::rules::VisitorRoute::
+                   CurrentTargetUnfiltered) {
     visitWornItems(a_inventory, a_visitor);
     return;
   }
 
   HiddenRealEquipmentFilterVisitor visitor{actor, displaySet, *a_visitor};
-  const auto iedChainTarget = g_iedVisitWornItemsChainTarget.load();
-  if (iedChainTarget != 0 && a_visitWornItems == iedChainTarget) {
+  if (route == sfs::native::ied::rules::VisitorRoute::
+                   OriginalEngineWithSfsFilterThenIedEvaluate) {
     // IED's hook accepts a concrete InitWornVisitor reference. Passing SFS's
     // generic filtering visitor through that hook violates its ABI and can
     // crash during an equipment rebuild. Filter through the original engine
@@ -3180,7 +3228,9 @@ bool IsDisplayedFittingArmor(RE::Actor *a_actor,
   if (!a_actor || !a_armor) {
     return false;
   }
-  return BuildDisplaySet(a_actor).Contains(a_armor);
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
+  return std::ranges::find(snapshot.visibleAdditionalArmors, a_armor) !=
+         snapshot.visibleAdditionalArmors.end();
 }
 
 bool IsArmorShownForActor(RE::Actor *a_actor,
@@ -3189,14 +3239,11 @@ bool IsArmorShownForActor(RE::Actor *a_actor,
     return false;
   }
 
-  const auto displaySet = BuildDisplaySet(a_actor);
-  if (displaySet.Contains(a_armor)) {
-    return true;
-  }
-
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
-  return equippedArmors.contains(a_armor) &&
-         IsRealArmorVisibleInDisplaySet(a_actor, displaySet, a_armor);
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
+  return std::ranges::find(snapshot.visibleAdditionalArmors, a_armor) !=
+             snapshot.visibleAdditionalArmors.end() ||
+         std::ranges::find(snapshot.visibleActualArmors, a_armor) !=
+             snapshot.visibleActualArmors.end();
 }
 
 bool IsShownArmorKeywordForActor(RE::Actor *a_actor,
@@ -3205,15 +3252,12 @@ bool IsShownArmorKeywordForActor(RE::Actor *a_actor,
     return false;
   }
 
-  const auto displaySet = BuildDisplaySet(a_actor);
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
-  const auto visibleRealArmors =
-      CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
   const auto hasKeyword = [a_keyword](const auto *a_armor) {
     return a_armor && a_armor->HasKeyword(a_keyword);
   };
-  return std::ranges::any_of(visibleRealArmors, hasKeyword) ||
-         std::ranges::any_of(displaySet.armors, hasKeyword);
+  return std::ranges::any_of(snapshot.visibleActualArmors, hasKeyword) ||
+         std::ranges::any_of(snapshot.visibleAdditionalArmors, hasKeyword);
 }
 
 bool AnyShownArmorForActor(RE::Actor *a_actor,
@@ -3223,18 +3267,17 @@ bool AnyShownArmorForActor(RE::Actor *a_actor,
     return false;
   }
 
-  const auto displaySet = BuildDisplaySet(a_actor);
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
-  for (const auto *armor : equippedArmors) {
-    if (IsRealArmorVisibleInDisplaySet(a_actor, displaySet, armor) &&
-        a_predicate(armor, a_context)) {
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
+  for (const auto *armor : snapshot.visibleActualArmors) {
+    if (a_predicate(armor, a_context)) {
       return true;
     }
   }
-  return std::ranges::any_of(displaySet.armors, [a_predicate, a_context](
-                                                  const auto *armor) {
-    return a_predicate(armor, a_context);
-  });
+  return std::ranges::any_of(
+      snapshot.visibleAdditionalArmors,
+      [a_predicate, a_context](const auto *armor) {
+        return a_predicate(armor, a_context);
+      });
 }
 
 bool IsActorVisuallyNakedForSlots(RE::Actor *a_actor,
@@ -3243,18 +3286,9 @@ bool IsActorVisuallyNakedForSlots(RE::Actor *a_actor,
     return false;
   }
 
-  const auto displaySet = BuildDisplaySet(a_actor);
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
-  const auto visibleRealArmors =
-      CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
-  const auto coversRequestedSlots = [a_slotMask](const auto *a_armor) {
-    return a_armor &&
-           (static_cast<std::uint32_t>(
-                sfs::armor::GetArmorDisplaySlotMask(a_armor)) &
-            a_slotMask) != 0;
-  };
-  return !std::ranges::any_of(visibleRealArmors, coversRequestedSlots) &&
-         !std::ranges::any_of(displaySet.armors, coversRequestedSlots);
+  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
+  return sfs::native::final_outfit::rules::IsVisuallyNakedForSlots(
+      snapshot.visibleActualSlotMask, snapshot.additionalSlotMask, a_slotMask);
 }
 
 void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {

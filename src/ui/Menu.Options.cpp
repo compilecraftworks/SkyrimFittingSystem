@@ -1,8 +1,8 @@
 #include "Menu.h"
 
 #include "native/ExternalEquipmentTransactions.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 
 #include "ArmorUtils.h"
 #include "ThemeConfig.h"
@@ -720,11 +720,12 @@ void Menu::DrawOptionsTab() {
             } else {
               workbench::SetExternalModStripLinkMode(mode);
               native::external_equipment::ClearRuntimeState();
-              poc::ResetVirtualWornTokenRuntimeState();
-              poc::UpdateVirtualWornTokenCache();
+              virtual_tokens::ResetVirtualWornTokenRuntimeState();
+              virtual_tokens::UpdateVirtualWornTokenCache();
               if (mode == workbench::ExternalModStripLinkMode::
                               ModSettingsSlots) {
-                static_cast<void>(poc::RefreshDeviousDevicesHiderSettings());
+                static_cast<void>(devious_devices::
+                                      RefreshDeviousDevicesHiderSettings());
               }
               SaveUserSettings();
               workbench_.RefreshNativeArmorOverrides(
@@ -788,8 +789,8 @@ void Menu::DrawOptionsTab() {
         workbench::SetSpecialEffectProtectedSlotMask(protectedSlotMask);
         workbench_.RemoveProtectedAppearanceRegistrations();
         native::external_equipment::ClearRuntimeState();
-        poc::ResetVirtualWornTokenRuntimeState();
-        poc::UpdateVirtualWornTokenCache();
+        virtual_tokens::ResetVirtualWornTokenRuntimeState();
+        virtual_tokens::UpdateVirtualWornTokenCache();
         SaveUserSettings();
         workbench_.RefreshNativeArmorOverrides(
             ConditionDefinitions(), conditionStore_.revision, true);
@@ -810,8 +811,8 @@ void Menu::DrawOptionsTab() {
         workbench::SetShieldAppearanceSlotEnabled(shieldAppearanceEnabled);
         workbench_.RemoveProtectedAppearanceRegistrations();
         native::external_equipment::ClearRuntimeState();
-        poc::ResetVirtualWornTokenRuntimeState();
-        poc::UpdateVirtualWornTokenCache();
+        virtual_tokens::ResetVirtualWornTokenRuntimeState();
+        virtual_tokens::UpdateVirtualWornTokenCache();
         SaveUserSettings();
         workbench_.RefreshNativeArmorOverrides(
             ConditionDefinitions(), conditionStore_.revision, true);

@@ -1,0 +1,67 @@
+Skyrim Fitting System v1.6.0 - First Install And F6 Troubleshooting
+
+SFS is an SKSE64 plugin. It is not a standalone program and it is not a Skyrim
+Creations-menu mod. The included SkyrimFittingSystem-VirtualTokens.esl is only
+the helper plugin for strip/redress integration; enabling that ESL by itself
+cannot load SFSCore.dll or open the SFS menu.
+
+Requirements
+------------
+1. SKSE64 matching the exact installed Skyrim SE/AE runtime.
+2. Address Library for SKSE Plugins matching that runtime.
+3. powerofthree's Tweaks is strongly required for complete SFS behavior.
+4. Launch Skyrim through skse64_loader.exe every time.
+
+MO2
+---
+1. Install the SFS ZIP as a normal mod and enable it in MO2's left pane.
+2. Enable SkyrimFittingSystem-VirtualTokens.esl in the right-side Plugins tab.
+3. Select the SKSE executable in MO2's executable selector and click Run.
+   Do not start Skyrim Launcher or SkyrimSE.exe directly.
+
+Vortex
+------
+1. Install, enable, and deploy SFS normally.
+2. Enable SkyrimFittingSystem-VirtualTokens.esl in Vortex's Plugins page.
+3. Add or select skse64_loader.exe on the Vortex Dashboard and launch that.
+   SFS itself is not added as a tool; SKSE64 is the executable/tool to run.
+4. Enabling the ESL under Skyrim's Creations screen is not a replacement for
+   launching through SKSE64.
+
+Opening And Changing The Key
+----------------------------
+- Press F6 after reaching the main menu or loading a save.
+- The key is changed inside the SFS menu: F6 -> Options -> Toggle UI Button.
+- Skyrim's Escape -> Settings and Escape -> Controls screens are vanilla game
+  screens. They do not and will not contain an SFS Toggle UI Button entry.
+
+If F6 Does Nothing
+------------------
+On a successful SFSCore load, SFS immediately creates:
+
+  Data\SKSE\Plugins\SkyrimFittingSystem\settings.json
+
+With default MO2 output routing, a newly created file normally appears at:
+
+  <MO2 instance>\overwrite\SKSE\Plugins\SkyrimFittingSystem\settings.json
+
+An MO2 executable configured with "Create files in mod instead of Overwrite"
+may place it in that selected output mod instead. Vortex/manual installations
+normally expose it through the game's Data directory.
+
+Also check the SKSE log directory under:
+
+  Documents\My Games\<your Skyrim edition>\SKSE\Skyrim Fitting System.log
+
+- No Skyrim Fitting System.log and no settings.json: SFSCore.dll did not load. First confirm
+  that the game was launched through SKSE64, then verify SKSE64 and Address
+  Library match the exact Skyrim runtime and that the SFS mod is deployed.
+- settings.json exists but F6 still does nothing: inspect Skyrim Fitting System.log for
+  "unsupported Skyrim runtime" or "core hook signature validation failed".
+  Include Skyrim Fitting System.log and skse64.log in a bug report.
+- A custom binding can be reset by setting "toggleKey" to 64 and
+  "toggleModifier" to 0 while the game is closed. 64 is the DirectInput scan
+  code used by SFS for F6.
+
+Do not expect SFS files in MO2 Overwrite before SFSCore.dll has actually been
+loaded at least once. Merely activating the ESL does not execute native code.

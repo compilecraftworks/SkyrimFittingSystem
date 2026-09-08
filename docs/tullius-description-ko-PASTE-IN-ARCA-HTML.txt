@@ -13,7 +13,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 </style>
 </head>
 <body>
-<h1>Skyrim Fitting System v1.5.4</h1>
+<h1>Skyrim Fitting System v1.6.0</h1>
 <figure><a href="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" alt="Skyrim Fitting System"></a><figcaption>Skyrim Fitting System</figcaption></figure>
 <p>실제 장비의 방어력&#183;인챈트&#183;효과는 유지하면서, 캐릭터에게 보이는 외형만 따로 구성하는 SKSE 기반 외형 시스템입니다. 기본 UI 단축키는 <strong>F6</strong>이며 옵션에서 바꿀 수 있습니다.</p>
 <p>플레이어&#183;NPC&#183;팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.</p>
@@ -30,6 +30,30 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li>RaceMenu BodyMorph&#183;등록 하이힐 <code>HH_OFFSET</code>, SOS/TNG, DAVE&#183;DAV&#183;native 표시 환경 지원</li>
 <li>OAR 최종 표시 외형 조건, 내장 Grid Inventory Costume&#183;Helmet Toggle 2 연동, 선택형 DFFMA OAR&#183;Dynamic Footprints 호환 패치</li>
 <li>확실한 액터 바디 계열만 선택적으로 거르는 장비&#183;의상&#183;키트 목록과 항상 필터 없는 등록 외형 작업대</li>
+</ul>
+<hr>
+<h2>v1.6.0 주요 변경</h2>
+<ul>
+<li>실제 장비&#183;등록 외형&#183;전체/개별 숨김&#183;조건&#183;잠금&#183;보호/방패 슬롯&#183;미리보기&#183;임시 억제를 액터별 하나의 최종 렌더 결과로 합친 뒤 DAVE&#183;DAV&#183;native에 전달하도록 구조를 재정비했습니다.</li>
+<li>장비&#183;의상&#183;조건&#183;키트&#183;키트 생성기&#183;옵션과 네 가지 탈의 방식을 모두 유지합니다. SexLab P+ 2.12/2.18과 DD는 동일한 액터별 순서 보장 트랜잭션의 독립 어댑터로 처리합니다.</li>
+<li>BodyMorph 추적 상태의 소유자를 하나로 고정해 HT2&#183;염색&#183;카메라/일시정지&#183;조건&#183;키트&#183;탈의&#183;P+&#183;DD&#183;DAVE/DAV/native 갱신 뒤에도 OBody 실시간 변경이 유지되도록 했습니다.</li>
+<li>조건 카드&#183;동작 카드&#183;사용자 조건 절 드래그앤드롭을 64비트 고정 ID와 첫 릴리스 원자 처리로 변경했습니다. 유효하지 않은 드롭은 원본과 대상을 모두 보존합니다.</li>
+<li>세이브 로드와 되돌리기 전에 이전 월드의 예약 작업과 렌더/탈의/모프/염색 상태를 먼저 무효화하는 단일 생명주기 경계를 추가했습니다.</li>
+<li>검증된 IED 중간 점프와 트램펄린을 추적하며, 헬겐&#183;새 게임 초기처럼 확인되지 않은 체인에서는 서로 다른 visitor를 섞지 않고 일반 엔진 경로로 안전하게 비활성화합니다.</li>
+<li>누드/OAR 표시 조건, Wet Function&#183;DFFMA와 Dynamic Footprints가 실제 장비와 등록 외형을 합친 동일한 최종 화면 상태를 사용합니다.</li>
+<li>Virtual Token과 Devious Devices 브리지를 PoC 이름에서 정식 기능 모듈로 이동했습니다. 필수 ESL FormID&#183;Papyrus 이름&#183;저장 데이터와 설정은 유지됩니다.</li>
+<li>키트 생성기 UI 변경을 검증된 명령으로 제한하면서 키트 묶음 판단 기준은 계속 독립적으로 갱신할 수 있습니다. 후보 미리보기는 저장 작업대와 인벤토리를 수정하지 않습니다.</li>
+<li><code>SFSCore.dll</code> 로드 직후 설정 파일 경로를 준비하고 MO2/Vortex에서 SKSE64로 실행하는 방법과 SFS 내부 단축키 위치를 설치 안내에 명확히 적었습니다.</li>
+<li>피팅 염색의 흰색은 원본 diffuse 곱셈의 중립값임을 안내하고, 검증된 렌더 컨텍스트 재연결과 액터&#183;외형 조각별 소유 경계를 유지합니다.</li>
+<li>선택 패치는 DFFMA FOMOD 1.4.4.1, Wet Function 1.2.0 효과 브리지 전용 ZIP, Dynamic Footprints 1.6.0으로 정리했습니다.</li>
+</ul>
+<hr>
+<h2>v1.5.7 주요 변경</h2>
+<ul>
+<li>DAVE와 AE→SE RaceMenu 역포트를 함께 사용할 때 표시 중인 등록 외형의 실시간 BodyMorph&#183;OBody 변경이 반영되지 않던 문제를 수정했습니다.</li>
+<li>구형 SE ActorUpdateManager v0, 공개 레이아웃 v0 역포트, 정식 공개 v1/v2를 실제 구조로 안전하게 구분합니다.</li>
+<li>알 수 없는 레이아웃은 불확실한 vtable 슬롯을 호출하지 않고 안전하게 비활성화하며 DAVE&#183;DAV&#183;native의 BodyMorph v4/v5 경로를 유지합니다.</li>
+<li>피팅 염색, Helmet Toggle 2, P+, SOS/TNG, 조건, 키트, 잠금, 하이힐과 저장 데이터는 기존 동작을 유지합니다. 별도 RaceMenu 패치는 필요하지 않습니다.</li>
 </ul>
 <hr>
 <h2>v1.5.4 주요 변경</h2>
@@ -84,7 +108,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li>개인 키트가 있다면 <code>Interface/SkyrimFittingSystem/user</code>를 백업합니다.</li>
 <li>이전 SFS 모드 폴더를 완전히 삭제합니다.</li>
 <li>이전 독립형 <strong>SFS Kit Generator</strong>, 기존 <strong>SFS Helmet Toggle 2 호환 패치</strong>, v1.4.4 <strong>SFS Grid Inventory Costume Compatibility Patch</strong>가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.</li>
-<li>v1.5.4 본체 ZIP을 새 모드로 설치하고 <code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다.</li>
+<li>v1.6.0 본체 ZIP을 새 모드로 설치하고 <code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다.</li>
 <li>필요하면 백업한 개인 키트만 복원합니다.</li>
 <li>Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 <strong>별도 SFS 호환 패치만</strong> 원본 모드 뒤에 설치합니다.</li>
 </ol>

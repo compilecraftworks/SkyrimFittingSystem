@@ -12,8 +12,8 @@
 #include "native/GenitalArmorResolver.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/SOSStorageSync.h"
-#include "poc/VirtualWornTokenPoC.h"
-#include "poc/DeviousDevicesHiderPoC.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
 #include "ui/Menu.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
 
@@ -136,7 +136,7 @@ void RunActorRefresh(const RE::FormID a_actorFormID) {
   // the pre-transition snapshot. This restores the actor-local Pama-style
   // fallback without widening ordinary equipment-event handling.
   if (contextBoundaryRefreshPending) {
-    sfs::poc::ObserveActorContextWardrobeBoundary(actor);
+    sfs::virtual_tokens::ObserveActorContextWardrobeBoundary(actor);
   }
 
   const bool hadTrackedFittingState = sfs::native::HasFittingSlotState(actor);
@@ -163,12 +163,12 @@ void RunActorRefresh(const RE::FormID a_actorFormID) {
     // equipment refresh must force the actor-local variant to be reapplied.
     sfs::native::dave::MarkHiddenRealEquipmentDirty(actor);
   }
-  sfs::poc::UpdateVirtualWornTokenCache();
+  sfs::virtual_tokens::UpdateVirtualWornTokenCache();
   // Reconcile context-added real armor before building the display set so a
   // delayed prison/outfit equip starts visibly in this same refresh while
   // remaining under the actor's ordinary eye controls.
-  sfs::poc::RecordActorContextWardrobeSnapshot(actor);
-  sfs::poc::ReconcileDeviousDevicesRenderedDeviceVisibility(actor);
+  sfs::virtual_tokens::RecordActorContextWardrobeSnapshot(actor);
+  sfs::devious_devices::ReconcileDeviousDevicesRenderedDeviceVisibility(actor);
   sfs::native::RefreshArmorFor(
       actor, equipmentChangeRefreshPending
                  ? sfs::native::ArmorRefreshReason::kEquipmentChange
@@ -215,7 +215,7 @@ void QueueContextRefreshForActor(RE::Actor *a_actor) {
   if (sfs::native::HasFittingSlotState(a_actor) ||
       (menu != nullptr &&
        menu->GetWorkbench().HasRegisteredAppearancesForActor(actorFormID))) {
-    sfs::poc::ObserveActorContextWardrobeBoundary(a_actor);
+    sfs::virtual_tokens::ObserveActorContextWardrobeBoundary(a_actor);
     MarkContextBoundaryRefreshPending(actorFormID);
     sink->QueueActorRefresh(a_actor->GetFormID());
   }
@@ -351,9 +351,9 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
     return RE::BSEventNotifyControl::kContinue;
   }
 
-  sfs::poc::HandleVirtualWornTokenEquipEvent(
+  sfs::virtual_tokens::HandleVirtualWornTokenEquipEvent(
       actor, const_cast<RE::TESObjectARMO *>(armor), a_event->equipped);
-  sfs::poc::ObserveDeviousDevicesRenderedDeviceEquipEvent(
+  sfs::devious_devices::ObserveDeviousDevicesRenderedDeviceEquipEvent(
       actor, const_cast<RE::TESObjectARMO *>(armor), a_event->equipped);
   sfs::native::SynchronizeArmorClassificationKeywords(
       const_cast<RE::TESObjectARMO *>(armor));
@@ -388,7 +388,7 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
           actualEquipmentLinkedSlotMask);
   const bool eventAddedArmor =
       a_event->equipped &&
-      (sfs::poc::IsVirtualWornTokenEventAddedArmor(
+      (sfs::virtual_tokens::IsVirtualWornTokenEventAddedArmor(
            actor->GetFormID(), armor->GetFormID()) ||
        sfs::native::external_equipment::IsEventAddedActualEquipment(
            actor->GetFormID(), armor->GetFormID()));
@@ -446,7 +446,7 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
     return RE::BSEventNotifyControl::kContinue;
   }
   MarkEquipmentChangeRefreshPending(actor->GetFormID());
-  if (sfs::poc::IsVirtualWornTokenRecoveryBurstActive(
+  if (sfs::virtual_tokens::IsVirtualWornTokenRecoveryBurstActive(
           actor->GetFormID()) &&
       !eventAddedArmor) {
     logger::debug("Deferred equipment refresh inside strip transaction "

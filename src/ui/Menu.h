@@ -52,6 +52,10 @@ public:
 
   static Menu *GetSingleton();
 
+  // Establish the writable settings path as soon as SKSE loads SFSCore. This
+  // deliberately precedes the renderer/ImGui hook so a first-time install has
+  // an observable settings.json even when UI hook installation later fails.
+  void PrepareUserSettingsStorage();
   void Init(IDXGISwapChain *a_swapChain, ID3D11Device *a_device,
             ID3D11DeviceContext *a_context);
   void Draw();
@@ -173,11 +177,7 @@ private:
     std::uint64_t sourceUiIdentity{0};
   };
 
-  enum class ConditionDragSourceKind : std::uint32_t {
-    Catalog = 0,
-    ConditionalRow = 1,
-    ConditionalVisibilityRule = 2
-  };
+  using ConditionDragSourceKind = workbench::condition_drop::TargetKind;
 
   struct DraggedConditionPayload {
     std::array<char, 64> conditionId{};

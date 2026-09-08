@@ -1,0 +1,106 @@
+{
+    "name": "+Female Modesty SIMPLE - weapons - bows, great sword hammer",
+    "description": "Checks vanilla keywords for slot 32 Body.\n\nActivate Compare Values EVGCI14_ModestyF condition to use EVG recognition.",
+    "priority": 2123100979,
+    "requiredBehaviorProjectName": "DefaultFemale",
+    "hasCustomBlendTimeOnLoop": true,
+    "blendTimeOnLoop": 0.6499999761581421,
+    "conditions": [
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC Detection settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC Master settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC User settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC Weapon and Magic settings"
+        },
+        {
+            "condition": "OR",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "IsEquippedType",
+                    "requiredVersion": "1.0.0.0",
+                    "Type": {
+                        "value": 7.0
+                    },
+                    "Left hand": true
+                },
+                {
+                    "condition": "IsEquippedType",
+                    "requiredVersion": "1.0.0.0",
+                    "Type": {
+                        "value": 9.0
+                    },
+                    "Left hand": true
+                },
+                {
+                    "condition": "IsEquippedType",
+                    "requiredVersion": "1.0.0.0",
+                    "Type": {
+                        "value": 5.0
+                    },
+                    "Left hand": true
+                },
+                {
+                    "condition": "IsEquippedType",
+                    "requiredVersion": "1.0.0.0",
+                    "Type": {
+                        "value": 10.0
+                    },
+                    "Left hand": true
+                }
+            ]
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "condition": "IsWeaponDrawn",
+            "requiredVersion": "1.0.0.0"
+        }
+    ]
+}

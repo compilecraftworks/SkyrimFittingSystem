@@ -3,8 +3,8 @@
 #include "ArmorUtils.h"
 #include "imgui_internal.h"
 #include "native/FittingSlotState.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/Localization.h"
 #include "ui/components/EditableCombo.h"
 #include "ui/workbench/Common.h"
@@ -139,7 +139,7 @@ void Menu::DrawWorkbenchToolbar() {
   const auto deviousDevicesHiderSuppressedFittingSlotMask =
       previewActor != nullptr
           ? static_cast<std::uint64_t>(
-                sfs::poc::GetDeviousDevicesHiderSuppressedFittingSlotMask(
+                sfs::devious_devices::GetDeviousDevicesHiderSuppressedFittingSlotMask(
                     previewActor))
           : 0;
   for (const auto rowIndex : baseRowIndices) {
@@ -156,7 +156,7 @@ void Menu::DrawWorkbenchToolbar() {
         controllableActualRows.push_back(rowIndex);
         const bool ddOrdinaryVisible =
             previewActor != nullptr &&
-            sfs::poc::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
+            sfs::devious_devices::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
                 previewActor->GetFormID(), row.equipped.formID);
         if (!ddOrdinaryVisible &&
             workbench_.ResolveEquippedIndividualHiddenForActor(previewActor,
@@ -174,7 +174,7 @@ void Menu::DrawWorkbenchToolbar() {
       const bool virtualTokenAppearanceSuppressed =
           !overrideItem.locked && previewActor != nullptr &&
           (overrideSlotMask & virtualTokenSuppressedFittingSlotMask) == 0 &&
-          sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
+          sfs::virtual_tokens::IsVirtualWornTokenAppearanceSuppressed(
               previewActor->GetFormID(), overrideItem.formID,
               static_cast<std::uint32_t>(overrideSlotMask));
       const bool automaticallyHidden =
@@ -383,7 +383,7 @@ void Menu::DrawWorkbenchToolbar() {
   }
   if (ImGui::Checkbox(hideRealEquipmentLabel.c_str(), &hideRealEquipment)) {
     if (previewActor != nullptr) {
-      sfs::poc::ClearDeviousDevicesRenderedDeviceOrdinaryVisibility(
+      sfs::devious_devices::ClearDeviousDevicesRenderedDeviceOrdinaryVisibility(
           previewActor->GetFormID());
       SetHideRealEquipmentWithFittingForActor(previewActor, hideRealEquipment);
       const auto actorFormID = previewActor->GetFormID();

@@ -377,6 +377,7 @@ void Menu::DrawWorkbenchDyePopup() {
                   ImGui::ColorConvertFloat4ToU32(state.tint));
       ImGui::EndTable();
     }
+    ImGui::TextDisabled("%s", localization->GetCStr("dye.popup.multiply_note"));
     ImGui::BeginDisabled(currentSelected == nullptr);
     if (ImGui::Button(localization->GetCStr("dye.popup.apply"))) {
       std::vector<native::dye::RenderedShapeInfo> targets{

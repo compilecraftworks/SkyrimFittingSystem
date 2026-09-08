@@ -3,8 +3,8 @@
 #include "ArmorUtils.h"
 #include "ThemeConfig.h"
 #include "native/ExternalEquipmentTransactions.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/Localization.h"
 #include "workbench/AppearanceSlotProtection.h"
 
@@ -1206,10 +1206,11 @@ void Menu::DrawStripLinkDialog() {
     // the public Direct Slot Editing entry after Apply.
     workbench::SetExternalModStripLinkMode(Mode::Custom);
     native::external_equipment::ClearRuntimeState();
-    poc::ResetVirtualWornTokenRuntimeState();
-    poc::UpdateVirtualWornTokenCache();
+    virtual_tokens::ResetVirtualWornTokenRuntimeState();
+    virtual_tokens::UpdateVirtualWornTokenCache();
     if (workbench::IsModSettingsStripLinkPolicyActive()) {
-      static_cast<void>(poc::RefreshDeviousDevicesHiderSettings());
+      static_cast<void>(
+          devious_devices::RefreshDeviousDevicesHiderSettings());
     }
     SaveUserSettings();
     workbench_.RefreshNativeArmorOverrides(ConditionDefinitions(),

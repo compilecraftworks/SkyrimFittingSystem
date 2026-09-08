@@ -202,7 +202,7 @@ void UI::DrawPluginSelection() {
       Menu::GetSingleton()->ConsumeKitListNextPane();
 
   auto &generator = Generator::Get();
-  auto &sources = generator.PluginSources();
+  const auto &sources = generator.PluginSources();
   if (openResultsRequested && !generator.GeneratedKits().empty()) {
     // Result-list Left only changes screens and keeps the scan session. Its
     // opposite direction reopens that same retained session.
@@ -217,15 +217,11 @@ void UI::DrawPluginSelection() {
 
   ImGui::TextUnformatted(title.c_str());
   if (ImGui::Button(selectAll.c_str())) {
-    for (auto &source : sources) {
-      source.selected = true;
-    }
+    generator.SetAllPluginSourcesSelected(true);
   }
   ImGui::SameLine();
   if (ImGui::Button(clearAll.c_str())) {
-    for (auto &source : sources) {
-      source.selected = false;
-    }
+    generator.SetAllPluginSourcesSelected(false);
   }
   const auto selectedCount = static_cast<std::size_t>(std::ranges::count_if(
       sources, [](const auto &source) { return source.selected; }));
@@ -334,8 +330,9 @@ void UI::DrawPluginSelection() {
     }
     if (applySelected && focusedPluginIndex_.has_value() &&
         *focusedPluginIndex_ < sources.size()) {
-      auto &focused = sources[*focusedPluginIndex_];
-      focused.selected = !focused.selected;
+      const auto &focused = sources[*focusedPluginIndex_];
+      static_cast<void>(generator.SetPluginSourceSelected(
+          *focusedPluginIndex_, !focused.selected));
     }
     static_cast<void>(previewSelected);
 
@@ -344,7 +341,7 @@ void UI::DrawPluginSelection() {
     for (std::size_t rowIndex = 0; rowIndex < visibleSourceIndices.size();
          ++rowIndex) {
       const auto sourceIndex = visibleSourceIndices[rowIndex];
-      auto &source = sources[sourceIndex];
+      const auto &source = sources[sourceIndex];
       const auto unsuitable =
           source.groupingAssessment->load(std::memory_order_acquire) ==
           OriginalGroupingAssessment::Unsuitable;
@@ -356,7 +353,11 @@ void UI::DrawPluginSelection() {
                                IM_COL32(72, 115, 176, 86));
       }
       ImGui::TableSetColumnIndex(0);
-      ImGui::Checkbox("##selected", &source.selected);
+      auto selected = source.selected;
+      if (ImGui::Checkbox("##selected", &selected)) {
+        static_cast<void>(
+            generator.SetPluginSourceSelected(sourceIndex, selected));
+      }
       ImGui::SameLine();
       if (unsuitable) {
         ImGui::PushStyleColor(ImGuiCol_Text,
@@ -472,7 +473,7 @@ void UI::DrawScanProgress() {
 
 void UI::DrawCandidateList() {
   auto &generator = Generator::Get();
-  auto &kits = generator.GeneratedKits();
+  const auto &kits = generator.GeneratedKits();
   auto &localization = Localization::Get();
   const auto title = localization.Text("candidates.title");
   const auto rename = localization.Text("candidates.rename");
@@ -662,11 +663,12 @@ void UI::DrawCandidateList() {
       ImGui::BeginDisabled(!hasVisibleCharacter);
       if ((ImGui::Button(apply.c_str()) || enterPressed) &&
           hasVisibleCharacter) {
-        kits[*renamingKitIndex_].name = enteredName;
-        SetCreationStatus(localization.Text("candidates.rename_success"),
-                          false);
-        renamingKitIndex_.reset();
-        ImGui::CloseCurrentPopup();
+        if (generator.RenameGeneratedKit(*renamingKitIndex_, enteredName)) {
+          SetCreationStatus(localization.Text("candidates.rename_success"),
+                            false);
+          renamingKitIndex_.reset();
+          ImGui::CloseCurrentPopup();
+        }
       }
       ImGui::EndDisabled();
       ImGui::SameLine();
@@ -718,12 +720,15 @@ void UI::DrawCandidateList() {
       const auto enteredName = TrimPrefixName(prefixNameBuffer_.data());
       ImGui::BeginDisabled(enteredName.empty());
       if ((ImGui::Button("적용") || enterPressed) && !enteredName.empty()) {
-        kits[*prefixKitIndex_].name = std::format(
-            "[{}][{}] {}", prefixIsNsfw_ ? "N" : "S",
-            kPersonalPrefixStyles[prefixStyleIndex_], enteredName);
-        SetCreationStatus("접두사 적용 완료", false);
-        prefixKitIndex_.reset();
-        ImGui::CloseCurrentPopup();
+        if (generator.RenameGeneratedKit(
+                *prefixKitIndex_,
+                std::format("[{}][{}] {}", prefixIsNsfw_ ? "N" : "S",
+                            kPersonalPrefixStyles[prefixStyleIndex_],
+                            enteredName))) {
+          SetCreationStatus("접두사 적용 완료", false);
+          prefixKitIndex_.reset();
+          ImGui::CloseCurrentPopup();
+        }
       }
       ImGui::EndDisabled();
       ImGui::SameLine();
@@ -991,7 +996,7 @@ void UI::DrawCandidateList() {
 
     for (const auto &row : candidateRows) {
       const auto kitIndex = row.kitIndex;
-      auto &kit = kits[kitIndex];
+      const auto &kit = kits[kitIndex];
       ImGui::TableNextRow();
       ImGui::TableSetColumnIndex(0);
       // Keep the result list on the same scroll-safe row input path as the
@@ -1024,10 +1029,11 @@ void UI::DrawCandidateList() {
       }
       const auto openCandidateDetail = [&]() {
         focusedKitIndex_ = kitIndex;
-        kit.draftCandidate = kit.selectedCandidate;
+        static_cast<void>(
+            generator.ResetGeneratedKitDraftCandidate(kitIndex));
         detailKitIndex_ = kitIndex;
         view_ = View::CandidateDetail;
-        PreviewCandidate(kitIndex, kit.draftCandidate);
+        PreviewCandidate(kitIndex, kit.selectedCandidate);
       };
       const auto updateCandidateGroupSelection = [&](const bool a_multiple) {
         if (a_multiple) {
@@ -1103,11 +1109,12 @@ void UI::DrawCandidateList() {
   if (openDetailRequested && focusedKitIndex_.has_value() &&
       *focusedKitIndex_ < kits.size()) {
     const auto focusedKitIdx = *focusedKitIndex_;
-    auto &kit = kits[focusedKitIdx];
-    kit.draftCandidate = kit.selectedCandidate;
+    const auto &kit = kits[focusedKitIdx];
+    static_cast<void>(
+        generator.ResetGeneratedKitDraftCandidate(focusedKitIdx));
     detailKitIndex_ = focusedKitIdx;
     view_ = View::CandidateDetail;
-    PreviewCandidate(focusedKitIdx, kit.draftCandidate);
+    PreviewCandidate(focusedKitIdx, kit.selectedCandidate);
     return;
   }
   if (backRequested) {
@@ -1187,14 +1194,15 @@ void UI::ClearCandidatePreview() {
 }
 
 void UI::DrawCandidateDetail() {
-  auto &kits = Generator::Get().GeneratedKits();
+  auto &generator = Generator::Get();
+  const auto &kits = generator.GeneratedKits();
   if (!detailKitIndex_.has_value() || *detailKitIndex_ >= kits.size()) {
     detailKitIndex_.reset();
     view_ = View::CandidateList;
     return;
   }
   const auto kitIndex = *detailKitIndex_;
-  auto &kit = kits[kitIndex];
+  const auto &kit = kits[kitIndex];
   auto &localization = Localization::Get();
   const auto detailTitle =
       localization.Format("candidates.detail_title", kit.name);
@@ -1216,9 +1224,9 @@ void UI::DrawCandidateDetail() {
     if (a_candidateIndex >= kit.candidates.size()) {
       return;
     }
-    kit.draftCandidate = a_candidateIndex;
-    kit.selectedCandidate = a_candidateIndex;
-    kit.safetyPrefixOverride.reset();
+    if (!generator.SelectGeneratedKitCandidate(kitIndex, a_candidateIndex)) {
+      return;
+    }
     PreviewCandidate(kitIndex, a_candidateIndex);
   };
 
@@ -1285,8 +1293,9 @@ void UI::DrawCandidateDetail() {
   if (focusedVisibleIndex < 0 && !visibleCandidateIndices.empty()) {
     focusedVisibleIndex = 0;
     if (visibleCandidateIndices.size() > 0) {
-      kit.draftCandidate = visibleCandidateIndices[static_cast<std::size_t>(
-          focusedVisibleIndex)];
+      static_cast<void>(generator.SetGeneratedKitDraftCandidate(
+          kitIndex, visibleCandidateIndices[static_cast<std::size_t>(
+                        focusedVisibleIndex)]));
     }
   }
   if (!visibleCandidateIndices.empty() && focusedVisibleIndex >= 0) {
@@ -1480,7 +1489,8 @@ void UI::DrawCandidateDetail() {
 }
 
 void UI::DrawCandidateEditor() {
-  auto &kits = Generator::Get().GeneratedKits();
+  auto &generator = Generator::Get();
+  const auto &kits = generator.GeneratedKits();
   if (!editorKitIndex_.has_value() || !editorCandidateIndex_.has_value() ||
       *editorKitIndex_ >= kits.size() ||
       *editorCandidateIndex_ >= kits[*editorKitIndex_].candidates.size()) {
@@ -1496,8 +1506,8 @@ void UI::DrawCandidateEditor() {
 
   const auto kitIndex = *editorKitIndex_;
   const auto candidateIndex = *editorCandidateIndex_;
-  auto &kit = kits[kitIndex];
-  auto &candidate = kit.candidates[candidateIndex];
+  const auto &kit = kits[kitIndex];
+  const auto &candidate = kit.candidates[candidateIndex];
   auto &localization = Localization::Get();
   if (editorPieceSelections_.size() != candidate.items.size()) {
     editorPieceSelections_.assign(candidate.items.size(), false);
@@ -1619,12 +1629,16 @@ void UI::DrawCandidateEditor() {
           return current.runtimeFormID == a_item.runtimeFormID;
         });
     if (!included) {
-      std::erase_if(candidate.items, [&](const auto &current) {
+      auto updatedItems = candidate.items;
+      std::erase_if(updatedItems, [&](const auto &current) {
         return (current.sourceSlotMask & a_item.sourceSlotMask) != 0;
       });
-      candidate.items.push_back(a_item);
-      std::ranges::stable_sort(candidate.items, {}, &ArmorRecord::sourceOrder);
-      candidate.score = 0;
+      updatedItems.push_back(a_item);
+      std::ranges::stable_sort(updatedItems, {}, &ArmorRecord::sourceOrder);
+      if (!generator.ReplaceGeneratedCandidateItems(
+              kitIndex, candidateIndex, std::move(updatedItems))) {
+        return;
+      }
       editorPieceSelections_.assign(candidate.items.size(), false);
       editorFocusedCurrentPieceIndex_ = 0;
     }
@@ -1686,17 +1700,18 @@ void UI::DrawCandidateEditor() {
           kept.push_back(candidate.items[index]);
         }
       }
-      candidate.items = std::move(kept);
-      candidate.score = 0;
-      editorPieceSelections_.assign(candidate.items.size(), false);
-      editorFocusedPane_ = EditorPane::CurrentPieces;
-      if (!editorFocusedCurrentPieceIndex_.has_value() ||
-          *editorFocusedCurrentPieceIndex_ >= candidate.items.size()) {
-        editorFocusedCurrentPieceIndex_ = 0;
+      if (generator.ReplaceGeneratedCandidateItems(kitIndex, candidateIndex,
+                                                   std::move(kept))) {
+        editorPieceSelections_.assign(candidate.items.size(), false);
+        editorFocusedPane_ = EditorPane::CurrentPieces;
+        if (!editorFocusedCurrentPieceIndex_.has_value() ||
+            *editorFocusedCurrentPieceIndex_ >= candidate.items.size()) {
+          editorFocusedCurrentPieceIndex_ = 0;
+        }
+        PreviewCandidatePiece(
+            kitIndex, candidateIndex,
+            candidate.items[*editorFocusedCurrentPieceIndex_].runtimeFormID);
       }
-      PreviewCandidatePiece(
-          kitIndex, candidateIndex,
-          candidate.items[*editorFocusedCurrentPieceIndex_].runtimeFormID);
     }
     ImGui::EndDisabled();
     if (deleteDisabled && selectedPieceCount == candidate.items.size() &&

@@ -6,16 +6,42 @@
 #include "native/FittingSlotState.h"
 #include "native/HelmetToggle2Integration.h"
 #include "native/RaceMenuBodyMorph.h"
+#include "native/SOSStorageSync.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingDye.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/ConditionParamOptionCache.h"
 #include "ui/Menu.h"
 #include "workbench/EquipmentRefreshEventSink.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
 
 namespace sfs::serialization {
+void PrepareForLoadTransition() {
+  auto *menu = Menu::GetSingleton();
+  menu->SetGameDataLoaded(false);
+
+  // Invalidate every asynchronous producer before clearing the state it may
+  // otherwise republish. Each operation is deliberately idempotent because
+  // this boundary is entered by both kPreLoadGame and LoadCallback.
+  native::InvalidateQueuedArmorRefreshes();
+  workbench::EquipmentRefreshEventSink::CancelQueuedRefreshes();
+  native::CancelSOSStorageSync();
+  native::racemenu::ForgetAllRegisteredAppearanceNodes();
+
+  body_family::ResetRuntimeCaches();
+  native::dye::ClearWorldTint();
+  native::dye::RevertSavedWorldTints();
+  ui::conditions::ConditionParamOptionCache::Get().Reset();
+  devious_devices::ResetDeviousDevicesHider();
+  virtual_tokens::ResetVirtualWornTokenRuntimeState();
+  native::external_equipment::ClearRuntimeState();
+  native::helmet_toggle::ResetRuntimeState();
+  native::ClearAllFittingSlotStates();
+  native::dave::ForgetHiddenRealEquipmentState();
+  menu->ResetTransientWorkbenchUiState(false);
+}
+
 void SaveCallback(SKSE::SerializationInterface *a_skse) {
   Menu::GetSingleton()->GetWorkbench().Serialize(a_skse);
   Menu::GetSingleton()->SerializeConditions(a_skse);
@@ -24,20 +50,12 @@ void SaveCallback(SKSE::SerializationInterface *a_skse) {
   native::SerializeArmorClassificationMigrationState(a_skse);
   workbench::SerializeActorAutomaticEquipmentVisibilitySettings(a_skse);
   native::external_equipment::Serialize(a_skse);
-  poc::SerializeVirtualWornTokenState(a_skse);
+  virtual_tokens::SerializeVirtualWornTokenState(a_skse);
   native::dye::SerializeSavedWorldTints(a_skse);
 }
 
 void LoadCallback(SKSE::SerializationInterface *a_skse) {
-  body_family::ResetRuntimeCaches();
-  native::dye::ClearWorldTint();
-  ui::conditions::ConditionParamOptionCache::Get().Reset();
-  poc::ResetDeviousDevicesHider();
-  poc::ResetVirtualWornTokenRuntimeState();
-  native::external_equipment::ClearRuntimeState();
-  native::helmet_toggle::ResetRuntimeState();
-  native::ClearAllFittingSlotStates();
-  native::dave::ForgetHiddenRealEquipmentState();
+  PrepareForLoadTransition();
   auto *menu = Menu::GetSingleton();
   const auto workbenchSerializationVersion = menu->GetWorkbench().Deserialize(
       a_skse, std::string(ui::conditions::kDefaultConditionId));
@@ -52,32 +70,18 @@ void LoadCallback(SKSE::SerializationInterface *a_skse) {
   native::DeserializeArmorClassificationMigrationState(a_skse);
   workbench::DeserializeActorAutomaticEquipmentVisibilitySettings(a_skse);
   native::external_equipment::Deserialize(a_skse);
-  poc::DeserializeVirtualWornTokenState(a_skse);
+  virtual_tokens::DeserializeVirtualWornTokenState(a_skse);
   native::dye::DeserializeSavedWorldTints(a_skse);
   menu->ResetTransientWorkbenchUiState(false);
 }
 
 void RevertCallback([[maybe_unused]] SKSE::SerializationInterface *a_skse) {
-  body_family::ResetRuntimeCaches();
-  native::dye::ClearWorldTint();
-  native::dye::RevertSavedWorldTints();
-  ui::conditions::ConditionParamOptionCache::Get().Reset();
-  poc::ResetDeviousDevicesHider();
-  poc::ResetVirtualWornTokenRuntimeState();
-  native::helmet_toggle::ResetRuntimeState();
-  native::racemenu::ForgetAllRegisteredAppearanceNodes();
-  native::ClearAllFittingSlotStates();
-  native::InvalidateQueuedArmorRefreshes();
+  PrepareForLoadTransition();
   native::RevertArmorClassificationMigrationState();
-  native::dave::ForgetHiddenRealEquipmentState();
-  workbench::EquipmentRefreshEventSink::CancelQueuedRefreshes();
   auto *menu = Menu::GetSingleton();
-  menu->SetGameDataLoaded(false);
   menu->GetWorkbench().Revert(false);
   menu->RevertConditions();
   menu->RevertActorVisibilitySettings();
   workbench::RevertActorAutomaticEquipmentVisibilitySettings();
-  native::external_equipment::ClearRuntimeState();
-  menu->ResetTransientWorkbenchUiState(false);
 }
 } // namespace sfs::serialization

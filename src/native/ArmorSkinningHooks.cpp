@@ -1,4 +1,5 @@
 #include "native/ArmorSkinning.h"
+#include "native/BranchChainRules.h"
 #include "native/DaveIntegration.h"
 #include "runtime/RuntimeLayouts.h"
 
@@ -8,10 +9,13 @@
 
 #include <array>
 #include <cstring>
+#include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
+#include <unordered_set>
 
 namespace {
 SKSE::Trampoline g_localTrampoline{"SFS native armor skinning"};
@@ -89,18 +93,137 @@ TryReadDavInitWornTarget(const std::uintptr_t a_hookAddress) {
   return _wcsicmp(fileName.c_str(), a_moduleName.data()) == 0;
 }
 
-void ConfigureIedCustomSkinCompatibility(const CallSiteBranch &a_callSite,
-                                         const std::string_view a_runtime) {
-  const bool iedTarget =
-      !a_callSite.expected &&
-      IsAddressInModule(a_callSite.target, L"ImmersiveEquipmentDisplays.dll");
+[[nodiscard]] bool IsReadableCommittedRange(const std::uintptr_t a_address,
+                                            const std::size_t a_size,
+                                            const bool a_requireExecutable) {
+  if (a_address == 0 || a_size == 0) {
+    return false;
+  }
+
+  MEMORY_BASIC_INFORMATION memoryInfo{};
+  if (::VirtualQuery(reinterpret_cast<const void *>(a_address), &memoryInfo,
+                     sizeof(memoryInfo)) != sizeof(memoryInfo) ||
+      memoryInfo.State != MEM_COMMIT ||
+      (memoryInfo.Protect & (PAGE_GUARD | PAGE_NOACCESS)) != 0) {
+    return false;
+  }
+
+  const auto protection = memoryInfo.Protect & 0xFF;
+  const bool readable = protection == PAGE_READONLY ||
+                        protection == PAGE_READWRITE ||
+                        protection == PAGE_WRITECOPY ||
+                        protection == PAGE_EXECUTE ||
+                        protection == PAGE_EXECUTE_READ ||
+                        protection == PAGE_EXECUTE_READWRITE ||
+                        protection == PAGE_EXECUTE_WRITECOPY;
+  const bool executable = protection == PAGE_EXECUTE ||
+                          protection == PAGE_EXECUTE_READ ||
+                          protection == PAGE_EXECUTE_READWRITE ||
+                          protection == PAGE_EXECUTE_WRITECOPY;
+  if (!readable || (a_requireExecutable && !executable)) {
+    return false;
+  }
+
+  const auto regionStart =
+      reinterpret_cast<std::uintptr_t>(memoryInfo.BaseAddress);
+  if (a_address < regionStart) {
+    return false;
+  }
+  const auto offset = a_address - regionStart;
+  return offset <= memoryInfo.RegionSize &&
+         a_size <= memoryInfo.RegionSize - offset;
+}
+
+template <class T>
+[[nodiscard]] std::optional<T> TryReadMemory(const std::uintptr_t a_address,
+                                             const bool a_requireExecutable) {
+  if (!IsReadableCommittedRange(a_address, sizeof(T), a_requireExecutable)) {
+    return std::nullopt;
+  }
+  T value{};
+  std::memcpy(std::addressof(value), reinterpret_cast<const void *>(a_address),
+              sizeof(value));
+  return value;
+}
+
+struct ModuleChainMatch {
+  std::uintptr_t finalTarget{0};
+  std::size_t trampolineDepth{0};
+};
+
+[[nodiscard]] std::optional<ModuleChainMatch> ResolveBranchChainOwner(
+    const std::uintptr_t a_start, const std::wstring_view a_moduleName) {
+  constexpr std::size_t kMaximumTrampolineDepth = 8;
+  constexpr std::size_t kDecodeWindow = 16;
+
+  std::uintptr_t current = a_start;
+  std::unordered_set<std::uintptr_t> visited;
+  for (std::size_t depth = 0; depth <= kMaximumTrampolineDepth; ++depth) {
+    if (IsAddressInModule(current, a_moduleName)) {
+      return ModuleChainMatch{current, depth};
+    }
+    if (depth == kMaximumTrampolineDepth || !visited.insert(current).second) {
+      break;
+    }
+
+    const auto bytes =
+        TryReadMemory<std::array<std::uint8_t, kDecodeWindow>>(current, true);
+    if (!bytes.has_value()) {
+      break;
+    }
+    const auto transfer = sfs::native::branch_chain::rules::DecodeTransfer(
+        current, std::span<const std::uint8_t>(*bytes));
+    if (!transfer.has_value()) {
+      break;
+    }
+
+    if (transfer->kind == sfs::native::branch_chain::rules::TransferKind::
+                              IndirectTargetSlot) {
+      const auto indirect =
+          TryReadMemory<std::uintptr_t>(transfer->address, false);
+      if (!indirect.has_value()) {
+        break;
+      }
+      current = *indirect;
+    } else {
+      current = transfer->address;
+    }
+    if (current == 0) {
+      break;
+    }
+  }
+  return std::nullopt;
+}
+
+[[nodiscard]] bool
+ConfigureIedCustomSkinCompatibility(const CallSiteBranch &a_callSite,
+                                    const std::string_view a_runtime) {
+  if (a_callSite.expected) {
+    sfs::native::SetIedVisitWornItemsChainTarget(0);
+    return true;
+  }
+
+  const auto iedOwner = ResolveBranchChainOwner(
+      a_callSite.target, L"ImmersiveEquipmentDisplays.dll");
+  const bool iedTarget = iedOwner.has_value();
   sfs::native::SetIedVisitWornItemsChainTarget(
       iedTarget ? a_callSite.target : 0);
   if (iedTarget) {
     logger::info(
-        "SFS IED compatibility enabled for {} custom-skin target {:X}; filtered calls use the original engine visitor path and queue IED.Evaluate afterward",
-        a_runtime, a_callSite.target);
+        "SFS IED compatibility enabled for {} custom-skin chain {:X} -> {:X} through {} trampoline(s); filtered calls use the original engine visitor path and queue IED.Evaluate afterward",
+        a_runtime, a_callSite.target, iedOwner->finalTarget,
+        iedOwner->trampolineDepth);
+    return true;
   }
+
+  // A pre-patched visitor target whose ownership cannot be proven may require
+  // a concrete visitor layout just like IED. Installing SFS on top and passing
+  // its filtering visitor through that target would be an ABI guess. Leave the
+  // existing hook untouched and fail closed instead.
+  logger::warn(
+      "Skipped SFS {} custom-skin hook because pre-patched target {:X} could not be resolved through a verified trampoline chain",
+      a_runtime, a_callSite.target);
+  return false;
 }
 
 bool InstallDavInitWornChainHook(const sfs::runtime::HookLayout &a_layout) {
@@ -402,7 +525,9 @@ void InstallCustomSkinHookSE(const sfs::runtime::HookLayout &a_layout) {
         "SFS native armor skinning custom skin hook for SE will chain the existing patched target {:X}",
         callSite.target);
   }
-  ConfigureIedCustomSkinCompatibility(callSite, a_layout.name);
+  if (!ConfigureIedCustomSkinCompatibility(callSite, a_layout.name)) {
+    return;
+  }
 
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems) {
@@ -483,7 +608,9 @@ void InstallCustomSkinHookAE(const sfs::runtime::HookLayout &a_layout) {
         "SFS native armor skinning custom skin hook for AE will chain the existing patched target {:X}",
         callSite.target);
   }
-  ConfigureIedCustomSkinCompatibility(callSite, a_layout.name);
+  if (!ConfigureIedCustomSkinCompatibility(callSite, a_layout.name)) {
+    return;
+  }
 
   struct Code : Xbyak::CodeGenerator {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems) {

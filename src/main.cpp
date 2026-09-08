@@ -17,8 +17,8 @@
 #include "native/SOSStorageSync.h"
 #include "native/SmoothCamIntegration.h"
 #include "papyrus/FittingPapyrus.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/ConditionParamOptionCache.h"
 #include "ui/Menu.h"
 #include "workbench/EquipmentRefreshEventSink.h"
@@ -37,8 +37,8 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
   case SKSE::MessagingInterface::kDataLoaded:
     sfs::native::genital_compatibility::InitializeEnvironment();
     sfs::kit_generator::Generator::Get().SnapshotLoadedArmorForms();
-    sfs::poc::InitializeVirtualWornTokens();
-    sfs::poc::InitializeDeviousDevicesHider();
+    sfs::virtual_tokens::InitializeVirtualWornTokens();
+    sfs::devious_devices::InitializeDeviousDevicesHider();
     sfs::native::racemenu::InitializeBodyMorphInterface();
     sfs::Menu::GetSingleton()->SetGameDataLoaded(true);
     static_cast<void>(sfs::native::helmet_toggle::Initialize());
@@ -55,18 +55,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::native::racemenu::InitializeBodyMorphInterface();
     break;
   case SKSE::MessagingInterface::kPreLoadGame:
-    sfs::body_family::ResetRuntimeCaches();
-    sfs::native::dye::ClearWorldTint();
-    sfs::native::dye::RevertSavedWorldTints();
-    sfs::Menu::GetSingleton()->SetGameDataLoaded(false);
-    sfs::native::InvalidateQueuedArmorRefreshes();
-    sfs::native::dave::ForgetHiddenRealEquipmentState();
-    sfs::native::helmet_toggle::ResetRuntimeState();
-    sfs::native::CancelSOSStorageSync();
-    sfs::native::racemenu::ForgetAllRegisteredAppearanceNodes();
-    sfs::poc::ResetDeviousDevicesHider();
-    sfs::workbench::EquipmentRefreshEventSink::CancelQueuedRefreshes();
-    sfs::ui::conditions::ConditionParamOptionCache::Get().Reset();
+    sfs::serialization::PrepareForLoadTransition();
     break;
   case SKSE::MessagingInterface::kPostLoadGame:
     sfs::native::InvalidateQueuedArmorRefreshes();
@@ -75,7 +64,8 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::ui::conditions::ConditionParamOptionCache::Get().Reset();
     sfs::Menu::GetSingleton()->SetGameDataLoaded(true);
     sfs::native::helmet_toggle::SynchronizePlayer(false);
-    static_cast<void>(sfs::poc::RefreshDeviousDevicesHiderSettings());
+    static_cast<void>(
+        sfs::devious_devices::RefreshDeviousDevicesHiderSettings());
     sfs::native::RequestSOSStorageSync();
     sfs::workbench::EquipmentRefreshEventSink::GetSingleton()->QueueRefresh();
     sfs::native::QueuePlayerArmorRefresh();
@@ -101,12 +91,14 @@ SKSEPlugin_Load(const SKSE::LoadInterface *a_skse) {
   SKSE::Init(a_skse);
   SKSE::AllocTrampoline(1 << 12);
   logger::info("{} build {}", Plugin::NAME, Plugin::VERSION_STRING);
+  sfs::Menu::GetSingleton()->PrepareUserSettingsStorage();
 
   messaging->RegisterListener("SKSE", SKSEMessageHandler);
 
   if (auto *papyrus = SKSE::GetPapyrusInterface()) {
     papyrus->Register(sfs::papyrus::Register);
-    papyrus->Register(sfs::poc::RegisterVirtualWornTokenPapyrus);
+    papyrus->Register(
+        sfs::virtual_tokens::RegisterVirtualWornTokenPapyrus);
   } else {
     logger::warn("Failed to load Papyrus interface");
   }

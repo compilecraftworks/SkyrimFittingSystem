@@ -25,6 +25,8 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 - RaceMenu high-heel `HH_OFFSET` and live BodyMorph synchronization across DAVE, DAV, and native display
 - Optional actor-aware body-family filtering for Equipment, Outfits, and Kits, with fail-open handling for custom actors and no workbench filtering
 - Final displayed-outfit OAR conditions, built-in Grid Inventory Costume and Helmet Toggle 2 support, and optional DFFMA OAR and Dynamic Footprints bridges
+- One final actor-local rendered-outfit result shared by actual gear, registered appearances, conditions, manual visibility, strip integration, nudity checks, and compatibility consumers
+- Transactional condition/action drag and drop that commits on the first valid release without clearing the source on a failed drop
 
 ![Hiding Actual Equipment](https://i.ibb.co/4bb432f/image.gif)
 **Hiding Actual Equipment**
@@ -49,6 +51,21 @@ SFS automatically separates DAVE, ordinary DAV, and Skyrim-native display enviro
 
 ![Helmet Toggle 2 Appearance Hiding Integration](https://i.ibb.co/S4JHn3DT/2.gif)
 **Helmet Toggle 2 Appearance Hiding Integration (Does Not Interfere with Helmet Toggle 2’s Actual Equipment Control)**
+
+## Version 1.6.0 Update Summary
+
+- Rebuilt runtime state flow around one actor-local final-rendered-outfit result. Actual gear, registered appearances, global and per-item visibility, conditions, locks, protected/shield slots, previews, and temporary suppression now resolve before DAVE, DAV, or native rendering.
+- Preserved every Gear, Outfits, Conditions, Kits, Kit Generator, and Options workflow from 1.5.7. Mod-Configured, Automatic Vanilla-Slot, Direct+Mod-Configured, and Direct+Vanilla strip/redress modes now share ordered actor-local transactions, including SexLab P+ 2.12/2.18 and Devious Devices adapters.
+- Made RaceMenu BodyMorph tracking single-owner so live OBody changes remain eligible through equipment, condition, kit, Helmet Toggle 2, dye, camera/pause, strip, P+, DD, and backend refreshes. NiTransform, BodyMorph, and ActorUpdateManager layouts are negotiated independently and unknown layouts fail closed.
+- Reworked condition-card, action-card, and custom-clause drag/drop around stable 64-bit identities and atomic first-release commits. Stale, conflicting, duplicate, and invalid payloads leave both source and target unchanged.
+- Added one save-load/revert boundary that invalidates queued armor, event, SOS, BodyMorph, renderer, strip, token, DD, HT2, DAVE, cache, and transient UI work before reading the incoming co-save.
+- Hardened IED compatibility by following verified intermediate jump/trampoline chains. Unknown early-game and Helgen startup chains stay on the ordinary engine path instead of combining incompatible concrete visitors.
+- Final nudity, shown-armor/OAR queries, Wet Function/DFFMA consumers, and Dynamic Footprints now use the same visible actual-plus-registered outfit result. Explicit SFS-managed barefoot state no longer falls back to technically worn hidden shoes.
+- Promoted Virtual Tokens and the Devious Devices bridge from PoC source identity to production feature modules without changing the required helper ESL, saved data, Papyrus names, or user settings.
+- Isolated Kit Generator edits behind validated commands while keeping its grouping criteria independently updateable. Candidate preview remains temporary and cannot mutate saved workbench or inventory state.
+- Improved first-install diagnostics: settings storage is created as soon as `SFSCore.dll` loads, and the package explains MO2/Vortex, SKSE64 launching, the required helper ESL, and that Toggle UI Button is inside SFS Options rather than Skyrim Controls.
+- Fitting Dye now explains that white is the neutral multiplicative value and retains verified renderer-context re-hooking and exact actor/component ownership.
+- Updated optional packages: DFFMA FOMOD 1.4.4.1 fixes Vortex XML validation, the Wet Function 1.2.0 archive is limited to its effect bridge and README, and the Dynamic Footprints bridge is consistently versioned 1.6.0.
 
 ## Version 1.5.7 Update Summary
 
@@ -138,7 +155,7 @@ Built-in: (Not required any patch file)
 - SOS or TNG for genital conceal/reveal compatibility
 - Helmet Toggle 2 for built-in actor-local registered-appearance headgear hiding; SFS does not interfere with Helmet Toggle 2's actual equipment control
 - Grid Inventory v1.4.1
-- SexLab P+ v2.12.0 for built-in actor-local strip/redress integration
+- SexLab P+ v2.12.0 and v2.18 for built-in actor-local strip/redress integration
 
 ## Installation and Updating
 
@@ -146,7 +163,7 @@ Built-in: (Not required any patch file)
 2. Completely delete the previous SFS mod folder.
 3. Completely delete any older **SFS Helmet Toggle 2 Compatibility Patch** and the **v1.4.4 SFS Grid Inventory Costume Compatibility Patch**. Do not delete their original mods.
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
-5. Install the v1.5.4 distribution ZIP as a new mod.
+5. Install the v1.6.0 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
 7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.
 

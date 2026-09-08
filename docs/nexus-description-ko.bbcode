@@ -18,7 +18,7 @@ Skyrim Fitting System(SFS)은 인벤토리에 실제로 착용한 장비와 화�
 SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으로 구분하며 동일한 작업대와 저장 데이터를 사용합니다.
 
 [line]
-[size=4][b][color=#42ACC8]v1.5.7 주요 기능[/color][/b][/size]
+[size=4][b][color=#42ACC8]v1.6.0 주요 기능[/color][/b][/size]
 
 
 [list]
@@ -50,6 +50,26 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]액터별 최종 표시 장비를 읽는 OAR용 읽기 전용 조건[/*]
 [*]내장 Grid Inventory Costume·Helmet Toggle 2 연동과 DFFMA OAR·Dynamic Footprints v3 선택형 호환 패치[/*]
 [*]플레이어·NPC·팔로워의 혼합 바디 구성에서도 모든 항목을 등록할 수 있는 장비·의상·키트 카탈로그[/*]
+[/list]
+
+
+[line]
+[size=4][b][color=#42ACC8]v1.6.0 업데이트 요약[/color][/b][/size]
+
+
+[list]
+[*]실제 장비, 등록 외형, 전체·개별 숨김, 조건, 잠금, 보호/방패 슬롯, 미리보기와 임시 억제를 액터별 하나의 최종 렌더 결과로 합친 뒤 DAVE·DAV·native에 전달하도록 구조를 재정비했습니다.[/*]
+[*]1.5.7의 장비·의상·조건·키트·키트 생성기·옵션 기능을 유지합니다. 모드 설정, 바닐라 자동, 직접+모드 설정, 직접+바닐라의 네 탈의 방식을 순서가 보장되는 액터별 트랜잭션으로 통합하고 SexLab P+ 2.12/2.18과 DD를 독립 어댑터로 처리합니다.[/*]
+[*]BodyMorph 추적 소유자를 하나로 고정해 장비·조건·키트·HT2·염색·카메라/일시정지·탈의·P+·DD·백엔드 갱신 뒤에도 OBody 실시간 변경을 계속 받을 수 있게 했습니다. RaceMenu의 NiTransform·BodyMorph·ActorUpdateManager는 각각 검증하며 알 수 없는 구조는 안전하게 비활성화합니다.[/*]
+[*]조건 카드·동작 카드·사용자 조건 절의 드래그앤드롭을 64비트 고정 ID와 첫 릴리스 원자 처리로 변경했습니다. 오래되거나 충돌한 payload는 출발점과 대상 모두를 바꾸지 않습니다.[/*]
+[*]세이브 로드·되돌리기 전에 이전 월드의 장비·이벤트·SOS·BodyMorph·렌더러·탈의·토큰·DD·HT2·DAVE·캐시·임시 UI 작업을 무효화하는 단일 생명주기 경계를 추가했습니다.[/*]
+[*]IED의 검증된 중간 점프와 트램펄린을 따라 실제 소유자를 판별합니다. 헬겐과 새 게임 초기처럼 체인을 확인할 수 없는 상황에서는 서로 다른 visitor를 섞지 않고 일반 엔진 경로로 안전하게 닫힙니다.[/*]
+[*]최종 누드/OAR 표시 조건, Wet Function·DFFMA, Dynamic Footprints가 동일한 실제+등록 최종 외형을 기준으로 판단합니다. SFS가 최종적으로 맨발로 관리하는 액터는 기술적으로 착용 중인 숨긴 신발로 되돌아가지 않습니다.[/*]
+[*]Virtual Token과 Devious Devices 브리지를 PoC 이름에서 정식 기능 모듈로 승격했습니다. 필수 ESL FormID, Papyrus 이름, 저장 데이터와 사용자 설정은 유지합니다.[/*]
+[*]키트 생성기 변경을 검증된 명령으로 제한하면서 키트 묶음 판단 기준은 계속 독립적으로 갱신할 수 있게 했습니다. 후보 미리보기는 임시 상태이며 저장 작업대와 인벤토리를 수정하지 않습니다.[/*]
+[*][font=Courier New]SFSCore.dll[/font] 로드 직후 설정 저장소를 생성하고, MO2/Vortex에서 SKSE64로 실행해야 한다는 점, 보조 ESL만으로 DLL이 로드되지 않는다는 점, 단축키 설정이 Skyrim 조작 메뉴가 아닌 SFS 옵션에 있다는 점을 설치 안내에 명확히 적었습니다.[/*]
+[*]피팅 염색에서 흰색이 원본 diffuse 곱셈의 중립값임을 안내하고, 검증된 렌더 컨텍스트 재연결과 액터·외형 조각별 소유 경계를 유지합니다.[/*]
+[*]선택 패치는 DFFMA FOMOD 1.4.4.1, Wet Function 1.2.0의 효과 브리지 전용 패키지, Dynamic Footprints 1.6.0으로 정리했습니다.[/*]
 [/list]
 
 
@@ -177,7 +197,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]Wet Function Redux: 별도 SFS 호환 패치로 등록 외형 젖음 효과 적용[/*]
 [*]Open Animation Replacer와 Dynamic Feminine Female Modesty Animations OAR: 별도 DFFMA 구성 패치 사용 대상[/*]
 [*]Grid Inventory v1.4.1 이상과 Helmet Toggle 2: 별도 SFS 패치 없이 본체 내장 연동 사용. Dynamic Footprints SKSE BASE v3: 전용 SFS 선택형 호환 패치 설치 시 사용[/*]
-[*]SexLab P+ v2.12.0: 별도 SFS 패치 없이 액터별 탈의·재착의 내장 연동 사용[/*]
+[*]SexLab P+ v2.12.0 및 v2.18: 별도 SFS 패치 없이 액터별 탈의·재착의 내장 연동 사용[/*]
 [*]SexLab, Soulgem Oven, Private Needs, Bathing in Skyrim, Devious Devices, Pama Prison Alternative 등: 외부 모드 탈의 연동 사용 대상[/*]
 [/list]
 
@@ -191,7 +211,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 [*]이전 SFS 모드 폴더를 완전히 삭제합니다.[/*]
 [*]기존의 모든 [b]SFS Helmet Toggle 2 호환 패치[/b]를 완전히 삭제합니다. Helmet Toggle 2 본체를 삭제하는 것은 아닙니다.[/*]
 [*]이전 독립형 시험용 [b]SFS Kit Generator[/b] 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.[/*]
-[*]v1.5.4 배포 ZIP을 새 모드로 설치합니다.[/*]
+[*]v1.6.0 배포 ZIP을 새 모드로 설치합니다.[/*]
 [*][font=Courier New]SkyrimFittingSystem-VirtualTokens.esl[/font]을 활성화합니다.[/*]
 [*]필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.[/*]
 [/list]

@@ -1,6 +1,6 @@
 # Build, Deploy, And Release
 
-This document describes the v1.5.7 build and release workflow for:
+This document describes the v1.6.0 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.5.7/windows/x64/<mode>/SFSCore.dll`
-- local-only SE/AE PDB when present: `build/v1.5.7/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.6.0/windows/x64/<mode>/SFSCore.dll`
+- local-only SE/AE PDB when present: `build/v1.6.0/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -70,12 +70,14 @@ Before deployment or packaging, run:
 ```
 
 The suite builds and runs RuntimeLayout, Kit Generator, BodyFamily, Condition
-CNF, Fitting Dye, Kit navigation, core behavior, RaceMenu interface, and
-RaceMenu morph-tracking tests (nine executables).
+CNF, Condition Drop, Fitting Dye, Kit navigation, core behavior, RaceMenu
+interface, and RaceMenu morph-tracking tests (ten executables), followed by
+source-boundary checks.
 The morph-tracking target generates a test-only include from production
 function definitions and runs them with fake engine attachments. It covers
 preview/visibility transitions, late grafts, original-call preservation,
-actor isolation, bounded completion, initial morph separation, and stale tasks.
+actor isolation, bounded completion, initial morph separation, stale tasks,
+and interleaved HT2/dye/camera/strip/P+/DD/backend refreshes.
 No test include or fake engine code is linked into SFSCore.dll.
 RaceMenu tests use independent MSVC x64 provider vtables to check versioned
 registration, callback arguments, BodyMorph/NiTransform calls, and cross-thread
@@ -84,8 +86,10 @@ version matrix and verification limits. Core behavior coverage shares
 the production decision rules for actor-local BodyMorph and suppression,
 Mod-Configured, Vanilla, Direct+ModSettings, Direct+Vanilla, virtual-token and
 actual-equipment transactions, paused character rotation isolation, and
-DAVE/DAV/native refresh dispatch. Runtime hooks and rendered 3D still require
-the corresponding in-game smoke checks.
+DAVE/DAV/native refresh dispatch, final actual-plus-registered nudity, and IED
+visitor routing. Static checks keep BodyMorph ownership out of unrelated
+features and Virtual Tokens in the production build. Runtime hooks and rendered
+3D still require the corresponding in-game smoke checks.
 
 ## Build And Deploy
 
@@ -142,10 +146,10 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.5.7 SE-AE.zip`
-- `Sources/Skyrim Fitting System v1.5.7 Source.zip`
+- `Release/Skyrim Fitting System v1.6.0 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.6.0 Source.zip`
 - matching copies under `dist/`
-- `Release/SHA256SUMS-v1.5.7.txt`
+- `Release/SHA256SUMS-v1.6.0.txt`
 
 The runtime archive has a flat MO2-installable root. It contains the main DLL,
 VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;

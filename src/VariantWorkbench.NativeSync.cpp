@@ -289,12 +289,16 @@ void VariantWorkbench::Revert(const bool a_queueArmorRefresh) {
   auto stateLock = AcquireStateLock();
   ClearPreview(a_queueArmorRefresh);
 
+  const auto previousRows = rows_;
   rows_.clear();
   conditionalVisibilityRules_.clear();
   equippedHiddenByActor_.clear();
   needsConditionOwnershipMigration_ = false;
   RebuildRowOrder();
   if (a_queueArmorRefresh) {
+    // Interactive reset is a committed deletion of every appearance. Save
+    // load/revert uses false and owns its broader runtime epoch teardown.
+    InvalidateRemovedAppearanceAutomation(previousRows);
     sfs::native::QueuePlayerArmorRefresh();
   }
   MarkChanged();

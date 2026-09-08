@@ -4,7 +4,7 @@
 #include "native/ExternalEquipmentTransactionRules.h"
 #include "native/HelmetToggle2Integration.h"
 #include "native/PapyrusObserverInstallRules.h"
-#include "poc/DeviousDevicesHiderPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
 #include "runtime/RuntimeLayouts.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
 
@@ -251,7 +251,8 @@ template <class T>
 
 [[nodiscard]] bool IsDedicatedDeviousDevicesArmor(
     const RE::TESObjectARMO *a_armor) {
-  return sfs::poc::IsDeviousDevicesEquipmentTransactionArmor(a_armor);
+  return sfs::devious_devices::IsDeviousDevicesEquipmentTransactionArmor(
+      a_armor);
 }
 
 [[nodiscard]] std::unordered_map<RE::FormID, std::uint64_t>

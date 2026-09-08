@@ -1,8 +1,11 @@
 #include "native/ArmorRefreshRules.h"
+#include "native/BranchChainRules.h"
 #include "native/ExternalEquipmentTransactionRules.h"
 #include "native/FittingSlotStateRules.h"
+#include "native/FinalRenderedOutfitRules.h"
 #include "native/GenitalCompatibilityRules.h"
 #include "native/HelmetToggle2Rules.h"
+#include "native/IedVisitorRoutingRules.h"
 #include "native/PapyrusObserverInstallRules.h"
 #include "native/RegisteredAppearanceMorphRules.h"
 #include "native/SexLabPPlusRules.h"
@@ -11,7 +14,9 @@
 #include "ui/MenuInteractionRules.h"
 #include "workbench/ExternalStripLinkRules.h"
 
+#include <array>
 #include <cstdint>
+#include <cstring>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
@@ -456,6 +461,129 @@ void TestRefreshBackends() {
          "A slot still used by visible actual armor must not be removed with another SFS-hidden armor");
 }
 
+void TestIedVisitorRoutingIsolation() {
+  using namespace sfs::native::ied::rules;
+  constexpr std::uintptr_t engineTarget = 0x1000;
+  constexpr std::uintptr_t iedChainTarget = 0x2000;
+
+  Expect(ResolveVisitorRoute(false, iedChainTarget, iedChainTarget) ==
+             VisitorRoute::CurrentTargetUnfiltered,
+         "IED must retain its normal visitor path when SFS has nothing to filter");
+  Expect(ResolveVisitorRoute(true, engineTarget, 0) ==
+             VisitorRoute::CurrentTargetWithSfsFilter,
+         "An unknown IED chain during early-game startup must stay on the ordinary engine path");
+  Expect(ResolveVisitorRoute(true, engineTarget, iedChainTarget) ==
+             VisitorRoute::CurrentTargetWithSfsFilter,
+         "An unrelated visitor target must not be mistaken for IED");
+  Expect(ResolveVisitorRoute(true, iedChainTarget, iedChainTarget) ==
+             VisitorRoute::OriginalEngineWithSfsFilterThenIedEvaluate,
+         "The exact IED chain must be bypassed before passing SFS's visitor and refreshed through IED afterward");
+}
+
+void TestHookTrampolineChainDecoding() {
+  using namespace sfs::native::branch_chain::rules;
+  constexpr std::uintptr_t base = 0x100000;
+
+  std::array<std::uint8_t, 16> commonLibVeneer{};
+  commonLibVeneer[0] = 0xFF;
+  commonLibVeneer[1] = 0x25;
+  constexpr std::uintptr_t iedTarget = 0x7FFA12345678;
+  std::memcpy(commonLibVeneer.data() + 6, &iedTarget, sizeof(iedTarget));
+  auto transfer = DecodeTransfer(base, commonLibVeneer);
+  Expect(transfer.has_value() &&
+             transfer->kind == TransferKind::IndirectTargetSlot &&
+             transfer->address == base + 6,
+         "CommonLib's rel32 branch-pool veneer must expose its indirect target slot for IED ownership resolution");
+
+  std::array<std::uint8_t, 16> relativeJump{};
+  relativeJump[0] = 0xE9;
+  const std::int32_t relativeDisplacement = 0x120;
+  std::memcpy(relativeJump.data() + 1, &relativeDisplacement,
+              sizeof(relativeDisplacement));
+  transfer = DecodeTransfer(base, relativeJump);
+  Expect(transfer.has_value() &&
+             transfer->kind == TransferKind::DirectTarget &&
+             transfer->address == base + 5 + relativeDisplacement,
+         "a rel32 trampoline hop must resolve to its next executable target");
+
+  std::array<std::uint8_t, 16> shortJump{};
+  shortJump[0] = 0xEB;
+  shortJump[1] = 0xF0;
+  transfer = DecodeTransfer(base, shortJump);
+  Expect(transfer.has_value() &&
+             transfer->kind == TransferKind::DirectTarget &&
+             transfer->address == base - 14,
+         "a negative rel8 trampoline hop must use signed displacement");
+
+  std::array<std::uint8_t, 16> absoluteJump{};
+  absoluteJump[0] = 0x48;
+  absoluteJump[1] = 0xB8;
+  std::memcpy(absoluteJump.data() + 2, &iedTarget, sizeof(iedTarget));
+  absoluteJump[10] = 0xFF;
+  absoluteJump[11] = 0xE0;
+  transfer = DecodeTransfer(base, absoluteJump);
+  Expect(transfer.has_value() && transfer->address == iedTarget,
+         "a mov-rax/jmp-rax veneer must resolve to its module-owned target");
+
+  std::array<std::uint8_t, 20> endbrR11Jump{};
+  endbrR11Jump[0] = 0xF3;
+  endbrR11Jump[1] = 0x0F;
+  endbrR11Jump[2] = 0x1E;
+  endbrR11Jump[3] = 0xFA;
+  endbrR11Jump[4] = 0x49;
+  endbrR11Jump[5] = 0xBB;
+  std::memcpy(endbrR11Jump.data() + 6, &iedTarget, sizeof(iedTarget));
+  endbrR11Jump[14] = 0x41;
+  endbrR11Jump[15] = 0xFF;
+  endbrR11Jump[16] = 0xE3;
+  transfer = DecodeTransfer(base, endbrR11Jump);
+  Expect(transfer.has_value() && transfer->address == iedTarget,
+         "an ENDBR64-prefixed mov-r11/jmp-r11 veneer must resolve exactly");
+
+  std::array<std::uint8_t, 16> underflowJump{};
+  underflowJump[0] = 0xE9;
+  const std::int32_t underflowDisplacement = -16;
+  std::memcpy(underflowJump.data() + 1, &underflowDisplacement,
+              sizeof(underflowDisplacement));
+  Expect(!DecodeTransfer(0, underflowJump).has_value(),
+         "an overflowing relative veneer must fail closed");
+
+  std::array<std::uint8_t, 16> executableBody{};
+  executableBody[0] = 0x48;
+  executableBody[1] = 0x89;
+  Expect(!DecodeTransfer(base, executableBody).has_value(),
+         "ordinary hook bodies must not be guessed through as transparent trampolines");
+}
+
+void TestFinalRenderedNudityContract() {
+  using sfs::native::final_outfit::rules::IsVisuallyNakedForSlots;
+  using sfs::native::final_outfit::rules::ResolveDisplayedFootwear;
+  constexpr auto body = std::uint32_t{1} << 2;
+  constexpr auto hands = std::uint32_t{1} << 3;
+  constexpr auto feet = std::uint32_t{1} << 7;
+
+  Expect(!IsVisuallyNakedForSlots(body, 0, body),
+         "visible actual body armor must prevent a nude result");
+  Expect(!IsVisuallyNakedForSlots(0, body, body),
+         "visible registered body appearance must prevent a nude result");
+  Expect(!ResolveDisplayedFootwear(false, 0, 0x100).has_value(),
+         "an unmanaged actor must preserve the consumer's actual-footwear fallback");
+  Expect(ResolveDisplayedFootwear(true, 0x200U, 0x100U) == 0x200U,
+         "visible registered footwear must win the managed final result");
+  Expect(ResolveDisplayedFootwear(true, 0, 0x100U) == 0x100U,
+         "visible actual footwear must remain available in a managed final result");
+  Expect(ResolveDisplayedFootwear(true, 0, 0) == 0U,
+         "a managed actor with every feet source hidden must produce an explicit barefoot result");
+  Expect(!IsVisuallyNakedForSlots(hands, feet, hands | feet),
+         "actual and registered coverage must combine in the final rendered outfit");
+  Expect(IsVisuallyNakedForSlots(0, hands | feet, body),
+         "a technically equipped but SFS-hidden body armor must not count as visible coverage");
+  Expect(IsVisuallyNakedForSlots(hands, feet, body),
+         "visible unrelated slots must not prevent body nudity");
+  Expect(!IsVisuallyNakedForSlots(0, 0, 0),
+         "an empty query mask must fail closed instead of reporting nudity");
+}
+
 void TestTngGenitalCoverIsolation() {
   using namespace sfs::armor::rules;
   constexpr auto slot52 = kGenitalSlotMask;
@@ -601,6 +729,9 @@ int main() {
   TestSexLabPPlusStripContract();
   TestBodyMorphActivity();
   TestRefreshBackends();
+  TestIedVisitorRoutingIsolation();
+  TestHookTrampolineChainDecoding();
+  TestFinalRenderedNudityContract();
   TestTngGenitalCoverIsolation();
   TestGenitalCompatibilityEnvironmentIsolation();
   TestPausedCharacterRotationIsolation();

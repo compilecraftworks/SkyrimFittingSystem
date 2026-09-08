@@ -3975,14 +3975,88 @@ void Generator::SnapshotLoadedArmorForms() {
       });
 }
 
-std::vector<PluginSource> &Generator::PluginSources() { return pluginSources_; }
 const std::vector<PluginSource> &Generator::PluginSources() const {
   return pluginSources_;
+}
+bool Generator::SetPluginSourceSelected(const std::size_t a_index,
+                                        const bool a_selected) {
+  const auto state = state_.load(std::memory_order_acquire);
+  if (state == ScanState::Scanning || state == ScanState::Cancelling ||
+      a_index >= pluginSources_.size()) {
+    return false;
+  }
+  pluginSources_[a_index].selected = a_selected;
+  return true;
+}
+void Generator::SetAllPluginSourcesSelected(const bool a_selected) {
+  const auto state = state_.load(std::memory_order_acquire);
+  if (state == ScanState::Scanning || state == ScanState::Cancelling) {
+    return;
+  }
+  for (auto &source : pluginSources_) {
+    source.selected = a_selected;
+  }
 }
 const std::vector<GeneratedKit> &Generator::GeneratedKits() const {
   return generatedKits_;
 }
-std::vector<GeneratedKit> &Generator::GeneratedKits() { return generatedKits_; }
+bool Generator::RenameGeneratedKit(const std::size_t a_kitIndex,
+                                   std::string a_name) {
+  if (state_.load(std::memory_order_acquire) != ScanState::Complete ||
+      a_kitIndex >= generatedKits_.size() || a_name.empty()) {
+    return false;
+  }
+  generatedKits_[a_kitIndex].name = std::move(a_name);
+  return true;
+}
+bool Generator::ResetGeneratedKitDraftCandidate(
+    const std::size_t a_kitIndex) {
+  if (state_.load(std::memory_order_acquire) != ScanState::Complete ||
+      a_kitIndex >= generatedKits_.size()) {
+    return false;
+  }
+  auto &kit = generatedKits_[a_kitIndex];
+  if (kit.candidates.empty()) {
+    return false;
+  }
+  kit.selectedCandidate =
+      (std::min)(kit.selectedCandidate, kit.candidates.size() - 1);
+  kit.draftCandidate = kit.selectedCandidate;
+  return true;
+}
+bool Generator::SetGeneratedKitDraftCandidate(
+    const std::size_t a_kitIndex, const std::size_t a_candidateIndex) {
+  if (state_.load(std::memory_order_acquire) != ScanState::Complete ||
+      a_kitIndex >= generatedKits_.size() ||
+      a_candidateIndex >= generatedKits_[a_kitIndex].candidates.size()) {
+    return false;
+  }
+  generatedKits_[a_kitIndex].draftCandidate = a_candidateIndex;
+  return true;
+}
+bool Generator::SelectGeneratedKitCandidate(
+    const std::size_t a_kitIndex, const std::size_t a_candidateIndex) {
+  if (!SetGeneratedKitDraftCandidate(a_kitIndex, a_candidateIndex)) {
+    return false;
+  }
+  auto &kit = generatedKits_[a_kitIndex];
+  kit.selectedCandidate = a_candidateIndex;
+  kit.safetyPrefixOverride.reset();
+  return true;
+}
+bool Generator::ReplaceGeneratedCandidateItems(
+    const std::size_t a_kitIndex, const std::size_t a_candidateIndex,
+    std::vector<ArmorRecord> a_items) {
+  if (state_.load(std::memory_order_acquire) != ScanState::Complete ||
+      a_items.empty() || a_kitIndex >= generatedKits_.size() ||
+      a_candidateIndex >= generatedKits_[a_kitIndex].candidates.size()) {
+    return false;
+  }
+  auto &candidate = generatedKits_[a_kitIndex].candidates[a_candidateIndex];
+  candidate.items = std::move(a_items);
+  candidate.score = 0;
+  return true;
+}
 bool Generator::IncludeSafetyPrefix() const { return includeSafetyPrefix_; }
 
 ProgressSnapshot Generator::GetProgressSnapshot() const {

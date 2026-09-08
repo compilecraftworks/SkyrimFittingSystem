@@ -1,0 +1,75 @@
+{
+    "name": "+Female NPC Modesty SIMPLE - weapons -greataxe",
+    "description": "Checks vanilla keywords for slot 32 Body.\n\nActivate Compare Values EVGCI14_ModestyF condition to use EVG recognition.",
+    "priority": 2123102004,
+    "requiredBehaviorProjectName": "DefaultFemale",
+    "replaceOnLoop": false,
+    "conditions": [
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Detection settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Master settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC User settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Weapon and Magic settings"
+        },
+        {
+            "condition": "IsEquippedType",
+            "requiredVersion": "1.0.0.0",
+            "Type": {
+                "value": 6.0
+            },
+            "Left hand": true
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "condition": "IsWeaponDrawn",
+            "requiredVersion": "1.0.0.0"
+        }
+    ]
+}

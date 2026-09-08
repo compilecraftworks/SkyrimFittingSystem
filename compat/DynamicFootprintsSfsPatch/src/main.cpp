@@ -31,10 +31,13 @@ constexpr std::array<std::uint8_t, 16> kExpectedFunctionPrefix{
 
 using GetHostApiVersion = std::uint32_t(SKSEAPI *)();
 using GetDisplayedFootwearFormID = std::uint32_t(SKSEAPI *)(std::uint32_t);
+using TryGetDisplayedFootwearFormID = bool(SKSEAPI *)(std::uint32_t,
+                                                      std::uint32_t *);
 using GetWornArmor = RE::TESObjectARMO *(SKSEAPI *)(
     RE::Actor *, RE::BIPED_MODEL::BipedObjectSlot, bool);
 
 GetDisplayedFootwearFormID g_getDisplayedFootwearFormID = nullptr;
+TryGetDisplayedFootwearFormID g_tryGetDisplayedFootwearFormID = nullptr;
 GetWornArmor g_originalGetWornArmor = nullptr;
 SKSE::Trampoline g_dynamicFootprintsTrampoline{
     "SFS Dynamic Footprints compatibility"};
@@ -130,6 +133,9 @@ bool g_installed = false;
   g_getDisplayedFootwearFormID = reinterpret_cast<GetDisplayedFootwearFormID>(
       ::GetProcAddress(sfsCore,
                        "SkyrimFittingSystem_GetDisplayedFootwearFormID"));
+  g_tryGetDisplayedFootwearFormID =
+      reinterpret_cast<TryGetDisplayedFootwearFormID>(::GetProcAddress(
+          sfsCore, "SkyrimFittingSystem_TryGetDisplayedFootwearFormID"));
   if (getVersion == nullptr || g_getDisplayedFootwearFormID == nullptr ||
       getVersion() != 1) {
     g_getDisplayedFootwearFormID = nullptr;
@@ -147,6 +153,15 @@ bool g_installed = false;
       RE::BIPED_MODEL::BipedObjectSlot::kFeet);
   if (a_actor != nullptr && g_getDisplayedFootwearFormID != nullptr &&
       static_cast<std::uint32_t>(a_slot) == feetSlot) {
+    if (g_tryGetDisplayedFootwearFormID != nullptr) {
+      std::uint32_t finalFormID = 0;
+      if (g_tryGetDisplayedFootwearFormID(a_actor->GetFormID(),
+                                         &finalFormID)) {
+        return finalFormID != 0
+                   ? RE::TESForm::LookupByID<RE::TESObjectARMO>(finalFormID)
+                   : nullptr;
+      }
+    }
     const auto displayedFormID =
         g_getDisplayedFootwearFormID(a_actor->GetFormID());
     if (displayedFormID != 0) {

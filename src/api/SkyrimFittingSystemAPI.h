@@ -31,6 +31,11 @@ SFS_API std::uint32_t
 SkyrimFittingSystem_GetDynamicFootprintsHostAPIVersion();
 SFS_API std::uint32_t
 SkyrimFittingSystem_GetDisplayedFootwearFormID(std::uint32_t a_actorFormID);
+// Optional ABI-v1 extension. Returns true when SFS owns the actor's final
+// footwear decision; a true result with FormID 0 explicitly means barefoot.
+// False tells older consumers to use their ordinary actual-equipment query.
+SFS_API bool SkyrimFittingSystem_TryGetDisplayedFootwearFormID(
+    std::uint32_t a_actorFormID, std::uint32_t *a_outFormID);
 
 namespace sfs::api {
 [[nodiscard]] bool IsHotkeyEnabled();

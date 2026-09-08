@@ -10,8 +10,8 @@
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/InputWidgets.h"
 #include "ui/Localization.h"
 #include "ui/WorkbenchConflicts.h"
@@ -456,9 +456,11 @@ bool Menu::DrawSlotCreationRow(const bool a_drawConditionSectionHeader,
         ImGui::BeginDragDropTargetCustom(
             cardRect, ImGui::GetID("##slot-create-condition-target"))) {
       if (const auto *payload = ImGui::AcceptDragDropPayload(
-              ui::workbench::kConditionPayloadType);
+              ui::workbench::kConditionPayloadType,
+              ImGuiDragDropFlags_AcceptBeforeDelivery);
           payload && payload->Data != nullptr &&
-          payload->DataSize == sizeof(DraggedConditionPayload)) {
+          payload->DataSize == sizeof(DraggedConditionPayload) &&
+          payload->IsDelivery()) {
         DraggedConditionPayload conditionPayload{};
         std::memcpy(&conditionPayload, payload->Data, sizeof(conditionPayload));
         const std::string conditionId(conditionPayload.conditionId.data());
@@ -656,9 +658,11 @@ bool Menu::DrawSlotCreationRow(const bool a_drawConditionSectionHeader,
         ImGui::BeginDragDropTargetCustom(
             rightCellRect, ImGui::GetID("##slot-create-override-target"))) {
       if (const auto *payload = ImGui::AcceptDragDropPayload(
-              ui::workbench::kVariantItemPayloadType);
+              ui::workbench::kVariantItemPayloadType,
+              ImGuiDragDropFlags_AcceptBeforeDelivery);
           payload && payload->Data != nullptr &&
-          payload->DataSize == sizeof(DraggedEquipmentPayload)) {
+          payload->DataSize == sizeof(DraggedEquipmentPayload) &&
+          payload->IsDelivery()) {
         DraggedEquipmentPayload dragPayload{};
         std::memcpy(&dragPayload, payload->Data, sizeof(dragPayload));
         const auto sourceKind =
@@ -719,9 +723,11 @@ bool Menu::DrawSlotCreationRow(const bool a_drawConditionSectionHeader,
         }
       }
       if (const auto *payload = ImGui::AcceptDragDropPayload(
-              ui::workbench::kConditionPayloadType);
+              ui::workbench::kConditionPayloadType,
+              ImGuiDragDropFlags_AcceptBeforeDelivery);
           payload && payload->Data != nullptr &&
-          payload->DataSize == sizeof(DraggedConditionPayload)) {
+          payload->DataSize == sizeof(DraggedConditionPayload) &&
+          payload->IsDelivery()) {
         DraggedConditionPayload conditionPayload{};
         std::memcpy(&conditionPayload, payload->Data, sizeof(conditionPayload));
         const std::string conditionId(conditionPayload.conditionId.data());
@@ -995,7 +1001,7 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
   const auto deviousDevicesHiderSuppressedFittingSlotMask =
       previewActor != nullptr
           ? static_cast<std::uint64_t>(
-                sfs::poc::GetDeviousDevicesHiderSuppressedFittingSlotMask(
+                sfs::devious_devices::GetDeviousDevicesHiderSuppressedFittingSlotMask(
                     previewActor))
           : 0;
   const auto selectPrimaryDisplaySlot = [](const std::uint64_t a_slotMask) {
@@ -1391,6 +1397,25 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
         a_visibleWhenTrue = !sourceItem->hidden && !globallyHideFittingOverrides;
         return true;
       };
+  const auto resolveConditionalActionSource =
+      [](const DraggedEquipmentPayload &a_payload)
+      -> std::optional<workbench::condition_drop::Target> {
+    if (a_payload.sourceUiIdentity == 0) {
+      return std::nullopt;
+    }
+    const auto sourceKind = static_cast<DragSourceKind>(a_payload.sourceKind);
+    if (sourceKind == DragSourceKind::ConditionalRow) {
+      return workbench::condition_drop::Target{
+          workbench::condition_drop::TargetKind::ConditionalRow,
+          a_payload.sourceUiIdentity};
+    }
+    if (sourceKind == DragSourceKind::ConditionalVisibilityRule) {
+      return workbench::condition_drop::Target{
+          workbench::condition_drop::TargetKind::ConditionalVisibilityRule,
+          a_payload.sourceUiIdentity};
+    }
+    return std::nullopt;
+  };
   const auto resolveActiveFittingRowForSlotMask =
       [&](const std::uint64_t a_slotMask) {
         int baseRowIndex = -1;
@@ -1833,39 +1858,18 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
       };
       std::optional<PendingAppearanceLockChange>
           pendingAppearanceLockChange;
-      struct PendingConditionalFittingReplacement {
-        int rowIndex{-1};
-        std::uint64_t targetUiIdentity{0};
-        RE::FormID formID{0};
-        DraggedEquipmentPayload draggedItem{};
-      };
       std::optional<PendingConditionalRowAction> pendingConditionalRowAction;
-      std::optional<PendingConditionalFittingReplacement>
-          pendingConditionalFittingReplacement;
       struct PendingVisibilityRuleDelete {
         std::size_t ruleIndex{0};
         bool preserveTarget{false};
       };
       std::optional<PendingVisibilityRuleDelete> pendingVisibilityRuleDelete;
-      struct PendingVisibilityRuleReplacement {
-        std::size_t ruleIndex{0};
-        std::uint64_t targetUiIdentity{0};
-        workbench::ConditionalVisibilityTargetKind targetKind{
-            workbench::ConditionalVisibilityTargetKind::Fitting};
-        RE::FormID formID{0};
-        bool visibleWhenTrue{true};
-        DraggedEquipmentPayload draggedItem{};
+      struct PendingConditionalActionDrop {
+        workbench::ConditionalActionDropRequest request;
+        bool changesRows{false};
       };
-      std::optional<PendingVisibilityRuleReplacement>
-          pendingVisibilityRuleReplacement;
-      struct PendingVisibilityRuleFittingConversion {
-        std::size_t ruleIndex{0};
-        std::uint64_t targetUiIdentity{0};
-        RE::FormID formID{0};
-        DraggedEquipmentPayload draggedItem{};
-      };
-      std::optional<PendingVisibilityRuleFittingConversion>
-          pendingVisibilityRuleFittingConversion;
+      std::optional<PendingConditionalActionDrop>
+          pendingConditionalActionDrop;
       struct PendingVisibilityRuleConditionAssignment {
         std::size_t ruleIndex{0};
         std::uint64_t targetUiIdentity{0};
@@ -1874,17 +1878,6 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
       };
       std::optional<PendingVisibilityRuleConditionAssignment>
           pendingVisibilityRuleConditionAssignment;
-      struct PendingConditionalRowVisibilityConversion {
-        int rowIndex{-1};
-        std::uint64_t targetUiIdentity{0};
-        workbench::ConditionalVisibilityTargetKind targetKind{
-            workbench::ConditionalVisibilityTargetKind::Fitting};
-        RE::FormID formID{0};
-        bool visibleWhenTrue{true};
-        DraggedEquipmentPayload draggedItem{};
-      };
-      std::optional<PendingConditionalRowVisibilityConversion>
-          pendingConditionalRowVisibilityConversion;
       bool refreshNativeAfterTable = false;
       bool syncRowsAfterTable = false;
       const auto freezeWorkbenchOrderForEdit = [&]() {
@@ -2155,7 +2148,8 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
           const auto conditionCardMax =
               ImVec2(leftCellRect.Max.x - cellPadding.x,
                      conditionCardMin.y + contentHeight);
-          ImGui::PushID(displayGroup.conditionRowIndex);
+          ImGui::PushID(reinterpret_cast<const void *>(
+              static_cast<std::uintptr_t>(conditionRow.uiIdentity)));
           ImGui::SetCursorScreenPos(conditionCardMin);
           ImGui::InvisibleButton(
               "##condition-summary-card",
@@ -2313,9 +2307,11 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                   conditionCardRect,
                   ImGui::GetID("##condition-summary-target"))) {
             if (const auto *payload = ImGui::AcceptDragDropPayload(
-                    ui::workbench::kConditionPayloadType);
+                    ui::workbench::kConditionPayloadType,
+                    ImGuiDragDropFlags_AcceptBeforeDelivery);
                 payload && payload->Data != nullptr &&
-                payload->DataSize == sizeof(DraggedConditionPayload)) {
+                payload->DataSize == sizeof(DraggedConditionPayload) &&
+                payload->IsDelivery()) {
               DraggedConditionPayload conditionPayload{};
               std::memcpy(&conditionPayload, payload->Data,
                           sizeof(conditionPayload));
@@ -2369,7 +2365,8 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
             const bool sosTngControlledActual =
                 armor::IsSosTngInternalArmor(actualArmor);
             const bool ddRenderedDevice =
-                sfs::poc::IsDeviousDevicesRenderedDevice(actualArmor);
+                sfs::devious_devices::IsDeviousDevicesRenderedDevice(
+                    actualArmor);
             const bool alwaysVisibleActual =
                 actualRow.IsAlwaysVisibleActualEquipment();
             const bool hideControlLocked = alwaysVisibleActual ||
@@ -2379,7 +2376,7 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                                                          actualRow);
             const bool ddOrdinaryVisible =
                 previewActor != nullptr &&
-                sfs::poc::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
+                sfs::devious_devices::IsDeviousDevicesRenderedDeviceOrdinaryVisible(
                     previewActor->GetFormID(), actualRow.equipped.formID);
             const auto activeActualRule =
                 activeActualVisibilityRules.find(actualRow.equipped.formID);
@@ -2508,7 +2505,7 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
               bool changed = false;
               const bool desiredHidden = !effectiveHidden;
               if (ddRenderedDevice) {
-                sfs::poc::SetDeviousDevicesRenderedDeviceUserVisible(
+                sfs::devious_devices::SetDeviousDevicesRenderedDeviceUserVisible(
                     actorFormID, actualRow.equipped.formID, !desiredHidden);
               } else if (baseActualHidden && previewActor != nullptr &&
                   HideRealEquipmentWithFittingForActor(previewActor)) {
@@ -2703,7 +2700,7 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 !overrideItem.locked && previewActor != nullptr &&
                 (overrideSlotMask &
                  virtualTokenSuppressedFittingSlotMask) == 0 &&
-                sfs::poc::IsVirtualWornTokenAppearanceSuppressed(
+                sfs::virtual_tokens::IsVirtualWornTokenAppearanceSuppressed(
                     previewActor->GetFormID(), overrideItem.formID,
                     static_cast<std::uint32_t>(overrideSlotMask));
             const bool virtualTokenHidden =
@@ -2884,9 +2881,11 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                     overrideWidgetRect,
                     ImGui::GetID((widgetId + ":condition-target").c_str()))) {
               if (const auto *payload = ImGui::AcceptDragDropPayload(
-                      ui::workbench::kConditionPayloadType);
+                      ui::workbench::kConditionPayloadType,
+                      ImGuiDragDropFlags_AcceptBeforeDelivery);
                   payload && payload->Data != nullptr &&
-                  payload->DataSize == sizeof(DraggedConditionPayload)) {
+                  payload->DataSize == sizeof(DraggedConditionPayload) &&
+                  payload->IsDelivery()) {
                 DraggedConditionPayload conditionPayload{};
                 std::memcpy(&conditionPayload, payload->Data,
                             sizeof(conditionPayload));
@@ -3012,9 +3011,11 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                             .c_str()));
             overrideTargetActive) {
           if (const auto *payload = ImGui::AcceptDragDropPayload(
-                  ui::workbench::kVariantItemPayloadType);
+                  ui::workbench::kVariantItemPayloadType,
+                  ImGuiDragDropFlags_AcceptBeforeDelivery);
               payload && payload->Data != nullptr &&
-              payload->DataSize == sizeof(DraggedEquipmentPayload)) {
+              payload->DataSize == sizeof(DraggedEquipmentPayload) &&
+              payload->IsDelivery()) {
             DraggedEquipmentPayload dragPayload{};
             std::memcpy(&dragPayload, payload->Data, sizeof(dragPayload));
             workbench::EquipmentWidgetItem droppedItem{};
@@ -3022,41 +3023,42 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                     DragSourceKind::Catalog &&
                 dragPayload.formID != 0 &&
                 workbench::BuildCatalogItem(dragPayload.formID, droppedItem)) {
-              // A condition-only row has no action type or slot. Its previous
-              // appearance slot must not prevent a different appearance from
-              // being dropped into the same retained row.
-              pendingConditionalFittingReplacement =
-                  PendingConditionalFittingReplacement{
-                      displayGroup.dropTargetRowIndex,
-                      rows[static_cast<std::size_t>(
-                               displayGroup.dropTargetRowIndex)]
-                          .uiIdentity,
-                      dragPayload.formID, dragPayload};
+              pendingConditionalActionDrop = PendingConditionalActionDrop{
+                  .request =
+                      {.target =
+                           {workbench::condition_drop::TargetKind::
+                                ConditionalRow,
+                            rows[static_cast<std::size_t>(
+                                     displayGroup.dropTargetRowIndex)]
+                                .uiIdentity},
+                       .formID = dragPayload.formID,
+                       .targetKind = workbench::
+                           ConditionalVisibilityTargetKind::Fitting,
+                       .registerFittingTarget = true},
+                  .changesRows = true};
             } else {
               workbench::ConditionalVisibilityTargetKind targetKind{};
               bool visibleWhenTrue = true;
               if (resolveVisibilityTargetPayload(dragPayload, targetKind,
                                                  visibleWhenTrue)) {
-                if (targetKind == workbench::
-                                      ConditionalVisibilityTargetKind::Fitting) {
-                   pendingConditionalFittingReplacement =
-                       PendingConditionalFittingReplacement{
-                           displayGroup.dropTargetRowIndex,
-                           rows[static_cast<std::size_t>(
-                                    displayGroup.dropTargetRowIndex)]
-                               .uiIdentity,
-                           dragPayload.formID,
-                           dragPayload};
-                } else {
-                  pendingConditionalRowVisibilityConversion =
-                       PendingConditionalRowVisibilityConversion{
-                           displayGroup.dropTargetRowIndex,
-                           rows[static_cast<std::size_t>(
-                                    displayGroup.dropTargetRowIndex)]
-                               .uiIdentity,
-                           targetKind,
-                           dragPayload.formID, visibleWhenTrue, dragPayload};
-                }
+                pendingConditionalActionDrop = PendingConditionalActionDrop{
+                    .request =
+                        {.target =
+                             {workbench::condition_drop::TargetKind::
+                                  ConditionalRow,
+                              rows[static_cast<std::size_t>(
+                                       displayGroup.dropTargetRowIndex)]
+                                  .uiIdentity},
+                         .source =
+                             resolveConditionalActionSource(dragPayload),
+                         .formID = dragPayload.formID,
+                         .targetKind = targetKind,
+                         .visibleWhenTrue = visibleWhenTrue,
+                         .registerFittingTarget =
+                             targetKind == workbench::
+                                               ConditionalVisibilityTargetKind::
+                                                   Fitting},
+                    .changesRows = true};
               }
             }
           }
@@ -3100,7 +3102,8 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
         ImGui::TableNextRow(ImGuiTableRowFlags_None, rowHeight);
         ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
                                ThemeConfig::GetSingleton()->GetColorU32("BG"));
-        ImGui::PushID(static_cast<int>(ruleIndex));
+        ImGui::PushID(reinterpret_cast<const void *>(
+            static_cast<std::uintptr_t>(rule.uiIdentity)));
 
         const bool conditionMet = hasRuleCondition &&
                                   isConditionIdActive(rule.conditionId);
@@ -3263,9 +3266,11 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 conditionRect,
                 ImGui::GetID("##visibility-rule-condition-target"))) {
           if (const auto *payload = ImGui::AcceptDragDropPayload(
-                  ui::workbench::kConditionPayloadType);
+                  ui::workbench::kConditionPayloadType,
+                  ImGuiDragDropFlags_AcceptBeforeDelivery);
               payload != nullptr && payload->Data != nullptr &&
-              payload->DataSize == sizeof(DraggedConditionPayload)) {
+              payload->DataSize == sizeof(DraggedConditionPayload) &&
+              payload->IsDelivery()) {
             DraggedConditionPayload draggedCondition{};
             std::memcpy(&draggedCondition, payload->Data,
                         sizeof(draggedCondition));
@@ -3403,30 +3408,56 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 actionWidgetRect,
                 ImGui::GetID("##visibility-rule-action-target"))) {
           if (const auto *payload = ImGui::AcceptDragDropPayload(
-                  ui::workbench::kVariantItemPayloadType);
+                  ui::workbench::kVariantItemPayloadType,
+                  ImGuiDragDropFlags_AcceptBeforeDelivery);
               payload != nullptr && payload->Data != nullptr &&
-              payload->DataSize == sizeof(DraggedEquipmentPayload)) {
+              payload->DataSize == sizeof(DraggedEquipmentPayload) &&
+              payload->IsDelivery()) {
             DraggedEquipmentPayload draggedItem{};
             std::memcpy(&draggedItem, payload->Data, sizeof(draggedItem));
             if (static_cast<DragSourceKind>(draggedItem.sourceKind) ==
                     DragSourceKind::Catalog &&
                 draggedItem.formID != 0) {
-              pendingVisibilityRuleFittingConversion =
-                  PendingVisibilityRuleFittingConversion{ruleIndex,
-                                                         rule.uiIdentity,
-                                                         draggedItem.formID,
-                                                         draggedItem};
+              pendingConditionalActionDrop = PendingConditionalActionDrop{
+                  .request =
+                      {.target =
+                           {workbench::condition_drop::TargetKind::
+                                ConditionalVisibilityRule,
+                            rule.uiIdentity},
+                       .formID = draggedItem.formID,
+                       .targetKind = workbench::
+                           ConditionalVisibilityTargetKind::Fitting,
+                       .registerFittingTarget = true},
+                  .changesRows = true};
             } else {
               workbench::ConditionalVisibilityTargetKind targetKind{};
               bool visibleWhenTrue = true;
               if (resolveVisibilityTargetPayload(draggedItem, targetKind,
                                                  visibleWhenTrue)) {
-                pendingVisibilityRuleReplacement =
-                    PendingVisibilityRuleReplacement{ruleIndex,
-                                                     rule.uiIdentity, targetKind,
-                                                     draggedItem.formID,
-                                                     visibleWhenTrue,
-                                                     draggedItem};
+                const auto source =
+                    resolveConditionalActionSource(draggedItem);
+                pendingConditionalActionDrop = PendingConditionalActionDrop{
+                    .request =
+                        {.target =
+                             {workbench::condition_drop::TargetKind::
+                                  ConditionalVisibilityRule,
+                              rule.uiIdentity},
+                         .source = source,
+                         .formID = draggedItem.formID,
+                         .targetKind = targetKind,
+                         .visibleWhenTrue = visibleWhenTrue,
+                         .registerFittingTarget =
+                             source.has_value() &&
+                             source->kind ==
+                                 workbench::condition_drop::TargetKind::
+                                     ConditionalRow &&
+                             targetKind == workbench::
+                                               ConditionalVisibilityTargetKind::
+                                                   Fitting},
+                    .changesRows =
+                        source.has_value() &&
+                        source->kind == workbench::condition_drop::TargetKind::
+                                            ConditionalRow};
               }
             }
           }
@@ -3795,193 +3826,58 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                    ? -1
                    : static_cast<int>(std::distance(currentRows.begin(), it));
       };
-      const auto findRuleIndexByUiIdentity =
-          [&](const std::uint64_t a_identity) -> std::optional<std::size_t> {
-        const auto &currentRules = workbench_.GetConditionalVisibilityRules();
-        const auto it = std::ranges::find(
-            currentRules, a_identity,
-            &workbench::ConditionalVisibilityRule::uiIdentity);
-        if (it == currentRules.end()) {
-          return std::nullopt;
-        }
-        return static_cast<std::size_t>(
-            std::distance(currentRules.begin(), it));
-      };
-      const auto readConditionByIdentity =
-          [&](const ConditionDragSourceKind a_kind,
-              const std::uint64_t a_identity) -> std::string {
-        if (a_kind == ConditionDragSourceKind::ConditionalRow) {
-          const auto rowIndex = findRowIndexByUiIdentity(a_identity);
-          if (rowIndex >= 0) {
-            return workbench_.GetRows()[static_cast<std::size_t>(rowIndex)]
-                .conditionId.value_or(std::string{});
-          }
-        } else if (a_kind ==
-                   ConditionDragSourceKind::ConditionalVisibilityRule) {
-          if (const auto ruleIndex = findRuleIndexByUiIdentity(a_identity);
-              ruleIndex.has_value()) {
-            return workbench_.GetConditionalVisibilityRules()[*ruleIndex]
-                .conditionId;
-          }
-        }
-        return {};
-      };
-      const auto writeConditionByIdentity =
-          [&](const ConditionDragSourceKind a_kind,
-              const std::uint64_t a_identity,
-              const std::string_view a_conditionId) {
-        if (a_kind == ConditionDragSourceKind::ConditionalRow) {
-          const auto rowIndex = findRowIndexByUiIdentity(a_identity);
-          if (rowIndex < 0) {
-            return false;
-          }
-          return a_conditionId.empty()
-                     ? workbench_.ClearConditionAssignmentKeepRow(rowIndex)
-                     : workbench_.SetConditionAssignmentKeepRow(rowIndex,
-                                                                a_conditionId);
-        }
-        if (a_kind ==
-            ConditionDragSourceKind::ConditionalVisibilityRule) {
-          const auto ruleIndex = findRuleIndexByUiIdentity(a_identity);
-          return ruleIndex.has_value() &&
-                 workbench_.SetConditionalVisibilityRuleConditionId(
-                     *ruleIndex, a_conditionId);
-        }
-        return false;
-      };
       const auto applyConditionDrop =
           [&](const ConditionDragSourceKind a_targetKind,
               const std::uint64_t a_targetIdentity,
               const std::string_view a_conditionId,
               const std::optional<DraggedConditionPayload> &a_dragged) {
-        if (!a_dragged.has_value() ||
-            a_dragged->sourceUiIdentity == 0) {
-          return writeConditionByIdentity(a_targetKind, a_targetIdentity,
-                                          a_conditionId);
+        workbench::condition_drop::Request request{
+            .target = {a_targetKind, a_targetIdentity},
+            .conditionId = std::string(a_conditionId),
+        };
+        if (a_dragged.has_value() &&
+            a_dragged->sourceUiIdentity != 0) {
+          request.source = workbench::condition_drop::Target{
+              static_cast<ConditionDragSourceKind>(a_dragged->sourceKind),
+              a_dragged->sourceUiIdentity};
         }
-        const auto sourceKind = static_cast<ConditionDragSourceKind>(
-            a_dragged->sourceKind);
-        if (sourceKind == a_targetKind &&
-            a_dragged->sourceUiIdentity == a_targetIdentity) {
-          return false;
+        const auto status = workbench_.ApplyConditionDropTransaction(request);
+        if (status != workbench::condition_drop::Status::Applied &&
+            status != workbench::condition_drop::Status::NoChange) {
+          logger::warn(
+              "Condition drop rejected status={} sourceKind={} source={:016X} targetKind={} target={:016X}",
+              workbench::condition_drop::StatusName(status),
+              request.source.has_value()
+                  ? static_cast<std::uint32_t>(request.source->kind)
+                  : 0,
+              request.source.has_value() ? request.source->uiIdentity : 0,
+              static_cast<std::uint32_t>(request.target.kind),
+              request.target.uiIdentity);
         }
-        const auto oldTargetCondition =
-            readConditionByIdentity(a_targetKind, a_targetIdentity);
-        const auto oldSourceCondition = readConditionByIdentity(
-            sourceKind, a_dragged->sourceUiIdentity);
-        // Move between occupied condition cells as a swap, so editing never
-        // silently discards the destination card. Moving to an empty cell
-        // simply leaves the source cell empty.
-        // Clear the destination first. Otherwise two visibility-rule cards
-        // with the same target can temporarily collide during a swap and the
-        // model correctly rejects the duplicate before the source is moved.
-        const bool targetCleared = writeConditionByIdentity(
-            a_targetKind, a_targetIdentity, {});
-        if (!targetCleared &&
-            !readConditionByIdentity(a_targetKind, a_targetIdentity).empty()) {
-          return false;
-        }
-        const bool sourceMoved = writeConditionByIdentity(
-            sourceKind, a_dragged->sourceUiIdentity, oldTargetCondition);
-        if (!sourceMoved &&
-            readConditionByIdentity(sourceKind,
-                                    a_dragged->sourceUiIdentity) !=
-                oldTargetCondition) {
-          static_cast<void>(writeConditionByIdentity(
-              a_targetKind, a_targetIdentity, oldTargetCondition));
-          return false;
-        }
-        const bool targetMoved = writeConditionByIdentity(
-            a_targetKind, a_targetIdentity, a_conditionId);
-        if (!targetMoved &&
-            readConditionByIdentity(a_targetKind, a_targetIdentity) !=
-                a_conditionId) {
-          static_cast<void>(writeConditionByIdentity(
-              sourceKind, a_dragged->sourceUiIdentity, oldSourceCondition));
-          static_cast<void>(writeConditionByIdentity(
-              a_targetKind, a_targetIdentity, oldTargetCondition));
-          return false;
-        }
-        return targetCleared || sourceMoved || targetMoved;
+        return status == workbench::condition_drop::Status::Applied;
       };
-      const auto clearMovedActionSource =
-          [&](const DraggedEquipmentPayload &a_payload,
-              const std::uint64_t a_targetIdentity) {
-        const auto sourceKind =
-            static_cast<DragSourceKind>(a_payload.sourceKind);
-        if (a_payload.sourceUiIdentity == 0 ||
-            a_payload.sourceUiIdentity == a_targetIdentity) {
-          return false;
-        }
-        if (sourceKind == DragSourceKind::ConditionalRow) {
-          const auto rowIndex =
-              findRowIndexByUiIdentity(a_payload.sourceUiIdentity);
-          if (rowIndex < 0) {
-            return false;
-          }
-          const auto &sourceRow =
-              workbench_.GetRows()[static_cast<std::size_t>(rowIndex)];
-          const auto itemIt = std::ranges::find(
-              sourceRow.overrides, a_payload.formID,
-              &workbench::EquipmentWidgetItem::formID);
-          if (itemIt == sourceRow.overrides.end()) {
-            return false;
-          }
-          return workbench_.DeleteOverride(
-              rowIndex, static_cast<int>(
-                            std::distance(sourceRow.overrides.begin(), itemIt)));
-        }
-        if (sourceKind == DragSourceKind::ConditionalVisibilityRule) {
-          const auto ruleIndex =
-              findRuleIndexByUiIdentity(a_payload.sourceUiIdentity);
-          if (!ruleIndex.has_value()) {
-            return false;
-          }
-          const auto targetKind =
-              workbench_.GetConditionalVisibilityRules()[*ruleIndex].targetKind;
-          return workbench_.SetConditionalVisibilityRuleTarget(
-              *ruleIndex, targetKind, 0);
-        }
-        return false;
-      };
-
-      if (pendingConditionalRowVisibilityConversion.has_value()) {
+      if (pendingConditionalActionDrop.has_value()) {
         freezeWorkbenchOrderForEdit();
-        const auto conversion = *pendingConditionalRowVisibilityConversion;
-        const auto &currentRows = workbench_.GetRows();
-        const auto conversionRowIndex =
-            findRowIndexByUiIdentity(conversion.targetUiIdentity);
-        if (conversionRowIndex >= 0 &&
-            conversionRowIndex < static_cast<int>(currentRows.size())) {
-          const auto sourceRow =
-              currentRows[static_cast<std::size_t>(conversionRowIndex)];
-          if (sourceRow.conditionId.has_value()) {
-            bool targetReady = workbench_.AddConditionalVisibilityRule(
-                *sourceRow.conditionId, sourceRow.ownerActorFormID,
-                conversion.targetKind, conversion.formID,
-                conversion.visibleWhenTrue, sourceRow.uiIdentity,
-                sourceRow.registrationOrder);
-            if (!targetReady) {
-              targetReady = std::ranges::any_of(
-                  workbench_.GetConditionalVisibilityRules(),
-                  [&](const auto &a_rule) {
-                    return a_rule.conditionId == *sourceRow.conditionId &&
-                           a_rule.ownerActorFormID ==
-                               sourceRow.ownerActorFormID &&
-                           a_rule.targetKind == conversion.targetKind &&
-                           a_rule.target.formID == conversion.formID;
-                  });
-            }
-            // The drop fills this row's action side. Conditional actual gear
-            // uses a visibility-rule representation, so consume the former
-            // empty fitting row instead of leaving it beside a new row.
-            if (targetReady && workbench_.DeleteRow(conversionRowIndex)) {
-              syncRowsAfterTable = true;
-              refreshNativeAfterTable = true;
-              static_cast<void>(clearMovedActionSource(
-                  conversion.draggedItem, conversion.targetUiIdentity));
-            }
-          }
+        const auto actionDrop = *pendingConditionalActionDrop;
+        const auto status = workbench_.ApplyConditionalActionDropTransaction(
+            actionDrop.request);
+        if (status == workbench::condition_drop::Status::Applied) {
+          syncRowsAfterTable |= actionDrop.changesRows;
+          refreshNativeAfterTable = true;
+        } else if (status != workbench::condition_drop::Status::NoChange) {
+          logger::warn(
+              "Condition action drop rejected status={} sourceKind={} source={:016X} targetKind={} target={:016X} form={:08X}",
+              workbench::condition_drop::StatusName(status),
+              actionDrop.request.source.has_value()
+                  ? static_cast<std::uint32_t>(
+                        actionDrop.request.source->kind)
+                  : 0,
+              actionDrop.request.source.has_value()
+                  ? actionDrop.request.source->uiIdentity
+                  : 0,
+              static_cast<std::uint32_t>(actionDrop.request.target.kind),
+              actionDrop.request.target.uiIdentity,
+              actionDrop.request.formID);
         }
       }
 
@@ -4027,37 +3923,6 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                 ConditionDragSourceKind::ConditionalVisibilityRule,
                 assignment.targetUiIdentity, assignment.conditionId,
                 assignment.draggedCondition)) {
-          refreshNativeAfterTable = true;
-        }
-      }
-
-      if (pendingVisibilityRuleReplacement.has_value()) {
-        freezeWorkbenchOrderForEdit();
-        const auto replacement = *pendingVisibilityRuleReplacement;
-        const auto targetRuleIndex =
-            findRuleIndexByUiIdentity(replacement.targetUiIdentity);
-        if (targetRuleIndex.has_value()) {
-          if (workbench_.SetConditionalVisibilityRuleTarget(
-                  *targetRuleIndex, replacement.targetKind,
-                  replacement.formID)) {
-            static_cast<void>(clearMovedActionSource(
-                replacement.draggedItem, replacement.targetUiIdentity));
-            refreshNativeAfterTable = true;
-          }
-        }
-      }
-
-      if (pendingVisibilityRuleFittingConversion.has_value()) {
-        freezeWorkbenchOrderForEdit();
-        const auto conversion = *pendingVisibilityRuleFittingConversion;
-        const auto targetRuleIndex =
-            findRuleIndexByUiIdentity(conversion.targetUiIdentity);
-        if (targetRuleIndex.has_value() &&
-            workbench_.ConvertConditionalVisibilityRuleToFittingRow(
-                *targetRuleIndex, conversion.formID)) {
-          static_cast<void>(clearMovedActionSource(
-              conversion.draggedItem, conversion.targetUiIdentity));
-          syncRowsAfterTable = true;
           refreshNativeAfterTable = true;
         }
       }
@@ -4127,22 +3992,6 @@ void Menu::DrawWorkbenchTable(const std::vector<int> &a_visibleRowIndices) {
                          ConditionDragSourceKind::ConditionalRow,
                          action.targetUiIdentity, *action.conditionId,
                          action.draggedCondition)) {
-            syncRowsAfterTable = true;
-            refreshNativeAfterTable = true;
-          }
-        }
-      } else if (pendingConditionalFittingReplacement.has_value()) {
-        freezeWorkbenchOrderForEdit();
-        const auto replacement = *pendingConditionalFittingReplacement;
-        const auto targetRowIndex =
-            findRowIndexByUiIdentity(replacement.targetUiIdentity);
-        const auto &currentRows = workbench_.GetRows();
-        if (targetRowIndex >= 0 &&
-            targetRowIndex < static_cast<int>(currentRows.size())) {
-          if (workbench_.ReplaceConditionalFittingTarget(
-                  targetRowIndex, replacement.formID)) {
-            static_cast<void>(clearMovedActionSource(
-                replacement.draggedItem, replacement.targetUiIdentity));
             syncRowsAfterTable = true;
             refreshNativeAfterTable = true;
           }

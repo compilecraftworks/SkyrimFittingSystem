@@ -95,6 +95,7 @@ bool VariantWorkbench::ConvertConditionalVisibilityRuleToFittingRow(
     // rejected as a whole when any displayed slot overlaps a locked card.
     return false;
   }
+  const auto previousRows = rows_;
 
   // Use the same workbench representative-slot rule as ordinary appearance
   // registration. The row model still retains every original occupied slot on
@@ -142,6 +143,7 @@ bool VariantWorkbench::ConvertConditionalVisibilityRuleToFittingRow(
     conditionalVisibilityRules_.erase(conditionalVisibilityRules_.begin() +
                                       static_cast<std::ptrdiff_t>(a_ruleIndex));
     RebuildRowOrder();
+    InvalidateRemovedAppearanceAutomation(previousRows);
     MarkChanged();
     return true;
   }
@@ -153,6 +155,7 @@ bool VariantWorkbench::ConvertConditionalVisibilityRuleToFittingRow(
                                     static_cast<std::ptrdiff_t>(a_ruleIndex));
   rowOrder_.push_back(row->key);
   rows_.push_back(std::move(*row));
+  InvalidateRemovedAppearanceAutomation(previousRows);
   MarkChanged();
   return true;
 }

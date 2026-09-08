@@ -1,0 +1,317 @@
+{
+    "name": "+Female NPC Modesty SIMPLE stealth",
+    "description": "Checks vanilla keywords for slot 32 Body.\n\nActivate Compare Values EVGCI14_ModestyF condition to use EVG recognition.",
+    "priority": 2123101998,
+    "requiredBehaviorProjectName": "DefaultFemale",
+    "interruptible": true,
+    "hasCustomBlendTimeOnInterrupt": true,
+    "blendTimeOnInterrupt": 0.6499999761581421,
+    "hasCustomBlendTimeOnLoop": true,
+    "blendTimeOnLoop": 0.6499999761581421,
+    "conditions": [
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Master settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Detection settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Sneaking settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC User settings"
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "condition": "OR",
+            "requiredVersion": "1.0.0.0",
+            "disabled": true,
+            "Conditions": [
+                {
+                    "condition": "TARGET",
+                    "requiredVersion": "1.3.0.0",
+                    "Target type": {
+                        "value": 6.0
+                    },
+                    "Conditions": [
+                        {
+                            "condition": "AND",
+                            "requiredVersion": "1.0.0.0",
+                            "Conditions": [
+                                {
+                                    "condition": "OR",
+                                    "requiredVersion": "1.0.0.0",
+                                    "Conditions": [
+                                        {
+                                            "condition": "AND",
+                                            "requiredVersion": "1.0.0.0",
+                                            "Conditions": [
+                                                {
+                                                    "condition": "CurrentTargetLineOfSight",
+                                                    "requiredVersion": "1.2.0.0",
+                                                    "Target type": {
+                                                        "value": 6.0
+                                                    },
+                                                    "Evaluate target": false
+                                                },
+                                                {
+                                                    "condition": "IsFemale",
+                                                    "requiredVersion": "1.0.0.0",
+                                                    "negated": true
+                                                },
+                                                {
+                                                    "condition": "CurrentTargetRelationship",
+                                                    "requiredVersion": "1.1.0.0",
+                                                    "Target type": {
+                                                        "value": 6.0
+                                                    },
+                                                    "Comparison": "<",
+                                                    "Numeric value": {
+                                                        "value": 4.0
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "condition": "AND",
+                                            "requiredVersion": "1.0.0.0",
+                                            "Conditions": [
+                                                {
+                                                    "condition": "CurrentTargetLineOfSight",
+                                                    "requiredVersion": "1.2.0.0",
+                                                    "Target type": {
+                                                        "value": 6.0
+                                                    },
+                                                    "Evaluate target": true
+                                                },
+                                                {
+                                                    "condition": "IsFemale",
+                                                    "requiredVersion": "1.0.0.0",
+                                                    "negated": true
+                                                },
+                                                {
+                                                    "condition": "CurrentTargetRelationship",
+                                                    "requiredVersion": "1.1.0.0",
+                                                    "Target type": {
+                                                        "value": 6.0
+                                                    },
+                                                    "Comparison": "<",
+                                                    "Numeric value": {
+                                                        "value": 4.0
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "condition": "AND",
+                                            "requiredVersion": "1.0.0.0",
+                                            "Conditions": [
+                                                {
+                                                    "condition": "CurrentTargetDistance",
+                                                    "requiredVersion": "1.1.0.0",
+                                                    "Target type": {
+                                                        "value": 6.0
+                                                    },
+                                                    "Comparison": "<",
+                                                    "Numeric value": {
+                                                        "value": 250.0
+                                                    }
+                                                },
+                                                {
+                                                    "condition": "IsFemale",
+                                                    "requiredVersion": "1.0.0.0",
+                                                    "negated": true
+                                                },
+                                                {
+                                                    "condition": "CurrentTargetRelationship",
+                                                    "requiredVersion": "1.1.0.0",
+                                                    "Target type": {
+                                                        "value": 6.0
+                                                    },
+                                                    "Comparison": "<",
+                                                    "Numeric value": {
+                                                        "value": 4.0
+                                                    }
+                                                }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                {
+                                    "condition": "AND",
+                                    "requiredVersion": "1.0.0.0",
+                                    "Conditions": [
+                                        {
+                                            "condition": "HasKeyword",
+                                            "requiredVersion": "1.0.0.0",
+                                            "negated": true,
+                                            "Keyword": {
+                                                "form": {
+                                                    "pluginName": "Skyrim.esm",
+                                                    "formID": "13798"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "condition": "HasKeyword",
+                                            "requiredVersion": "1.0.0.0",
+                                            "negated": true,
+                                            "Keyword": {
+                                                "form": {
+                                                    "pluginName": "Skyrim.esm",
+                                                    "formID": "13795"
+                                                }
+                                            }
+                                        },
+                                        {
+                                            "condition": "HasKeyword",
+                                            "requiredVersion": "1.0.0.0",
+                                            "negated": true,
+                                            "Keyword": {
+                                                "form": {
+                                                    "pluginName": "Skyrim.esm",
+                                                    "formID": "10EAD7"
+                                                }
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                },
+                {
+                    "condition": "AND",
+                    "requiredVersion": "1.0.0.0",
+                    "Conditions": [
+                        {
+                            "condition": "IsMenuOpen",
+                            "requiredVersion": "1.3.0.0",
+                            "Menu name": "dialogue menu"
+                        },
+                        {
+                            "condition": "TARGET",
+                            "requiredVersion": "1.3.0.0",
+                            "Target type": {
+                                "value": 2.0
+                            },
+                            "Conditions": [
+                                {
+                                    "condition": "AND",
+                                    "requiredVersion": "1.0.0.0",
+                                    "Conditions": [
+                                        {
+                                            "condition": "AND",
+                                            "requiredVersion": "1.0.0.0",
+                                            "Conditions": [
+                                                {
+                                                    "condition": "HasKeyword",
+                                                    "requiredVersion": "1.0.0.0",
+                                                    "negated": true,
+                                                    "Keyword": {
+                                                        "form": {
+                                                            "pluginName": "Skyrim.esm",
+                                                            "formID": "13798"
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "condition": "HasKeyword",
+                                                    "requiredVersion": "1.0.0.0",
+                                                    "negated": true,
+                                                    "Keyword": {
+                                                        "form": {
+                                                            "pluginName": "Skyrim.esm",
+                                                            "formID": "13795"
+                                                        }
+                                                    }
+                                                },
+                                                {
+                                                    "condition": "HasKeyword",
+                                                    "requiredVersion": "1.0.0.0",
+                                                    "negated": true,
+                                                    "Keyword": {
+                                                        "form": {
+                                                            "pluginName": "Skyrim.esm",
+                                                            "formID": "10EAD7"
+                                                        }
+                                                    }
+                                                }
+                                            ]
+                                        },
+                                        {
+                                            "condition": "IsFemale",
+                                            "requiredVersion": "1.0.0.0",
+                                            "negated": true
+                                        },
+                                        {
+                                            "condition": "CurrentTargetRelationship",
+                                            "requiredVersion": "1.1.0.0",
+                                            "Target type": {
+                                                "value": 2.0
+                                            },
+                                            "Comparison": "<",
+                                            "Numeric value": {
+                                                "value": 4.0
+                                            }
+                                        }
+                                    ]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "condition": "IsSneaking",
+            "requiredVersion": "1.0.0.0"
+        },
+        {
+            "condition": "IsWeaponDrawn",
+            "requiredVersion": "1.0.0.0",
+            "negated": true
+        }
+    ]
+}

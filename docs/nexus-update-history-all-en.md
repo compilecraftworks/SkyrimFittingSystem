@@ -1,3 +1,17 @@
+## Version 1.6.0
+
+- Rebuilt SFS around one actor-local final-rendered-outfit result shared by actual gear, registered appearances, global/per-item visibility, conditions, locks, protected/shield slots, previews, strip state, nudity checks, and compatibility consumers.
+- Preserved the complete v1.5.7 UI and feature set while routing all four strip/redress modes through ordered actor-local transactions. SexLab P+ 2.12/2.18 and Devious Devices remain isolated adapters.
+- Made RaceMenu BodyMorph tracking single-owner so live OBody updates survive every feature and DAVE/DAV/native refresh. NiTransform, BodyMorph, and ActorUpdateManager are negotiated independently and unknown layouts fail closed.
+- Reworked condition/action/clause drag/drop around stable 64-bit identities and atomic first-release commits. Invalid, conflicting, duplicate, or stale payloads leave both endpoints unchanged.
+- Added a shared save-load/revert lifecycle boundary that invalidates previous-world work before incoming co-save records are read.
+- Hardened IED early-game/Helgen handling by following verified intermediate jump/trampoline chains and retaining the ordinary engine path when ownership cannot be proven.
+- Unified nudity, OAR shown-armor queries, Wet Function/DFFMA consumers, and Dynamic Footprints around the same visible actual-plus-registered outfit result, including explicit managed-barefoot state.
+- Promoted Virtual Tokens and the Devious Devices bridge from PoC source identity to production modules without changing the helper ESL, save records, Papyrus names, or settings.
+- Isolated Kit Generator mutations behind validated commands while preserving independently updateable grouping criteria and read-only candidate preview.
+- Improved MO2/Vortex first-install diagnostics and clarified SKSE64 launch, helper ESL, settings/log creation, and SFS Options hotkey behavior. Fitting Dye now explains white as the neutral multiplicative tint.
+- Updated optional packages: DFFMA FOMOD 1.4.4.1, Wet Function effect-only patch 1.2.0, and Dynamic Footprints bridge 1.6.0.
+
 ## Version 1.5.7
 
 - Fixed live RaceMenu BodyMorph and OBody updates on visible registered

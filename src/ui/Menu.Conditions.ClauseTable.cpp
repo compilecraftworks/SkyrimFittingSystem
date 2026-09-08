@@ -1,6 +1,7 @@
 #include "Menu.h"
 
 #include "ThemeConfig.h"
+#include "conditions/ClauseReorder.h"
 #include "conditions/Validation.h"
 #include "imgui_internal.h"
 #include "ui/Localization.h"
@@ -12,6 +13,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdio>
 #include <format>
 #include <optional>
@@ -59,23 +61,6 @@ void DrawClauseDragHandle(const char *a_id, const ImVec2 a_size) {
   drawList->AddText(ImVec2(min.x + ((max.x - min.x) - iconSize.x) * 0.5f,
                            min.y + ((max.y - min.y) - iconSize.y) * 0.5f),
                     color, kIconGripVertical);
-}
-
-void MoveConditionClauseToSlot(std::vector<ConditionClause> &a_clauses,
-                               const std::size_t a_sourceIndex,
-                               std::size_t a_slotIndex) {
-  if (a_sourceIndex >= a_clauses.size() || a_slotIndex > a_clauses.size()) {
-    return;
-  }
-
-  auto clause = std::move(a_clauses[a_sourceIndex]);
-  a_clauses.erase(a_clauses.begin() +
-                  static_cast<std::ptrdiff_t>(a_sourceIndex));
-  if (a_sourceIndex < a_slotIndex) {
-    --a_slotIndex;
-  }
-  a_clauses.insert(a_clauses.begin() + static_cast<std::ptrdiff_t>(a_slotIndex),
-                   std::move(clause));
 }
 
 const char *ComparatorLabel(const ConditionComparator a_comparator) {
@@ -203,8 +188,9 @@ bool Menu::DrawConditionEditorClauseTable(
   const bool reorderPreviewActive =
       activePayload && activePayload->Data != nullptr &&
       activePayload->IsDataType(kConditionClausePayloadType) &&
-      activePayload->DataSize == sizeof(int);
-  std::optional<std::size_t> acceptedSourceClauseIndex;
+      activePayload->DataSize ==
+          sizeof(conditions::clause_reorder::Payload);
+  std::optional<conditions::clause_reorder::Payload> acceptedPayload;
   std::optional<std::size_t> acceptedSlotIndex;
   std::vector<std::optional<ImRect>> joinCellRects(
       a_editor.draft.clauses.size());
@@ -259,9 +245,12 @@ bool Menu::DrawConditionEditorClauseTable(
     DrawHoverDescription("conditions:editor:drag:" + std::to_string(index),
                          localization->Get("conditions.clauses.move_help"));
     if (ImGui::BeginDragDropSource()) {
-      const int payloadIndex = static_cast<int>(index);
-      ImGui::SetDragDropPayload(kConditionClausePayloadType, &payloadIndex,
-                                sizeof(payloadIndex));
+      const conditions::clause_reorder::Payload payload{
+          .sourceIndex = static_cast<std::uint32_t>(index),
+          .sourceFingerprint =
+              conditions::clause_reorder::Fingerprint(clause)};
+      ImGui::SetDragDropPayload(kConditionClausePayloadType, &payload,
+                                sizeof(payload));
       const auto clauseNumber = index + 1;
       const auto moveClauseLabel = sfs::strings::SafeVFormat(
           std::string(localization->Get("conditions.clauses.move_drag")),
@@ -557,18 +546,28 @@ bool Menu::DrawConditionEditorClauseTable(
           tableRect, ImGui::GetID("##condition-clause-reorder-target"))) {
     if (const auto *payload = ImGui::AcceptDragDropPayload(
             kConditionClausePayloadType,
-            ImGuiDragDropFlags_AcceptNoDrawDefaultRect);
+            ImGuiDragDropFlags_AcceptNoDrawDefaultRect |
+                ImGuiDragDropFlags_AcceptBeforeDelivery);
         payload && payload->Data != nullptr &&
-        payload->DataSize == sizeof(int)) {
-      acceptedSourceClauseIndex =
-          static_cast<std::size_t>(*static_cast<const int *>(payload->Data));
+        payload->DataSize == sizeof(conditions::clause_reorder::Payload) &&
+        payload->IsDelivery()) {
+      acceptedPayload =
+          *static_cast<const conditions::clause_reorder::Payload *>(
+              payload->Data);
       acceptedSlotIndex = reorderPreview.hoveredSlotIndex;
     }
     ImGui::EndDragDropTarget();
   }
-  if (acceptedSourceClauseIndex && acceptedSlotIndex) {
-    MoveConditionClauseToSlot(a_editor.draft.clauses,
-                              *acceptedSourceClauseIndex, *acceptedSlotIndex);
+  if (acceptedPayload && acceptedSlotIndex) {
+    const auto status = conditions::clause_reorder::ApplyMoveTransaction(
+        a_editor.draft.clauses, *acceptedPayload, *acceptedSlotIndex);
+    if (status == conditions::clause_reorder::Status::InvalidTarget ||
+        status == conditions::clause_reorder::Status::StaleSource) {
+      logger::warn("Condition clause drop rejected status={}",
+                   status == conditions::clause_reorder::Status::StaleSource
+                       ? "stale-source"
+                       : "invalid-target");
+    }
   }
   return addClauseRequested;
 }

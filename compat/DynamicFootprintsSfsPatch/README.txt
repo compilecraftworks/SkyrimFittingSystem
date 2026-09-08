@@ -1,4 +1,4 @@
-SFS - Dynamic Footprints Compatibility Patch v1.4.5
+SFS - Dynamic Footprints Compatibility Patch v1.6.0
 
 Requirements
 - Skyrim Fitting System v1.4.4 or later (SFSCore.dll)
@@ -7,10 +7,15 @@ Requirements
 Install this after Dynamic Footprints.  It adds SFS_DynamicFootprintsPatch.dll;
 it does not replace SFSCore.dll or NMN_DynamicFootprints.dll.
 
-When an actor has a currently displayed SFS registered appearance in slot 37
-(Feet), Dynamic Footprints reads that footwear for its footprint profile.  When
-SFS has no visible footwear for the actor, Dynamic Footprints keeps its normal
-actual-equipment lookup.
+When SFS manages an actor, Dynamic Footprints reads the final slot-37 result:
+visible registered footwear first, otherwise visible actual footwear, or an
+explicit barefoot result when SFS hid every feet-slot source.  Actors not
+managed by SFS keep Dynamic Footprints' normal actual-equipment lookup.
+
+v1.6.0 keeps the original host API v1 contract and adds an optional query that
+distinguishes an unmanaged actor from an SFS-managed explicit barefoot result.
+It remains backward compatible with older SFS hosts through the original v1
+function, without treating a missing extension as an installation failure.
 
 Safety boundary
 - No global Actor::GetWornArmor hook is installed.

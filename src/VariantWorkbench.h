@@ -5,6 +5,8 @@
 
 #include "EquipmentCatalog.h"
 #include "conditions/Definition.h"
+#include "workbench/ActionDrop.h"
+#include "workbench/ConditionDrop.h"
 #include "workbench/Items.h"
 
 #include <limits>
@@ -152,6 +154,19 @@ struct ConditionalVisibilityRule {
   }
 };
 
+struct ConditionalActionDropRequest {
+  condition_drop::Target target;
+  std::optional<condition_drop::Target> source;
+  RE::FormID formID{0};
+  ConditionalVisibilityTargetKind targetKind{
+      ConditionalVisibilityTargetKind::Fitting};
+  bool visibleWhenTrue{true};
+  // Catalog items dropped on a visibility-rule card become a registered
+  // fitting row. Existing row/rule action cards retain their current action
+  // representation while moving.
+  bool registerFittingTarget{false};
+};
+
 class VariantWorkbench {
 public:
   using StateLock = std::unique_lock<std::recursive_mutex>;
@@ -272,6 +287,10 @@ public:
   // an intentionally blank condition drop target.
   bool SetConditionAssignmentKeepRow(int a_rowIndex,
                                      std::string_view a_conditionId);
+  [[nodiscard]] condition_drop::Status
+  ApplyConditionDropTransaction(const condition_drop::Request &a_request);
+  [[nodiscard]] condition_drop::Status ApplyConditionalActionDropTransaction(
+      const ConditionalActionDropRequest &a_request);
   bool SetEquippedHidden(int a_rowIndex, bool a_hidden);
   bool SetEquippedHiddenForActor(RE::FormID a_actorFormID, int a_rowIndex,
                                  bool a_hidden);
@@ -446,6 +465,12 @@ private:
   struct KitLayoutProjection {
     std::vector<ProjectedKitLayoutRow> rows;
   };
+  struct DeferredAppearanceInvalidation {
+    RE::FormID actorFormID{0};
+    RE::FormID appearanceFormID{0};
+    std::uint32_t visualSlotMask{0};
+    bool deleted{false};
+  };
 
   [[nodiscard]] static std::vector<int>
   BuildCandidateRowIndices(const std::vector<int> *a_candidateRowIndices,
@@ -517,6 +542,15 @@ private:
   GetEquippedHiddenForActor(RE::FormID a_actorFormID,
                             std::string_view a_rowKey) const;
   void PersistCurrentEquippedHiddenStateForActor(RE::FormID a_actorFormID);
+  void InvalidateAppearanceAutomation(RE::FormID a_actorFormID,
+                                      RE::FormID a_appearanceFormID,
+                                      std::uint32_t a_visualSlotMask,
+                                      bool a_deleted);
+  // Reconciles structural/batch edits after their full model transition has
+  // succeeded. A moved or reinserted actor/form/slot identity is retained;
+  // only appearances absent from the committed model release strip/DD state.
+  void InvalidateRemovedAppearanceAutomation(
+      const std::vector<VariantWorkbenchRow> &a_previousRows);
   void RebuildRowOrder();
   void MarkChanged(bool a_affectsNativeDisplay = true);
 
@@ -538,5 +572,7 @@ private:
       (std::numeric_limits<std::uint64_t>::max)()};
   std::uint64_t lastNativeRefreshConditionRevision_{
       (std::numeric_limits<std::uint64_t>::max)()};
+  bool deferRuntimeEffects_{false};
+  std::vector<DeferredAppearanceInvalidation> deferredInvalidations_;
 };
 } // namespace sfs::workbench

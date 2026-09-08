@@ -1,0 +1,182 @@
+{
+    "name": "+Female NPC Modesty SIMPLE",
+    "description": "Checks vanilla keywords for slot 32 Body.\n\nActivate Compare Values EVGCI14_ModestyF condition to use EVG recognition.",
+    "priority": 2123101996,
+    "replacementAnimDatas": [
+        {
+            "projectName": "DefaultMale",
+            "path": "data\\meshes\\actors\\character\\animations\\OpenAnimationReplacer\\KP_nudeNPC\\npc_asimpl\\_variants_sneakmtidle",
+            "disabled": true,
+            "variantMode": 0,
+            "variantStateScope": 1,
+            "blendBetweenVariants": true,
+            "resetRandomOnLoopOrEcho": true,
+            "sharePlayedHistory": false
+        },
+        {
+            "projectName": "DefaultFemale",
+            "path": "data\\meshes\\actors\\character\\animations\\OpenAnimationReplacer\\KP_nudeNPC\\npc_asimpl\\_variants_sneakmtidle",
+            "variantMode": 0,
+            "variantStateScope": 1,
+            "blendBetweenVariants": true,
+            "resetRandomOnLoopOrEcho": true,
+            "sharePlayedHistory": false,
+            "variants": [
+                {
+                    "filename": "playfirst.hkx",
+                    "playOnce": true
+                },
+                {
+                    "filename": "playfirst1.hkx",
+                    "playOnce": true
+                },
+                {
+                    "filename": "playfirst2.hkx",
+                    "disabled": true,
+                    "playOnce": true
+                },
+                {
+                    "filename": "playfirst3.hkx",
+                    "disabled": true,
+                    "playOnce": true
+                },
+                {
+                    "filename": "playfirst4.hkx",
+                    "disabled": true,
+                    "playOnce": true
+                },
+                {
+                    "filename": "sneakidlecrouch1.hkx",
+                    "disabled": true
+                },
+                {
+                    "filename": "sneakidlecrouch2.hkx",
+                    "disabled": true
+                },
+                {
+                    "filename": "sneakidlecrouch4.hkx",
+                    "disabled": true
+                }
+            ]
+        }
+    ],
+    "requiredBehaviorProjectName": "DefaultFemale",
+    "hasCustomBlendTimeOnLoop": true,
+    "blendTimeOnLoop": 0.6499999761581421,
+    "conditions": [
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Detection settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC Master settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty NPC User settings"
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "disabled": true,
+            "Conditions": [
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 22.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 22.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "disabled": true,
+                    "negated": true,
+                    "Slot": {
+                        "value": 19.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "disabled": true,
+                    "negated": true,
+                    "Slot": {
+                        "value": 19.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}

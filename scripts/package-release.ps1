@@ -86,6 +86,7 @@ function Copy-RequiredDirectory {
 
 # Flat MO2-installable runtime root. No Data wrapper and no optional patch.
 Copy-RequiredFile (Join-Path $repoRoot 'LICENSE') (Join-Path $runtimeStage 'LICENSE.txt')
+Copy-RequiredFile (Join-Path $repoRoot 'INSTALL.txt') (Join-Path $runtimeStage 'INSTALL.txt')
 Copy-RequiredFile (Join-Path $repoRoot 'THIRD_PARTY_NOTICES.md') (Join-Path $runtimeStage 'THIRD_PARTY_NOTICES.txt')
 Copy-RequiredFile (Join-Path $repoRoot 'data\SkyrimFittingSystem-VirtualTokens.esl') (Join-Path $runtimeStage 'SkyrimFittingSystem-VirtualTokens.esl')
 Copy-RequiredDirectory (Join-Path $repoRoot 'data\Interface') (Join-Path $runtimeStage 'Interface')
@@ -102,7 +103,7 @@ if ($runtimePdbFiles) {
 # are deliberately excluded.
 $rootSourceFiles = @(
     '.clang-format', '.clang-tidy', '.gitattributes', '.gitignore',
-    'DEPENDENCIES.md', 'LICENSE', 'NuGet.Config', 'README.md',
+    'DEPENDENCIES.md', 'INSTALL.txt', 'LICENSE', 'NuGet.Config', 'README.md',
     'RELEASE_SOURCE_NOTICE.txt', 'SOURCE_PACKAGE_README.txt',
     'THIRD_PARTY_NOTICES.md', 'VERSION'
 )
@@ -117,7 +118,8 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
-    'Build-Deploy-Release.md', 'EXTERNAL-MOD-STRIP-LINK-MODES-KO.md',
+    'Build-Deploy-Release.md', 'DynamicFootprints-Integration-API.md',
+    'EXTERNAL-MOD-STRIP-LINK-MODES-KO.md',
     'OpenAnimationReplacer-Conditions.md', 'SkyrimFittingSystem-Menu-API.md',
     'RELEASE-NOTES-v1.5.0.md', 'RELEASE-NOTES-v1.5.0-ko.md',
     'RELEASE-NOTES-v1.5.1.md', 'RELEASE-NOTES-v1.5.1-ko.md',
@@ -127,6 +129,16 @@ $sourceDocs = @(
     'RELEASE-NOTES-v1.5.5.md', 'RELEASE-NOTES-v1.5.5-ko.md',
     'RELEASE-NOTES-v1.5.6.md', 'RELEASE-NOTES-v1.5.6-ko.md',
     'RELEASE-NOTES-v1.5.7.md', 'RELEASE-NOTES-v1.5.7-ko.md',
+    'RELEASE-NOTES-v1.6.0.md', 'RELEASE-NOTES-v1.6.0-ko.md',
+    'nexus-changelog-v1.6.0-en.txt', 'nexus-changelog-v1.6.0-ko.txt',
+    'nexus-description-en.md', 'nexus-description.bbcode',
+    'nexus-description-ko.md', 'nexus-description-ko.bbcode',
+    'nexus-update-history-all-en.md', 'nexus-update-history-all-ko.md',
+    'tullius-description-ko.html',
+    'V1.6.0-ARCHITECTURE-AND-PARITY.md',
+    'V1.6.0-FEEDBACK-REGRESSION-LEDGER.md',
+    'V1.6.0-IN-GAME-REGRESSION-MATRIX.md',
+    'V1.6.0-NEXUS-POSTS-AUDIT.md',
     'BodyMorph-v1.5.5-Regression-Checks.md',
     'RaceMenu-ABI-Audit.md'
 )

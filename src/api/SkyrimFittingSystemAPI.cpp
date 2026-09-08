@@ -2,8 +2,10 @@
 
 #include "ArmorUtils.h"
 #include "native/ArmorSkinning.h"
+#include "native/FinalRenderedOutfitRules.h"
 #include "native/GridInventoryIntegration.h"
 #include "ui/Menu.h"
+#include <algorithm>
 #include <atomic>
 
 namespace {
@@ -104,8 +106,55 @@ std::uint32_t SkyrimFittingSystem_GetDisplayedFootwearFormID(
   const auto feetSlotMask = static_cast<std::uint32_t>(
       sfs::armor::GetArmorSlotMask(37));
   const auto *footwear =
-      sfs::native::GetActiveFittingArmorForSlot(actor, feetSlotMask);
+      sfs::native::GetDisplayedFittingArmorForSlot(actor, feetSlotMask);
   return footwear ? footwear->GetFormID() : 0;
+}
+
+bool SkyrimFittingSystem_TryGetDisplayedFootwearFormID(
+    const std::uint32_t a_actorFormID, std::uint32_t *a_outFormID) {
+  if (a_outFormID == nullptr) {
+    return false;
+  }
+  *a_outFormID = 0;
+  if (!CanAcceptOpenRequest() || a_actorFormID == 0) {
+    return false;
+  }
+
+  auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
+  if (!actor) {
+    return false;
+  }
+  const auto snapshot = sfs::native::GetFinalRenderedOutfitSnapshot(actor);
+  const auto feetSlotMask = static_cast<std::uint32_t>(
+      sfs::armor::GetArmorSlotMask(37));
+  const auto findFeet = [feetSlotMask](const auto &a_armors) {
+    return std::ranges::find_if(
+        a_armors, [feetSlotMask](const RE::TESObjectARMO *a_armor) {
+          return a_armor != nullptr &&
+                 (static_cast<std::uint32_t>(
+                      sfs::armor::GetArmorDisplaySlotMask(a_armor)) &
+                  feetSlotMask) != 0;
+        });
+  };
+  const auto additional = findFeet(snapshot.visibleAdditionalArmors);
+  const auto actual = findFeet(snapshot.visibleActualArmors);
+  const auto decision =
+      sfs::native::final_outfit::rules::ResolveDisplayedFootwear(
+          snapshot.managedBySfs,
+          additional != snapshot.visibleAdditionalArmors.end()
+              ? (*additional)->GetFormID()
+              : 0,
+          actual != snapshot.visibleActualArmors.end()
+              ? (*actual)->GetFormID()
+              : 0);
+  if (!decision.has_value()) {
+    return false;
+  }
+  *a_outFormID = *decision;
+  // A handled zero is intentional: SFS hid every feet-slot source, so the
+  // final rendered state is barefoot and the consumer must not fall back to
+  // technically worn actual equipment.
+  return true;
 }
 
 namespace sfs::api {

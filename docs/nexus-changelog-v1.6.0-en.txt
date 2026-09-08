@@ -1,0 +1,12 @@
+Rebuilt SFS around one actor-local final-rendered-outfit result shared by actual gear, registered appearances, global and per-item visibility, conditions, locks, protected/shield slots, previews, strip state, nudity checks, and compatibility consumers.
+Preserved the complete v1.5.7 Gear, Outfits, Conditions, Kits, Kit Generator, and Options feature set while routing Mod-Configured, Automatic Vanilla-Slot, Direct+Mod-Configured, and Direct+Vanilla strip/redress through ordered actor-local transactions.
+Kept SexLab P+ 2.12/2.18 and Devious Devices as isolated adapters, with the required Virtual Tokens ESL and existing save/Papyrus contracts unchanged.
+Made RaceMenu BodyMorph tracking single-owner so live OBody changes remain eligible after equipment, condition, kit, Helmet Toggle 2, dye, camera/pause, strip, P+, DD, and DAVE/DAV/native refreshes.
+Negotiated RaceMenu NiTransform, BodyMorph, and ActorUpdateManager layouts independently and fail closed for unknown layouts.
+Reworked condition-card, action-card, and custom-clause drag/drop around stable 64-bit identities and atomic first-release commits; invalid or stale drops no longer partially clear the source.
+Added one save-load/revert lifecycle boundary that invalidates previous-world queued work before reading the incoming co-save.
+Hardened IED compatibility by following verified intermediate jump/trampoline chains and keeping unknown Helgen/new-game startup chains on the ordinary engine path.
+Unified final nudity, OAR shown-armor queries, Wet Function/DFFMA consumers, and Dynamic Footprints around the same visible actual-plus-registered outfit state, including explicit SFS-managed barefoot results.
+Moved Virtual Tokens and the Devious Devices bridge from PoC source identity into production feature modules, and isolated Kit Generator mutations behind validated commands while keeping grouping criteria updateable.
+Improved clean-install diagnostics and documentation for MO2/Vortex, SKSE64 launching, the helper ESL, settings/log creation, and the SFS Options hotkey location. Fitting Dye now explains that white is the neutral multiplicative value.
+Updated optional packages: DFFMA FOMOD 1.4.4.1 fixes Vortex XML validation, Wet Function 1.2.0 contains only its effect bridge and README, and Dynamic Footprints is consistently versioned 1.6.0.

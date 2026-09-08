@@ -210,6 +210,7 @@ bool VariantWorkbench::ApplyConditionOverridePlan(
     return false;
   }
 
+  const auto previousRows = rows_;
   bool changed = false;
   bool directlyChanged = false;
   std::unordered_set<RE::FormID> affectedOwnerActorFormIDs;
@@ -310,6 +311,7 @@ bool VariantWorkbench::ApplyConditionOverridePlan(
   }
 
   if (directlyChanged) {
+    InvalidateRemovedAppearanceAutomation(previousRows);
     MarkChanged();
   }
   return changed || directlyChanged;

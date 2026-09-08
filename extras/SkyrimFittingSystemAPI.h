@@ -18,11 +18,15 @@ using SkyrimFittingSystem_SetHotkeyEnabled_t = void (*)(bool);
 // Optional Dynamic Footprints consumer API (ABI v1).
 // A 0 result from GetDisplayedFootwearFormID means that SFS has no visible
 // registered footwear for this actor and the consumer must retain its normal
-// technically-equipped-footwear behavior.
+// technically-equipped-footwear behavior. v1.6.0 adds an optional extension
+// which distinguishes that fallback from an SFS-managed explicit barefoot
+// result without changing the host API version.
 using SkyrimFittingSystem_GetDynamicFootprintsHostAPIVersion_t =
     std::uint32_t (*)();
 using SkyrimFittingSystem_GetDisplayedFootwearFormID_t =
     std::uint32_t (*)(std::uint32_t a_actorFormID);
+using SkyrimFittingSystem_TryGetDisplayedFootwearFormID_t =
+    bool (*)(std::uint32_t a_actorFormID, std::uint32_t *a_outFormID);
 
 inline constexpr auto SkyrimFittingSystem_Open_Name =
     "SkyrimFittingSystem_Open";
@@ -36,3 +40,5 @@ inline constexpr auto SkyrimFittingSystem_GetDynamicFootprintsHostAPIVersion_Nam
     "SkyrimFittingSystem_GetDynamicFootprintsHostAPIVersion";
 inline constexpr auto SkyrimFittingSystem_GetDisplayedFootwearFormID_Name =
     "SkyrimFittingSystem_GetDisplayedFootwearFormID";
+inline constexpr auto SkyrimFittingSystem_TryGetDisplayedFootwearFormID_Name =
+    "SkyrimFittingSystem_TryGetDisplayedFootwearFormID";

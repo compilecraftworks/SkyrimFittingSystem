@@ -1,5 +1,10 @@
 Dynamic Feminine Female Modesty Animations OAR - SFS Displayed Outfit Patch
 
+Package revision 1.4.4.1
+- Adds the descriptions required by the FOMOD 5 schema to every optional GS
+  Hovering choice. This fixes Vortex's Invalid XML installer error. Installed
+  OAR configuration files and runtime behavior are unchanged from 1.4.4.0.
+
 Requirements
 - Skyrim Fitting System 1.4.4 or newer.
 - Open Animation Replacer.

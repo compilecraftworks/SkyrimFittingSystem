@@ -1,0 +1,191 @@
+{
+    "name": "Female Modesty SIMPLE - shield - weapons, magic",
+    "description": "Turn off if using Shield on back.\n\nChecks vanilla keywords for slot 32 Body.\n\nActivate Compare Values EVGCI14_ModestyF condition to use EVG recognition.",
+    "priority": 2123100983,
+    "requiredBehaviorProjectName": "DefaultFemale",
+    "hasCustomBlendTimeOnLoop": true,
+    "blendTimeOnLoop": 0.6499999761581421,
+    "conditions": [
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC Detection settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC Master settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC User settings"
+        },
+        {
+            "condition": "PRESET",
+            "requiredVersion": "2.2.0.0",
+            "Preset": "Modesty PC Weapon and Magic settings"
+        },
+        {
+            "condition": "IsReplacerEnabled",
+            "requiredVersion": "1.0.0.0",
+            "negated": true,
+            "Replacer mod name": "Dynamic Female MODESTY conditional idles PC",
+            "Submod name": "PC Shield on back ON/OFF"
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "OR",
+                    "requiredVersion": "1.0.0.0",
+                    "Conditions": [
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 12.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 13.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 14.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 15.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 16.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 17.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 1.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 2.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 3.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 4.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 8.0
+                            },
+                            "Left hand": false
+                        },
+                        {
+                            "condition": "IsEquippedType",
+                            "requiredVersion": "1.0.0.0",
+                            "Type": {
+                                "value": 0.0
+                            },
+                            "Left hand": false
+                        }
+                    ]
+                },
+                {
+                    "condition": "IsEquippedType",
+                    "requiredVersion": "1.0.0.0",
+                    "Type": {
+                        "value": 11.0
+                    },
+                    "Left hand": true
+                }
+            ]
+        },
+        {
+            "condition": "AND",
+            "requiredVersion": "1.0.0.0",
+            "Conditions": [
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "A8657"
+                        }
+                    }
+                },
+                {
+                    "condition": "SFS_IsShownArmorInSlotHasKeyword",
+                    "requiredVersion": "1.4.4.0",
+                    "negated": true,
+                    "Slot": {
+                        "value": 2.0
+                    },
+                    "Keyword": {
+                        "form": {
+                            "pluginName": "Skyrim.esm",
+                            "formID": "6C0EC"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "condition": "IsWeaponDrawn",
+            "requiredVersion": "1.0.0.0"
+        }
+    ]
+}

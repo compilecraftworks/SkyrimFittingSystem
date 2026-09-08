@@ -8,7 +8,7 @@
 #include "backends/imgui_impl_dx11.h"
 #include "backends/imgui_impl_win32.h"
 #include "native/ExternalEquipmentTransactions.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/Localization.h"
 #include "workbench/AppearanceSlotProtection.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
@@ -203,9 +203,9 @@ void Menu::MigrateExternalStripLinkModeForWorkbenchVersion(
   // have briefly populated its runtime cache. Clear both engines and rebuild
   // only the newly selected policy so no state crosses the migration edge.
   native::external_equipment::ClearRuntimeState();
-  poc::ResetVirtualWornTokenRuntimeState();
+  virtual_tokens::ResetVirtualWornTokenRuntimeState();
   workbench_.ClearAutomaticEquipmentVisibilityBindings();
-  poc::UpdateVirtualWornTokenCache();
+  virtual_tokens::UpdateVirtualWornTokenCache();
   pendingLegacyExternalStripLinkMode_ = *migratedMode;
   if (!userSettingsPath_.empty()) {
     SaveUserSettings();
@@ -563,21 +563,44 @@ std::string Menu::GetToggleKeyLabel() const {
   return keycode::GetKeyName(toggleKey_);
 }
 
+void Menu::PrepareUserSettingsStorage() {
+  if (settingsDirectory_.empty()) {
+    settingsDirectory_ = kSettingsDirectory;
+    imguiIniPath_ =
+        (std::filesystem::path(settingsDirectory_) / kImGuiIniFilename)
+            .string();
+    userSettingsPath_ =
+        (std::filesystem::path(settingsDirectory_) / kUserSettingsFilename)
+            .string();
+    favoritesPath_ =
+        (std::filesystem::path(settingsDirectory_) / kFavoritesFilename)
+            .string();
+    ResetSaveDataPath();
+  }
+
+  std::error_code error;
+  const bool settingsExist =
+      std::filesystem::is_regular_file(userSettingsPath_, error);
+  if (error) {
+    logger::warn("Could not inspect SFS user settings path {}: {}",
+                 userSettingsPath_, error.message());
+  } else if (!settingsExist) {
+    SaveUserSettings();
+  }
+
+  error.clear();
+  const auto absolutePath = std::filesystem::absolute(userSettingsPath_, error);
+  logger::info("SFS user settings path: {}",
+               error ? userSettingsPath_ : absolutePath.string());
+}
+
 void Menu::Init(IDXGISwapChain *a_swapChain, ID3D11Device *a_device,
                 ID3D11DeviceContext *a_context) {
   if (initialized_) {
     return;
   }
 
-  settingsDirectory_ = kSettingsDirectory;
-  imguiIniPath_ =
-      (std::filesystem::path(settingsDirectory_) / kImGuiIniFilename).string();
-  userSettingsPath_ =
-      (std::filesystem::path(settingsDirectory_) / kUserSettingsFilename)
-          .string();
-  favoritesPath_ =
-      (std::filesystem::path(settingsDirectory_) / kFavoritesFilename).string();
-  ResetSaveDataPath();
+  PrepareUserSettingsStorage();
   RefreshAvailableFonts();
   ui::Localization::GetSingleton()->RefreshAvailableLocales(kLocaleDirectory);
   LoadUserSettings();

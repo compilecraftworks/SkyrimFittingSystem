@@ -1,5 +1,7 @@
 #pragma once
 
+#include "native/FinalRenderedOutfit.h"
+
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 

@@ -15,6 +15,10 @@ std::uint32_t SkyrimFittingSystem_GetDynamicFootprintsHostAPIVersion();
 extern "C" __declspec(dllexport)
 std::uint32_t SkyrimFittingSystem_GetDisplayedFootwearFormID(
     std::uint32_t actorFormID);
+
+extern "C" __declspec(dllexport)
+bool SkyrimFittingSystem_TryGetDisplayedFootwearFormID(
+    std::uint32_t actorFormID, std::uint32_t* outFormID);
 ```
 
 ## ABI v1 behavior
@@ -26,6 +30,13 @@ std::uint32_t SkyrimFittingSystem_GetDisplayedFootwearFormID(
   owns Feet slot 37.
 - It returns `0` when no visible SFS registered footwear owns Feet. In that
   case the consumer must keep its normal actual-equipment lookup unchanged.
+- New consumers should prefer the optional
+  `SkyrimFittingSystem_TryGetDisplayedFootwearFormID` extension. `true` means
+  SFS owns the actor's final footwear decision; `*outFormID == 0` is an
+  explicit barefoot result and must not fall back to technically worn armor.
+  `false` means the consumer should keep its normal actual-equipment lookup.
+  The ABI version and original export remain unchanged so older patch DLLs
+  continue to load.
 - Calls must run on Skyrim's game thread. The function is read-only: it does
   not equip or unequip anything, mutate armor keywords, write SFS workbench
   state, or serialize data.
@@ -36,11 +47,12 @@ independent of external strip/redress transactions.
 
 ## Consumer integration boundary
 
-Dynamic Footprints should call this function immediately before its existing
-footwear classification. When it receives a non-zero FormID that resolves to
-an ARMO, it may classify that ARMO's armor type, heel data, and footprint
-keywords. Otherwise it must use the currently worn footwear exactly as it did
-before.
+Dynamic Footprints should call the `Try` extension immediately before its
+existing footwear classification. A handled non-zero FormID may be classified
+for armor type, heel data, and footprint keywords. A handled zero means
+barefoot. Only an unhandled result should use the currently worn footwear. A
+consumer limited to the original export retains the older registered-footwear
+override behavior.
 
 SFS deliberately does not hook `Actor::GetWornArmor()` or alter actual armor
 keywords to force this result. Those global changes would make gameplay and

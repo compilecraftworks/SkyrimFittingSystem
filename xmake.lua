@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.5.7"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.0"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -55,7 +55,7 @@ target("SkyrimFittingSystem")
     add_defines("SFS_VERSION_MINOR=" .. minor)
     add_defines("SFS_VERSION_PATCH=" .. patch)
     add_defines('SFS_VERSION_STRING="' .. build_version_string .. '"')
-    add_defines("SFS_VIRTUAL_TOKEN_POC=1")
+    add_defines("SFS_VIRTUAL_TOKENS=1")
 
     add_files("src/**.cpp")
     add_files(
@@ -114,6 +114,14 @@ target("ConditionCnfLogicTests")
     set_encodings("utf-8")
     set_targetdir("build/v" .. build_version .. "/tests")
     add_files("tests/ConditionCnfLogicTests.cpp")
+    add_includedirs("src")
+
+target("ConditionDropLogicTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/ConditionDropLogicTests.cpp")
     add_includedirs("src")
 
 target("FittingDyeRulesTests")
@@ -193,7 +201,7 @@ target("SkyrimFittingSystemPersonal")
     add_defines("SFS_VERSION_MINOR=" .. minor)
     add_defines("SFS_VERSION_PATCH=" .. patch)
     add_defines('SFS_VERSION_STRING="' .. build_version_string .. '-personal"')
-    add_defines("SFS_VIRTUAL_TOKEN_POC=1")
+    add_defines("SFS_VIRTUAL_TOKENS=1")
     add_defines("SFS_PERSONAL_KIT_COMPLETION=1")
 
     add_files("src/**.cpp")

@@ -8,8 +8,8 @@
 #include "native/ExternalEquipmentTransactions.h"
 #include "native/FittingSlotState.h"
 #include "native/HelmetToggle2Rules.h"
-#include "poc/DeviousDevicesHiderPoC.h"
-#include "poc/VirtualWornTokenPoC.h"
+#include "features/devious_devices/DeviousDevicesIntegration.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/Menu.h"
 #include "workbench/AppearanceSlotProtection.h"
 #include "workbench/AutomaticEquipmentVisibility.h"
@@ -470,6 +470,7 @@ void ClearAutomaticEquipmentBinding(EquipmentWidgetItem &a_item) {
 } // namespace
 
 bool VariantWorkbench::RemoveProtectedAppearanceRegistrations() {
+  const auto previousRows = rows_;
   bool changed = false;
   std::unordered_set<RE::FormID> ownerActorFormIDs;
   for (auto &row : rows_) {
@@ -509,6 +510,7 @@ bool VariantWorkbench::RemoveProtectedAppearanceRegistrations() {
     static_cast<void>(NormalizeOverrideRowsForActor(ownerActorFormID));
   }
   static_cast<void>(PruneFullyEmptyConditionalRows());
+  InvalidateRemovedAppearanceAutomation(previousRows);
   RebuildRowOrder();
   MarkChanged();
   return true;
@@ -632,12 +634,74 @@ void VariantWorkbench::RebuildRowOrder() {
   }
 }
 
+void VariantWorkbench::InvalidateAppearanceAutomation(
+    const RE::FormID a_actorFormID, const RE::FormID a_appearanceFormID,
+    const std::uint32_t a_visualSlotMask, const bool a_deleted) {
+  if (deferRuntimeEffects_) {
+    deferredInvalidations_.push_back({a_actorFormID, a_appearanceFormID,
+                                      a_visualSlotMask, a_deleted});
+    return;
+  }
+  sfs::virtual_tokens::InvalidateVirtualWornTokenAutomationForAppearance(
+      a_actorFormID, a_appearanceFormID, a_visualSlotMask, a_deleted);
+}
+
+void VariantWorkbench::InvalidateRemovedAppearanceAutomation(
+    const std::vector<VariantWorkbenchRow> &a_previousRows) {
+  struct AppearanceIdentity {
+    RE::FormID actorFormID{0};
+    RE::FormID appearanceFormID{0};
+    std::uint32_t visualSlotMask{0};
+
+    [[nodiscard]] bool operator==(const AppearanceIdentity &) const = default;
+  };
+
+  std::vector<AppearanceIdentity> invalidated;
+  for (const auto &previousRow : a_previousRows) {
+    for (const auto &previousItem : previousRow.overrides) {
+      if (previousItem.formID == 0) {
+        continue;
+      }
+      const AppearanceIdentity identity{
+          previousRow.ownerActorFormID, previousItem.formID,
+          static_cast<std::uint32_t>(
+              previousRow.GetOverrideVisualSlotMask(previousItem))};
+      if (std::ranges::find(invalidated, identity) != invalidated.end()) {
+        continue;
+      }
+      const bool retained = std::ranges::any_of(
+          rows_, [&](const VariantWorkbenchRow &a_currentRow) {
+            return a_currentRow.ownerActorFormID == identity.actorFormID &&
+                   std::ranges::any_of(
+                       a_currentRow.overrides,
+                       [&](const EquipmentWidgetItem &a_currentItem) {
+                         return a_currentItem.formID ==
+                                    identity.appearanceFormID &&
+                                static_cast<std::uint32_t>(
+                                    a_currentRow.GetOverrideVisualSlotMask(
+                                        a_currentItem)) ==
+                                    identity.visualSlotMask;
+                       });
+          });
+      if (retained) {
+        continue;
+      }
+      invalidated.push_back(identity);
+      InvalidateAppearanceAutomation(
+          identity.actorFormID, identity.appearanceFormID,
+          identity.visualSlotMask, true);
+    }
+  }
+}
+
 void VariantWorkbench::MarkChanged(const bool a_affectsNativeDisplay) {
   ++revision_;
   if (a_affectsNativeDisplay) {
     ++nativeDisplayRevision_;
   }
-  sfs::poc::UpdateVirtualWornTokenCache();
+  if (!deferRuntimeEffects_) {
+    sfs::virtual_tokens::UpdateVirtualWornTokenCache();
+  }
 }
 
 std::optional<bool> VariantWorkbench::GetEquippedHiddenForActor(
@@ -703,9 +767,9 @@ bool VariantWorkbench::ResolveEquippedHiddenForActor(
     const auto *armor =
         RE::TESForm::LookupByID<RE::TESObjectARMO>(a_row.equipped.formID);
     const bool ddRenderedDevice =
-        sfs::poc::IsDeviousDevicesRenderedDevice(armor);
+        sfs::devious_devices::IsDeviousDevicesRenderedDevice(armor);
     const bool eventAddedActual =
-        sfs::poc::IsVirtualWornTokenEventAddedArmor(
+        sfs::virtual_tokens::IsVirtualWornTokenEventAddedArmor(
             a_actor->GetFormID(), a_row.equipped.formID) ||
         sfs::native::external_equipment::IsEventAddedActualEquipment(
             a_actor->GetFormID(), a_row.equipped.formID);
@@ -1153,6 +1217,7 @@ bool VariantWorkbench::NormalizeOverrideRowsForActor(
   }
 
   RebuildRowOrder();
+  InvalidateRemovedAppearanceAutomation(originalRows);
   return true;
 }
 void VariantWorkbench::SyncRowsFromActor(RE::Actor *a_actor) {
@@ -1694,6 +1759,7 @@ bool VariantWorkbench::ReplaceCatalogSelectionInWorkbench(
   if (!PlanCatalogAssignments(a_formIDs, assignments, a_candidateRowIndices)) {
     return false;
   }
+  const auto previousRows = rows_;
 
   std::unordered_set<int> targetRows;
   targetRows.reserve(assignments.size());
@@ -1712,6 +1778,10 @@ bool VariantWorkbench::ReplaceCatalogSelectionInWorkbench(
   bool addedAny = false;
   for (const auto &assignment : assignments) {
     addedAny |= AddCatalogOverride(assignment.rowIndex, assignment.armorFormID);
+  }
+
+  if (addedAny) {
+    InvalidateRemovedAppearanceAutomation(previousRows);
   }
 
   return addedAny;
@@ -1733,6 +1803,7 @@ bool VariantWorkbench::RemoveOverridesOverlappingCatalogSelection(
     return false;
   }
 
+  const auto previousRows = rows_;
   bool changed = false;
   const auto removeOverlaps = [&](VariantWorkbenchRow &a_row) {
     const auto oldSize = a_row.overrides.size();
@@ -1757,6 +1828,7 @@ bool VariantWorkbench::RemoveOverridesOverlappingCatalogSelection(
   }
 
   if (changed) {
+    InvalidateRemovedAppearanceAutomation(previousRows);
     MarkChanged();
   }
   return changed;
@@ -1914,12 +1986,12 @@ bool VariantWorkbench::DeleteOverride(int a_rowIndex, int a_itemIndex) {
     return false;
   }
 
-  const auto &deletedItem = overrides[static_cast<std::size_t>(a_itemIndex)];
-  sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
-      row.ownerActorFormID, deletedItem.formID,
-      static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(deletedItem)),
-      true);
+  const auto previousRows = rows_;
   overrides.erase(overrides.begin() + a_itemIndex);
+  // The same actor/form/visual-slot identity may still be registered by a
+  // different condition row. Release automation only when the committed
+  // model no longer owns that identity.
+  InvalidateRemovedAppearanceAutomation(previousRows);
   // Keep conditional rows alive after their last appearance is removed.  The
   // remaining row is an empty drop target until a new appearance/equipment is
   // assigned, matching the condition-card persistence contract.
@@ -1972,6 +2044,12 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
     return false;
   }
 
+  EquipmentWidgetItem replacementSlot{};
+  if (!workbench::BuildSlotItem(representativeSlotMask, replacementSlot)) {
+    return false;
+  }
+  const auto previousRows = rows_;
+
   const auto newSourceKey = BuildSlotKey(representativeSlotMask);
   const auto newRowKey =
       BuildRowKey(newSourceKey, row.conditionId, row.ownerActorFormID);
@@ -1993,27 +2071,17 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
     const auto sourceIndex = static_cast<std::size_t>(a_targetRowIndex);
     rows_.erase(rows_.begin() + static_cast<std::ptrdiff_t>(sourceIndex));
     RebuildRowOrder();
+    InvalidateRemovedAppearanceAutomation(previousRows);
     MarkChanged();
     return true;
   }
 
-  for (const auto &oldItem : row.overrides) {
-    if (oldItem.locked) {
-      continue;
-    }
-    sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
-        row.ownerActorFormID, oldItem.formID,
-        static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(oldItem)),
-        true);
-  }
   item.hidden = false;
   // A condition-only row is type-neutral. Re-key it to the newly dropped
   // appearance instead of requiring the obsolete slot left by the deleted
   // action card.
   row.sourceKey = newSourceKey;
-  if (!workbench::BuildSlotItem(representativeSlotMask, row.equipped)) {
-    return false;
-  }
+  row.equipped = std::move(replacementSlot);
   row.isEquipped = false;
   std::erase_if(row.overrides, [](const EquipmentWidgetItem &a_item) {
     return !a_item.locked;
@@ -2021,6 +2089,7 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
   row.overrides.push_back(std::move(item));
   UpdateRowIdentity(row);
   RebuildRowOrder();
+  InvalidateRemovedAppearanceAutomation(previousRows);
   MarkChanged();
   return true;
 }
@@ -2039,13 +2108,13 @@ bool VariantWorkbench::SetOverrideHidden(int a_rowIndex, int a_itemIndex,
   }
 
   auto &overrideItem = overrides[static_cast<std::size_t>(a_itemIndex)];
-  sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
-      row.ownerActorFormID, overrideItem.formID,
-      static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(overrideItem)),
-      false);
   if (overrideItem.hidden == a_hidden) {
     return false;
   }
+  InvalidateAppearanceAutomation(
+      row.ownerActorFormID, overrideItem.formID,
+      static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(overrideItem)),
+      false);
 
   overrideItem.hidden = a_hidden;
   MarkChanged();
@@ -2072,7 +2141,7 @@ bool VariantWorkbench::SetOverrideLocked(const int a_rowIndex,
   if (a_locked) {
     // Release only this appearance's current automation tickets/latches. The
     // actor transaction and every other appearance remain untouched.
-    sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
+    InvalidateAppearanceAutomation(
         row.ownerActorFormID, item.formID,
         static_cast<std::uint32_t>(row.GetOverrideVisualSlotMask(item)),
         false);
@@ -2315,14 +2384,8 @@ bool VariantWorkbench::DeleteRow(int a_rowIndex) {
     return false;
   }
 
+  const auto previousRows = rows_;
   const auto &deletedRow = rows_[static_cast<std::size_t>(a_rowIndex)];
-  for (const auto &overrideItem : deletedRow.overrides) {
-    sfs::poc::InvalidateVirtualWornTokenAutomationForAppearance(
-        deletedRow.ownerActorFormID, overrideItem.formID,
-        static_cast<std::uint32_t>(
-            deletedRow.GetOverrideVisualSlotMask(overrideItem)),
-        true);
-  }
 
   const auto rowKey = deletedRow.key;
   if (!rowKey.empty()) {
@@ -2332,6 +2395,7 @@ bool VariantWorkbench::DeleteRow(int a_rowIndex) {
   }
 
   rows_.erase(rows_.begin() + a_rowIndex);
+  InvalidateRemovedAppearanceAutomation(previousRows);
   RebuildRowOrder();
   MarkChanged();
   return true;
@@ -2372,6 +2436,303 @@ bool VariantWorkbench::SetConditionAssignmentKeepRow(
   RebuildRowOrder();
   MarkChanged();
   return true;
+}
+
+condition_drop::Status VariantWorkbench::ApplyConditionDropTransaction(
+    const condition_drop::Request &a_request) {
+  const auto lock = AcquireStateLock();
+
+  std::vector<condition_drop::Entry> entries;
+  entries.reserve(rows_.size() + conditionalVisibilityRules_.size());
+  for (const auto &row : rows_) {
+    if (!row.IsSlotRow()) {
+      continue;
+    }
+    entries.push_back({
+        .target = {condition_drop::TargetKind::ConditionalRow,
+                   row.uiIdentity},
+        .conditionId = row.conditionId.value_or(std::string{}),
+    });
+  }
+  for (const auto &rule : conditionalVisibilityRules_) {
+    entries.push_back({
+        .target = {condition_drop::TargetKind::ConditionalVisibilityRule,
+                   rule.uiIdentity},
+        .conditionId = rule.conditionId,
+    });
+  }
+
+  const auto plan = condition_drop::BuildPlan(entries, a_request);
+  if (!plan.Changed()) {
+    return plan.status;
+  }
+
+  auto plannedRows = rows_;
+  auto plannedRules = conditionalVisibilityRules_;
+  for (const auto &change : plan.changes) {
+    if (change.target.kind == condition_drop::TargetKind::ConditionalRow) {
+      const auto row = std::ranges::find(
+          plannedRows, change.target.uiIdentity,
+          &VariantWorkbenchRow::uiIdentity);
+      if (row == plannedRows.end() || !row->IsSlotRow()) {
+        return condition_drop::Status::TargetNotFound;
+      }
+      row->conditionId = change.conditionId;
+      UpdateRowIdentity(*row);
+      continue;
+    }
+    if (change.target.kind ==
+        condition_drop::TargetKind::ConditionalVisibilityRule) {
+      const auto rule = std::ranges::find(
+          plannedRules, change.target.uiIdentity,
+          &ConditionalVisibilityRule::uiIdentity);
+      if (rule == plannedRules.end()) {
+        return condition_drop::Status::TargetNotFound;
+      }
+      rule->conditionId = change.conditionId;
+      continue;
+    }
+    return condition_drop::Status::InvalidRequest;
+  }
+
+  // A visibility rule is unique by condition, owner, target kind, and target
+  // form. Validate the complete post-drop state so a cross-row swap never
+  // commits only one side or relies on a temporarily invalid intermediate
+  // state.
+  for (std::size_t left = 0; left < plannedRules.size(); ++left) {
+    const auto &leftRule = plannedRules[left];
+    if (leftRule.conditionId.empty()) {
+      continue;
+    }
+    for (std::size_t right = left + 1; right < plannedRules.size(); ++right) {
+      const auto &rightRule = plannedRules[right];
+      if (leftRule.conditionId == rightRule.conditionId &&
+          leftRule.ownerActorFormID == rightRule.ownerActorFormID &&
+          leftRule.targetKind == rightRule.targetKind &&
+          leftRule.target.formID == rightRule.target.formID) {
+        return condition_drop::Status::Conflict;
+      }
+    }
+  }
+
+  rows_ = std::move(plannedRows);
+  conditionalVisibilityRules_ = std::move(plannedRules);
+  RebuildRowOrder();
+  MarkChanged();
+  return condition_drop::Status::Applied;
+}
+
+condition_drop::Status VariantWorkbench::ApplyConditionalActionDropTransaction(
+    const ConditionalActionDropRequest &a_request) {
+  const auto lock = AcquireStateLock();
+
+  std::vector<action_drop::Entry> entries;
+  entries.reserve(rows_.size() + conditionalVisibilityRules_.size());
+  for (const auto &row : rows_) {
+    if (!row.IsSlotRow()) {
+      continue;
+    }
+    action_drop::Entry entry{
+        .target = {condition_drop::TargetKind::ConditionalRow, row.uiIdentity}};
+    entry.formIDs.reserve(row.overrides.size());
+    for (const auto &item : row.overrides) {
+      if (item.formID != 0) {
+        entry.formIDs.push_back(item.formID);
+      }
+    }
+    entries.push_back(std::move(entry));
+  }
+  for (const auto &rule : conditionalVisibilityRules_) {
+    action_drop::Entry entry{
+        .target = {condition_drop::TargetKind::ConditionalVisibilityRule,
+                   rule.uiIdentity}};
+    if (rule.target.formID != 0) {
+      entry.formIDs.push_back(rule.target.formID);
+    }
+    entries.push_back(std::move(entry));
+  }
+
+  const auto validation = action_drop::ValidateRequest(
+      entries, {.target = a_request.target,
+                .formID = a_request.formID,
+                .source = a_request.source});
+  if (validation != condition_drop::Status::Applied) {
+    return validation;
+  }
+
+  // Apply every domain operation to an isolated model. Runtime invalidations
+  // are recorded rather than published until the complete target/source state
+  // has passed validation and is ready to commit.
+  VariantWorkbench staged;
+  staged.rows_ = rows_;
+  staged.conditionalVisibilityRules_ = conditionalVisibilityRules_;
+  staged.rowOrder_ = rowOrder_;
+  staged.equippedHiddenByActor_ = equippedHiddenByActor_;
+  staged.lastSyncedActorFormID_ = lastSyncedActorFormID_;
+  staged.deferRuntimeEffects_ = true;
+
+  const auto findRowIndex = [&](const std::uint64_t a_identity) {
+    const auto it = std::ranges::find(staged.rows_, a_identity,
+                                      &VariantWorkbenchRow::uiIdentity);
+    return it == staged.rows_.end()
+               ? -1
+               : static_cast<int>(std::distance(staged.rows_.begin(), it));
+  };
+  const auto findRuleIndex = [&](const std::uint64_t a_identity)
+      -> std::optional<std::size_t> {
+    const auto it = std::ranges::find(
+        staged.conditionalVisibilityRules_, a_identity,
+        &ConditionalVisibilityRule::uiIdentity);
+    if (it == staged.conditionalVisibilityRules_.end()) {
+      return std::nullopt;
+    }
+    return static_cast<std::size_t>(
+        std::distance(staged.conditionalVisibilityRules_.begin(), it));
+  };
+
+  bool targetChanged = false;
+  if (a_request.target.kind == condition_drop::TargetKind::ConditionalRow) {
+    const auto targetRowIndex = findRowIndex(a_request.target.uiIdentity);
+    if (targetRowIndex < 0) {
+      return condition_drop::Status::TargetNotFound;
+    }
+
+    if (a_request.targetKind == ConditionalVisibilityTargetKind::Fitting) {
+      targetChanged = staged.ReplaceConditionalFittingTarget(
+          targetRowIndex, a_request.formID);
+    } else {
+      const auto targetRow =
+          staged.rows_[static_cast<std::size_t>(targetRowIndex)];
+      if (!targetRow.conditionId.has_value()) {
+        return condition_drop::Status::InvalidRequest;
+      }
+      EquipmentWidgetItem targetItem{};
+      const auto *targetArmor =
+          RE::TESForm::LookupByID<RE::TESObjectARMO>(a_request.formID);
+      if (!targetArmor || !BuildCatalogItem(a_request.formID, targetItem) ||
+          IsAppearanceRegistrationProtectedSlotMask(
+              armor::GetArmorDisplaySlotMask(targetArmor))) {
+        return condition_drop::Status::InvalidRequest;
+      }
+      ConditionalVisibilityRule targetRule{
+          .conditionId = *targetRow.conditionId,
+          .ownerActorFormID = targetRow.ownerActorFormID,
+          .targetKind = a_request.targetKind,
+          .target = std::move(targetItem),
+          .visibleWhenTrue = a_request.visibleWhenTrue};
+      targetRule.uiIdentity = targetRow.uiIdentity;
+      targetRule.registrationOrder = targetRow.registrationOrder;
+      staged.conditionalVisibilityRules_.push_back(std::move(targetRule));
+      targetChanged = staged.DeleteRow(targetRowIndex);
+    }
+  } else if (a_request.target.kind ==
+             condition_drop::TargetKind::ConditionalVisibilityRule) {
+    const auto targetRuleIndex = findRuleIndex(a_request.target.uiIdentity);
+    if (!targetRuleIndex.has_value()) {
+      return condition_drop::Status::TargetNotFound;
+    }
+    targetChanged = a_request.registerFittingTarget
+        ? staged.ConvertConditionalVisibilityRuleToFittingRow(
+              *targetRuleIndex, a_request.formID)
+        : [&]() {
+            const bool targetReplaced =
+                staged.SetConditionalVisibilityRuleTarget(
+                    *targetRuleIndex, a_request.targetKind,
+                    a_request.formID);
+            const bool polarityChanged =
+                staged.SetConditionalVisibilityRuleVisible(
+                    *targetRuleIndex, a_request.visibleWhenTrue);
+            return targetReplaced || polarityChanged;
+          }();
+  } else {
+    return condition_drop::Status::InvalidRequest;
+  }
+
+  if (!targetChanged) {
+    return condition_drop::Status::NoChange;
+  }
+
+  if (a_request.source.has_value()) {
+    if (a_request.source->kind ==
+        condition_drop::TargetKind::ConditionalRow) {
+      const auto sourceRowIndex = findRowIndex(a_request.source->uiIdentity);
+      if (sourceRowIndex >= 0) {
+        const auto &sourceRow =
+            staged.rows_[static_cast<std::size_t>(sourceRowIndex)];
+        const auto sourceItem = std::ranges::find(
+            sourceRow.overrides, a_request.formID,
+            &EquipmentWidgetItem::formID);
+        if (sourceItem == sourceRow.overrides.end()) {
+          return condition_drop::Status::StaleSource;
+        }
+        const auto sourceItemIndex = static_cast<int>(
+            std::distance(sourceRow.overrides.begin(), sourceItem));
+        if (!staged.DeleteOverride(sourceRowIndex, sourceItemIndex)) {
+          return condition_drop::Status::StaleSource;
+        }
+      } else {
+        const bool sourceConsumedByFittingMerge =
+            a_request.targetKind ==
+                ConditionalVisibilityTargetKind::Fitting &&
+            (a_request.target.kind ==
+                 condition_drop::TargetKind::ConditionalRow ||
+             a_request.registerFittingTarget) &&
+            findRowIndex(a_request.target.uiIdentity) >= 0;
+        if (!sourceConsumedByFittingMerge) {
+          return condition_drop::Status::StaleSource;
+        }
+      }
+      // ReplaceConditionalFittingTarget may merge the target into the source
+      // row and transfer the target identity. In that one case the original
+      // source identity is intentionally consumed by the target operation.
+    } else if (a_request.source->kind ==
+               condition_drop::TargetKind::ConditionalVisibilityRule) {
+      const auto sourceRuleIndex = findRuleIndex(a_request.source->uiIdentity);
+      if (!sourceRuleIndex.has_value() ||
+          !staged.SetConditionalVisibilityRuleTarget(
+              *sourceRuleIndex,
+              staged.conditionalVisibilityRules_[*sourceRuleIndex].targetKind,
+              0)) {
+        return condition_drop::Status::StaleSource;
+      }
+    } else {
+      return condition_drop::Status::InvalidRequest;
+    }
+  }
+
+  // The setters used by legacy UI paths validate only their local endpoint.
+  // Validate the complete staged state so a move cannot create a duplicate
+  // visibility rule after clearing its source.
+  for (std::size_t left = 0;
+       left < staged.conditionalVisibilityRules_.size(); ++left) {
+    const auto &leftRule = staged.conditionalVisibilityRules_[left];
+    if (leftRule.conditionId.empty() || leftRule.target.formID == 0) {
+      continue;
+    }
+    for (std::size_t right = left + 1;
+         right < staged.conditionalVisibilityRules_.size(); ++right) {
+      const auto &rightRule = staged.conditionalVisibilityRules_[right];
+      if (leftRule.conditionId == rightRule.conditionId &&
+          leftRule.ownerActorFormID == rightRule.ownerActorFormID &&
+          leftRule.targetKind == rightRule.targetKind &&
+          leftRule.target.formID == rightRule.target.formID) {
+        return condition_drop::Status::Conflict;
+      }
+    }
+  }
+
+  rows_ = std::move(staged.rows_);
+  conditionalVisibilityRules_ =
+      std::move(staged.conditionalVisibilityRules_);
+  rowOrder_ = std::move(staged.rowOrder_);
+  equippedHiddenByActor_ = std::move(staged.equippedHiddenByActor_);
+  for (const auto &invalidation : staged.deferredInvalidations_) {
+    InvalidateAppearanceAutomation(
+        invalidation.actorFormID, invalidation.appearanceFormID,
+        invalidation.visualSlotMask, invalidation.deleted);
+  }
+  MarkChanged();
+  return condition_drop::Status::Applied;
 }
 
 bool VariantWorkbench::ClearConditionAssignmentKeepRow(const int a_rowIndex) {
@@ -2468,6 +2829,7 @@ bool VariantWorkbench::ResetAllRows(
     return true;
   }
 
+  const auto previousRows = rows_;
   bool changed = false;
   for (const auto rowIndex : *a_candidateRowIndices) {
     if (rowIndex < 0 || rowIndex >= static_cast<int>(rows_.size())) {
@@ -2486,6 +2848,7 @@ bool VariantWorkbench::ResetAllRows(
   }
 
   if (changed) {
+    InvalidateRemovedAppearanceAutomation(previousRows);
     MarkChanged();
   }
 

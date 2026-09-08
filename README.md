@@ -47,7 +47,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.5.7)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.6.0)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -57,6 +57,14 @@ used by SFS. XMake packages are resolved from the checked-in
 `xmake-requires.lock`. See `DEPENDENCIES.md` for exact upstream revisions,
 checksums, local patches, and the update policy.
 
+SFS is loaded by **SKSE64**, not by its helper ESL. Install the runtime ZIP as
+a normal MO2/Vortex mod, enable `SkyrimFittingSystem-VirtualTokens.esl`, and
+launch the game through `skse64_loader.exe`. SFS itself is not a separate tool.
+The Skyrim pause menu's **Settings** and **Controls** pages do not contain SFS
+controls; after opening SFS with F6, change the binding under
+**SFS -> Options -> Toggle UI Button**. See `INSTALL.txt` for exact MO2/Vortex
+steps and first-load diagnostics.
+
 ## Build
 From Windows:
 
@@ -65,7 +73,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.5.7/windows/x64/<mode>/` in the project root.
+`build/v1.6.0/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -106,6 +114,10 @@ download small. Debug symbols remain available only in the local build tree.
 ## Settings And Data
 - Runtime settings are stored under:
   - `Data/SKSE/Plugins/SkyrimFittingSystem/settings.json`
+  - SFS now creates this file as soon as `SFSCore.dll` loads, before renderer
+    and menu-hook initialization. With default MO2 output routing, a new file
+    normally appears under
+    `Overwrite/SKSE/Plugins/SkyrimFittingSystem/settings.json`.
 - Actor-owned appearances, conditions, and visibility are stored in the SKSE co-save. The selected strip-link policy and per-slot mappings are shared user settings applied to all actors, while active transactions and suppression results remain actor-local.
 - Fitting Dye colors are stored independently by actor FormID, registered appearance ARMO, and exact rendered-component identity; no source texture, material, actual equipment, or workbench registration data is changed.
 - Favorites are stored separately in:
@@ -115,14 +127,14 @@ download small. Debug symbols remain available only in the local build tree.
 
 ## Runtime Menu API
 
-SFS v1.5.7 exports a stable menu API for external hotkey and menu-management
+SFS v1.6.0 exports a stable menu API for external hotkey and menu-management
 mods. Managers may temporarily disable the native F6 or user-defined shortcut
 without changing its saved binding; this runtime-only state defaults to enabled
 on every game launch. Open, Close, and IsMenuOpen remain independent. See
 `docs/SkyrimFittingSystem-Menu-API.md` and `extras/SkyrimFittingSystemAPI.h`.
-The v1.5.7 module name is `SFSCore.dll`; the four C export names are unchanged.
+The v1.6.0 module name is `SFSCore.dll`; the four menu C export names are unchanged.
 
-SFS v1.5.7 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
+SFS v1.6.0 includes the Kit Generator directly in `SFSCore.dll`. Its tab scans
 selected outfit plugins, builds and edits candidate combinations, previews the
 selection on the character and in the workbench, and writes finished kits
 directly to the SFS user-kit folder. Only this temporary generator preview may
@@ -155,7 +167,7 @@ for Dynamic Feminine Female Modesty Animations OAR 4.30, Wet Function Redux,
 and Dynamic Footprints SKSE BASE v3. These use narrow, versioned integration
 boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.5.7.md` for the current release scope.
+state. See `docs/RELEASE-NOTES-v1.6.0.md` for the current release scope.
 
 ## Fitting Kits
 

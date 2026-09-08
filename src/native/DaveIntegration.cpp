@@ -292,10 +292,10 @@ void SyncHiddenRealEquipment(
   logger::debug(
       "SFS DAVE native: SyncHiddenRealEquipment actor={:08X} applied variant='{}' identifiers={} forceReapply={}",
       actorID, variantName, identifiers.size(), forceReapply);
-#if defined(SFS_VIRTUAL_TOKEN_POC)
+#if defined(SFS_VIRTUAL_TOKENS)
   if (forceReapply) {
     logger::info(
-        "PoC DAVE hidden real equipment reapplied actor={:08X} identifiers={}",
+        "DAVE hidden real equipment reapplied actor={:08X} identifiers={}",
         actorID, identifiers.size());
   }
 #endif

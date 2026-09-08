@@ -515,7 +515,8 @@ void Menu::DrawCatalogHostBody(const bool a_drawBodyChild) {
           "catalog:conditions-tab", ui::catalog::IsDelayedHover(),
           {localization->Get("help.conditions.1").data(),
            localization->Get("help.conditions.2").data(),
-           localization->Get("help.conditions.3").data()});
+           localization->Get("help.conditions.3").data(),
+           localization->Get("help.conditions.4").data()});
       if (conditionsTabOpen) {
         if (browser.activeTab != ui::catalog::BrowserTab::Conditions) {
           notifyGeneratorClosed(ui::catalog::BrowserTab::Conditions);
