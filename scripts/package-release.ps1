@@ -130,6 +130,10 @@ $sourceDocs = @(
     'RELEASE-NOTES-v1.5.6.md', 'RELEASE-NOTES-v1.5.6-ko.md',
     'RELEASE-NOTES-v1.5.7.md', 'RELEASE-NOTES-v1.5.7-ko.md',
     'RELEASE-NOTES-v1.6.0.md', 'RELEASE-NOTES-v1.6.0-ko.md',
+    'RELEASE-NOTES-v1.6.1.md', 'RELEASE-NOTES-v1.6.1-ko.md',
+    'GITHUB-RELEASE-v1.6.1.md',
+    'nexus-changelog-v1.6.1-en.txt', 'nexus-changelog-v1.6.1-ko.txt',
+    'V1.6.1-DISPLAY-REGRESSION-AUDIT.md',
     'nexus-changelog-v1.6.0-en.txt', 'nexus-changelog-v1.6.0-ko.txt',
     'nexus-description-en.md', 'nexus-description.bbcode',
     'nexus-description-ko.md', 'nexus-description-ko.bbcode',
@@ -141,6 +145,7 @@ $sourceDocs = @(
     'V1.6.0-NEXUS-POSTS-AUDIT.md',
     'BodyMorph-v1.5.5-Regression-Checks.md',
     'RaceMenu-ABI-Audit.md'
+    'RaceMenu-Version-Compatibility-v1.6.1.md'
 )
 foreach ($name in $sourceDocs) {
     Copy-RequiredFile (Join-Path $repoRoot "docs\$name") (Join-Path $sourceStage "docs\$name")

@@ -1,0 +1,52 @@
+param([Parameter(Mandatory=$true)][string]$OutputDirectory)
+$ErrorActionPreference = 'Stop'
+$repo = Split-Path -Parent $PSScriptRoot
+$groups = @{
+    'IntegrationOar.production.inc' = @('src/native/OpenAnimationReplacerIntegration.cpp', @(
+        'bool RegisterConditionsImpl()', 'void RegisterConditions()'))
+    'IntegrationDaveQuery.production.inc' = @('src/native/DaveIntegration.cpp', @(
+        '[[nodiscard]] IDynamicArmorVariantsExtendedInterface001 *TryGetDaveInterface('))
+    'IntegrationBackend.production.inc' = @('src/native/ArmorSkinningHooks.cpp', @(
+        'bool ConfigureRealEquipmentSkinningBackend('))
+    'IntegrationRaceMenu.production.inc' = @('src/native/RaceMenuBodyMorph.cpp', @(
+        'void InitializeBodyMorphInterface()', 'bool IsBodyMorphInterfaceReady()'))
+    'CustomSkinningCallbackFilter.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        'class ScopedHiddenWornVisitorFilter final'))
+    'CustomSkinningChain.production.inc' = @('src/native/ArmorSkinningHooks.cpp', @(
+        '[[nodiscard]] bool IsReadableCommittedRange(',
+        ('template <class T>' + "`n" + '[[nodiscard]] std::optional<T> TryReadMemory('),
+        '[[nodiscard]] std::optional<ModuleChainMatch> ResolveBranchChainOwner('))
+    'CustomSkinningHooks.production.inc' = @('src/native/ArmorSkinningHooks.cpp', @(
+        ('[[nodiscard]] bool' + "`n" + 'ConfigureIedCustomSkinCompatibility('),
+        'void InstallCustomSkinHookSE(', 'void InstallCustomSkinHookAE('))
+    'CustomSkinningVisitor.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        'void VisitWornItemsWithHiddenRealEquipmentFilter('))
+}
+foreach ($entry in $groups.GetEnumerator()) {
+    $source = (Get-Content -LiteralPath (Join-Path $repo $entry.Value[0]) -Raw).Replace("`r`n", "`n")
+    $blocks = [Collections.Generic.List[string]]::new()
+    foreach ($name in $entry.Value[1]) {
+        $start = $source.IndexOf($name, [StringComparison]::Ordinal)
+        if ($start -lt 0) { throw "Missing production definition: $name" }
+        $open = $source.IndexOf('{', $start)
+        $depth = 0
+        $end = -1
+        for ($i = $open; $i -lt $source.Length; $i++) {
+            if ($source[$i] -eq '{') { $depth++ }
+            if ($source[$i] -eq '}') {
+                $depth--
+                if ($depth -eq 0) { $end = $i + 1; break }
+            }
+        }
+        if ($end -lt 0) { throw "Unbalanced production definition: $name" }
+        if ($source[$end] -eq ';') { $end++ }
+        $blocks.Add($source.Substring($start, $end - $start))
+    }
+    # Build-generated test inputs; production functions are copied verbatim.
+    $content = $blocks -join "`n`n"
+    $path = [IO.Path]::GetFullPath((Join-Path $OutputDirectory $entry.Key))
+    [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path)) | Out-Null
+    if (-not [IO.File]::Exists($path) -or [IO.File]::ReadAllText($path) -cne $content) {
+        [IO.File]::WriteAllText($path, $content, [Text.UTF8Encoding]::new($false))
+    }
+}

@@ -7,7 +7,7 @@
 
 namespace sfs::native::dave {
 [[nodiscard]] bool IsDynamicArmorVariantsLoaded();
-[[nodiscard]] bool HasNativeApi();
+[[nodiscard]] bool HasNativeApi(bool a_forceRetry = false);
 [[nodiscard]] bool IsApiReady();
 void LockToNativeFallback();
 [[nodiscard]] bool RefreshActor(RE::Actor *a_actor);

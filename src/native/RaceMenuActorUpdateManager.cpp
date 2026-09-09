@@ -133,6 +133,25 @@ DetectVersionZeroLayout(IPluginInterface *a_plugin) {
 
 } // namespace
 
+bool HasCallableInterfacePrefix(const IPluginInterface *a_plugin,
+                                const std::size_t a_slotCount) {
+  if (!IsReadableAddress(a_plugin, sizeof(void *)) || a_slotCount == 0 ||
+      a_slotCount > 64) {
+    return false;
+  }
+  const auto *vtable = *reinterpret_cast<std::uintptr_t *const *>(a_plugin);
+  if (!IsReadableAddress(vtable, sizeof(std::uintptr_t))) {
+    return false;
+  }
+  for (std::size_t slot = 0; slot < a_slotCount; ++slot) {
+    if (!IsReadableAddress(vtable + slot, sizeof(std::uintptr_t)) ||
+        !IsExecutableAddress(vtable[slot])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 const char *
 AttachmentInterfaceLayoutName(const AttachmentInterfaceLayout a_layout) {
   switch (a_layout) {
@@ -142,6 +161,8 @@ AttachmentInterfaceLayoutName(const AttachmentInterfaceLayout a_layout) {
     return "public-v0-backport";
   case AttachmentInterfaceLayout::PublicV1V2:
     return "public-v1-v2";
+  case AttachmentInterfaceLayout::PublicCompatiblePrefix:
+    return "public-v1-compatible-prefix (forward compatibility assumed)";
   default:
     return "unknown";
   }
@@ -155,6 +176,10 @@ AttachmentRegistrationResult RegisterAttachmentObserver(
   }
   if (a_plugin == nullptr || a_observer == nullptr) {
     return {AttachmentRegistrationStatus::Unavailable};
+  }
+
+  if (!HasCallableInterfacePrefix(a_plugin, 3)) {
+    return {AttachmentRegistrationStatus::UnsupportedLayout};
   }
 
   const auto version = a_plugin->GetVersion();
@@ -174,12 +199,15 @@ AttachmentRegistrationResult RegisterAttachmentObserver(
   }
   case 1:
   case 2:
+  default:
+    if (!HasCallableInterfacePrefix(a_plugin, 12)) {
+      return {AttachmentRegistrationStatus::UnsupportedLayout, version};
+    }
     static_cast<IActorUpdateManagerV1 *>(a_plugin)->AddInterface(a_observer);
     a_registered.store(true);
     return {AttachmentRegistrationStatus::Registered, version,
-            AttachmentInterfaceLayout::PublicV1V2};
-  default:
-    return {AttachmentRegistrationStatus::UnsupportedVersion, version};
+            version <= 2 ? AttachmentInterfaceLayout::PublicV1V2
+                         : AttachmentInterfaceLayout::PublicCompatiblePrefix};
   }
 }
 

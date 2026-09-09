@@ -1,3 +1,21 @@
+## Version 1.6.1
+
+- Retry partial RaceMenu/DAVE/OAR initialization; use compatible public prefixes
+  for higher RaceMenu and Grid ABI numbers with explicit assumption logs.
+- Restore dye on late attachments independently of BodyMorph, and preserve
+  dye/pose/heel follow-ups through an engine rebuild after DAVE refresh failure.
+- All 12 fast regression executables pass; 19 RaceMenu source-change snapshots
+  audited. Future ABI semantics and every historical ZIP are not binary-verified.
+- Fixed a v1.6.0 path that disabled registered wig/clothing attachment when
+  a pre-existing custom-skin CALL had unknown visitor ownership.
+- Preserved the original foreign visitor and SFS attachment; verified engine
+  and IED routes retain their filtering. Opaque CALL chains filter through
+  original engine callbacks with thread/visitor-local scope, without replacing
+  the concrete object or changing inventory/worn flags.
+- Fixed long ENDBR64 and page-end trampoline detection and added executable
+  production SE/AE hook tests. Save formats and optional patches are unchanged.
+- The reporter's environment and specific in-game outcome remain unverified.
+
 ## Version 1.6.0
 
 - Rebuilt SFS around one actor-local final-rendered-outfit result shared by actual gear, registered appearances, global/per-item visibility, conditions, locks, protected/shield slots, previews, strip state, nudity checks, and compatibility consumers.

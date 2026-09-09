@@ -1,4 +1,5 @@
 #include "native/GridInventoryIntegration.h"
+#include "native/IntegrationCompatibilityRules.h"
 
 #include "third_party/gridinventory/GridInventoryCostumeAPI.h"
 #include "ui/Menu.h"
@@ -13,7 +14,6 @@
 namespace sfs::native::grid_inventory {
 namespace {
 constexpr std::uint32_t kPlayerFormID = 0x00000014;
-constexpr std::uint32_t kMaximumCostumePieceCount = 1024;
 
 struct CostumeSnapshot {
   std::int32_t tab{-1};
@@ -54,14 +54,16 @@ void OnGridInventoryMessage(SKSE::MessagingInterface::Message *a_message) {
 
   const auto *state =
       static_cast<const GridInvAPI::CostumeState *>(a_message->data);
-  if (state->structSize != sizeof(GridInvAPI::CostumeState) ||
-      state->abiVersion != GridInvAPI::kABIVersion ||
-      state->pieceCount > kMaximumCostumePieceCount ||
-      (state->pieceCount != 0 && state->pieces == nullptr)) {
-    logger::warn("[GRID COSTUME] ignored incompatible CostumeState message "
+  if (!integration_rules::CanReadCostumePrefix(
+          a_message->dataLen, state->structSize, state->pieceCount,
+          state->pieces != nullptr)) {
+    logger::warn("[GRID COSTUME] ignored malformed CostumeState message "
                  "(abi={}, size={}, pieces={})",
                  state->abiVersion, state->structSize, state->pieceCount);
     return;
+  }
+  if (state->abiVersion != GridInvAPI::kABIVersion) {
+    logger::warn("[GRID COSTUME] ABI {} is not individually audited; using the v1 message/ItemKey prefix (compatibility assumed)", state->abiVersion);
   }
 
   CostumeSnapshot snapshot;

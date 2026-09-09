@@ -9,7 +9,8 @@ namespace RE { class NiTransform; }
 // 87a5cadd5c282e790ea6e9cf104bb7aa551fc4dc (BodyMorph v4) and
 // 9ebcb733e17be695f994cd2e9cc383043446bc02 (BodyMorph v5 / NiTransform v3).
 // These declarations are shared with independent slot-dispatch regression tests.
-// Interface versions are independent; gate each cast with its own version.
+// Interface versions are independent. Higher versions use the last compatible
+// public prefix with a logged assumption and callable-memory validation.
 namespace sfs::native::racemenu::abi {
 
 // SE/AE x64 only. Public prefix v4/v5; the private task prefix is separately
@@ -74,18 +75,9 @@ public:
   virtual void ApplyVertexDiff(RE::TESObjectREFR *, RE::NiAVObject *,
                                bool = false) = 0;
   virtual void ApplyBodyMorphs(RE::TESObjectREFR *, bool = true) = 0;
-  virtual void UpdateModelWeight(RE::TESObjectREFR *, bool = false) = 0;
-  virtual void SetCacheLimit(std::size_t) = 0;
-  virtual bool HasMorphs(RE::TESObjectREFR *) = 0;
-  virtual std::uint32_t EvaluateBodyMorphs(RE::TESObjectREFR *) = 0;
-  virtual bool HasBodyMorph(RE::TESObjectREFR *, const char *,
-                            const char *) = 0;
-  virtual bool HasBodyMorphName(RE::TESObjectREFR *, const char *) = 0;
-  virtual bool HasBodyMorphKey(RE::TESObjectREFR *, const char *) = 0;
-  virtual void ClearBodyMorphKeys(RE::TESObjectREFR *, const char *) = 0;
-  virtual void VisitStrings(StringVisitor &) = 0;
-  virtual void VisitActors(ActorVisitor &) = 0;
-  virtual std::size_t ClearMorphCache() = 0;
+  // Deliberately stop at the last used slot. Early v4 SetCacheLimit used
+  // UInt32, later v4 used size_t; cache callbacks also changed without a new
+  // version. None is used by SFS, so do not expose a misleading full v4 ABI.
 };
 
 class INiTransformInterface : public IPluginInterface {

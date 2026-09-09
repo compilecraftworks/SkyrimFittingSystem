@@ -136,6 +136,11 @@ void ApplyDisplaySkinning(RE::Actor *a_actor,
 // records that ABI boundary here so the filtering path can use the original
 // engine visitor and request an actor-level IED refresh afterward.
 void SetIedVisitWornItemsChainTarget(std::uintptr_t a_chainTarget);
+// Opaque foreign call targets retain the exact game visitor. This limits only
+// custom-visitor filtering, never the following registered-armor attachment.
+void SetPassthroughVisitWornItemsChainTarget(std::uintptr_t a_chainTarget);
+bool InstallOriginalWornVisitorFilter();
+void FinalizeRealEquipmentSkinningBackend();
 void VisitWornItemsWithHiddenRealEquipmentFilter(
     RE::InventoryChanges *a_inventory,
     RE::InventoryChanges::IItemChangeVisitor *a_visitor,

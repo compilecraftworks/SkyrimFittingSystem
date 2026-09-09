@@ -7,6 +7,12 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.6.1 corrects a v1.6.0 custom-skin hook path that could skip registered
+wig/clothing attachment when a pre-existing hook's visitor ownership was
+unknown. See [release notes](docs/RELEASE-NOTES-v1.6.1.md) and the
+[production-code regression audit](docs/V1.6.1-DISPLAY-REGRESSION-AUDIT.md)
+for verified behavior, scoped original-visitor filtering, and validation scope.
+
 ## Features
 - Snappy ImGui interface for managing armor appearance overrides
 - Searchable catalog for:
@@ -47,7 +53,7 @@ requirements. Optional compatibility features require only their corresponding
 mod and that mod's own prerequisites.
 
 ## Build Requirements
-- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.6.0)
+- [XMake](https://xmake.io) v3.1.0 (exact release used for v1.6.1)
 - C++23 compiler on Windows (MSVC or Clang-CL)
 
 ## Getting Started
@@ -73,7 +79,7 @@ xmake build
 ```
 
 This generates `SFSCore.dll` under
-`build/v1.6.0/windows/x64/<mode>/` in the project root.
+`build/v1.6.1/windows/x64/<mode>/` in the project root.
 
 From WSL, to build and deploy directly into the local test mod folder:
 
@@ -167,7 +173,7 @@ for Dynamic Feminine Female Modesty Animations OAR 4.30, Wet Function Redux,
 and Dynamic Footprints SKSE BASE v3. These use narrow, versioned integration
 boundaries;
 the core retains actor-local actual equipment, conditions, linking, and display
-state. See `docs/RELEASE-NOTES-v1.6.0.md` for the current release scope.
+state. See `docs/RELEASE-NOTES-v1.6.1.md` for the current release scope.
 
 ## Fitting Kits
 

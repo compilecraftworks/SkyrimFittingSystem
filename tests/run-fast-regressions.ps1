@@ -14,6 +14,8 @@ $targets = @(
     "FittingDyeRulesTests",
     "KitListNavigationTests",
     "CoreBehaviorRegressionTests",
+    "CustomSkinningRegressionTests",
+    "IntegrationInitializationTests",
     "RaceMenuInterfaceTests",
     "RaceMenuMorphTrackingTests"
 )
@@ -222,8 +224,8 @@ try {
     $armorHookSource = Get-Content -LiteralPath (
         Join-Path $repository "src\native\ArmorSkinningHooks.cpp") -Raw
     if (-not $armorHookSource.Contains("ResolveBranchChainOwner") -or
-        -not $armorHookSource.Contains("could not be resolved through a verified trampoline chain")) {
-        throw "IED custom-skin compatibility must resolve trampolines and fail closed"
+        -not $armorHookSource.Contains("SetPassthroughVisitWornItemsChainTarget")) {
+        throw "Custom-skin compatibility must preserve unknown concrete visitors and SFS attachments"
     }
 
     $footwearApiSource = Get-Content -LiteralPath (

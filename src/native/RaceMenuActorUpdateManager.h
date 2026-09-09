@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <cstddef>
 #include <cstdint>
 
 namespace RE {
@@ -73,6 +74,7 @@ enum class AttachmentInterfaceLayout : std::uint8_t {
   LegacyV0,
   PublicV0Backport,
   PublicV1V2,
+  PublicCompatiblePrefix,
 };
 
 struct AttachmentRegistrationResult {
@@ -83,6 +85,11 @@ struct AttachmentRegistrationResult {
 
 [[nodiscard]] const char *
 AttachmentInterfaceLayoutName(AttachmentInterfaceLayout a_layout);
+
+// Memory/callability check only, not semantic ABI verification. External
+// executable trampolines are permitted; package names/hashes are not gates.
+[[nodiscard]] bool HasCallableInterfacePrefix(const IPluginInterface *a_plugin,
+                                               std::size_t a_slotCount);
 
 // The caller must hold the existing initialization mutex. This function does
 // not acquire any other lock or access actor/render/save/equipment state.

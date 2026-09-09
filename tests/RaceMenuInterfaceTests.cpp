@@ -1,5 +1,6 @@
 #include "native/RaceMenuInterfaces.h"
 #include "native/RegisteredAppearanceMorphRules.h"
+#include <Windows.h>
 
 #include <array>
 #include <atomic>
@@ -172,7 +173,13 @@ void TestRegistrationAndAttachment() {
            Case{1, 11, 28, abi::AttachmentInterfaceLayout::PublicV1V2,
                 "public v1"},
            Case{2, 11, 28, abi::AttachmentInterfaceLayout::PublicV1V2,
-                "public v2"}}) {
+                "public v2"},
+           Case{3, 11, 28, abi::AttachmentInterfaceLayout::PublicCompatiblePrefix,
+                "forward-compatible v3 prefix"},
+           Case{99, 11, 28, abi::AttachmentInterfaceLayout::PublicCompatiblePrefix,
+                "forward-compatible v99 prefix"},
+           Case{UINT32_MAX, 11, 28, abi::AttachmentInterfaceLayout::PublicCompatiblePrefix,
+                "forward-compatible maximum version prefix"}}) {
     const auto version = test.version;
     Provider provider(version);
     provider.slots[test.registerSlot] =
@@ -222,10 +229,11 @@ void TestFailureAndThreadedRetry() {
              Status::Unavailable && !registered, "Missing provider must remain retryable");
   for (auto version : {3U, 99U, UINT32_MAX}) {
     Provider unknown(version);
+    unknown.slots[11] = 0;
     const auto result = abi::RegisterAttachmentObserver(unknown.Plugin(), &observer, registered);
-    Expect(result.status == Status::UnsupportedVersion && result.version == version &&
+    Expect(result.status == Status::UnsupportedLayout && result.version == version &&
                unknown.versionCalls == 1 && !registered,
-           "Unverified versions must never call beyond the stable prefix");
+           "Invalid executable memory, not an unfamiliar version number, must reject a call");
   }
   Provider ambiguousV0(0);
   ambiguousV0.slots[7] = 0;
@@ -279,6 +287,39 @@ void TestFailureAndThreadedRetry() {
   Expect(provider.registerCalls == 2, "Only the failed attempt and one retry may call AddInterface");
 }
 
+void TestCallableMemoryBoundaries() {
+  Expect(!abi::HasCallableInterfacePrefix(nullptr, 14), "null provider memory");
+  Provider provider(6);
+  provider.slots[14] = 0;
+  Expect(abi::HasCallableInterfacePrefix(provider.Plugin(), 14) &&
+             !abi::HasCallableInterfacePrefix(provider.Plugin(), 15),
+         "unused tail slots must not block the required compatible prefix");
+  provider.slots[12] = reinterpret_cast<std::uintptr_t>(&provider.version);
+  Expect(!abi::HasCallableInterfacePrefix(provider.Plugin(), 14),
+         "readable data is not an executable callback");
+  SYSTEM_INFO system{};
+  GetSystemInfo(&system);
+  auto* pages = static_cast<std::byte*>(VirtualAlloc(nullptr,
+      system.dwPageSize * 2, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE));
+  Expect(pages != nullptr, "allocate guarded interface boundary fixture");
+  DWORD oldProtection{};
+  Expect(VirtualProtect(pages + system.dwPageSize, system.dwPageSize,
+                       PAGE_NOACCESS, &oldProtection) != 0, "guard interface boundary");
+  auto* table = reinterpret_cast<std::uintptr_t*>(pages + system.dwPageSize) - 14;
+  for (std::size_t i = 0; i < 14; ++i) {
+    table[i] = reinterpret_cast<std::uintptr_t>(&UnexpectedSlot);
+  }
+  auto* tablePointer = table;
+  auto* plugin = reinterpret_cast<abi::IPluginInterface*>(&tablePointer);
+  Expect(abi::HasCallableInterfacePrefix(plugin, 14) &&
+             !abi::HasCallableInterfacePrefix(plugin, 15),
+         "complete page-end prefixes connect without reading inaccessible tails");
+  Expect(!abi::HasCallableInterfacePrefix(
+      reinterpret_cast<abi::IPluginInterface*>(pages + system.dwPageSize), 3),
+      "unreadable provider object must be rejected without dereference");
+  VirtualFree(pages, 0, MEM_RELEASE);
+}
+
 void TestIndependentMorphAndTransformVersions() {
   Expect(abi::kApplyBodyMorphsVtableIndex == 13 &&
              abi::kUpdateModelWeightRunSlot == 0 &&
@@ -297,14 +338,14 @@ void TestIndependentMorphAndTransformVersions() {
   for (auto morphVersion : {0U, 1U, 2U, 3U, 4U, 5U, 6U, UINT32_MAX}) {
     for (auto transformVersion : {0U, 1U, 2U, 3U, 4U, UINT32_MAX}) {
       Expect(rules::IsPublicBodyMorphInterfaceCompatible(morphVersion) ==
-                 (morphVersion == 4 || morphVersion == 5), "Independent BodyMorph version policy");
+                 (morphVersion >= 4), "Independent BodyMorph compatible-prefix policy");
       const auto route = rules::ResolveHighHeelTransformRoute(transformVersion);
-      Expect(route == (transformVersion == 3 ? rules::HighHeelTransformRoute::PublicInterface :
+      Expect(route == (transformVersion >= 3 ? rules::HighHeelTransformRoute::PublicInterface :
               transformVersion == 1 || transformVersion == 2 ? rules::HighHeelTransformRoute::LegacyPapyrus :
               rules::HighHeelTransformRoute::Unavailable), "Independent NiTransform version policy");
     }
   }
-  for (auto version : {4U, 5U}) {
+  for (auto version : {4U, 5U, 6U, 99U, UINT32_MAX}) {
     Provider provider(version);
     provider.slots[6] = reinterpret_cast<std::uintptr_t>(&Provider::ReadMorph);
     provider.slots[8] = reinterpret_cast<std::uintptr_t>(&Provider::VisitMorphs);
@@ -333,7 +374,8 @@ void TestIndependentMorphAndTransformVersions() {
     Expect(provider.calls == std::vector<int>({8, 6, 12, 13, 8, 6, 12, 13}), "BodyMorph v4/v5 read/write slot dispatch");
     std::cout << "BodyMorph v" << version << " dispatch passed\n";
   }
-  Provider transform(3);
+  for (auto version : {3U, 4U, 99U, UINT32_MAX}) {
+  Provider transform(version);
   transform.slots[7] = reinterpret_cast<std::uintptr_t>(&Provider::AddPosition);
   transform.slots[15] = reinterpret_cast<std::uintptr_t>(&Provider::RemovePosition);
   transform.slots[22] = reinterpret_cast<std::uintptr_t>(&Provider::UpdateAll);
@@ -346,6 +388,7 @@ void TestIndependentMorphAndTransformVersions() {
   }
   Expect(transform.calls == std::vector<int>({7, 22, 15, 24, 7, 22, 15, 24}),
          "NiTransform v3 position/update slots must preserve actor-local call order");
+  }
 }
 } // namespace
 
@@ -356,6 +399,7 @@ int main() {
   static_assert(sizeof(abi::InterfaceExchangeMessage) == 8);
   TestRegistrationAndAttachment();
   TestFailureAndThreadedRetry();
+  TestCallableMemoryBoundaries();
   TestIndependentMorphAndTransformVersions();
   std::cout << "RaceMenu interface ABI regression tests passed\n";
 }

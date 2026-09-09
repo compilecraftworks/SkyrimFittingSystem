@@ -113,6 +113,7 @@ struct DisplaySetBuildScope {
 std::mutex g_queuedArmorRefreshMutex;
 std::unordered_map<RE::FormID, std::uint64_t> g_queuedArmorRefreshGeneration;
 std::atomic<std::uintptr_t> g_iedVisitWornItemsChainTarget{0};
+std::atomic<std::uintptr_t> g_passthroughVisitWornItemsChainTarget{0};
 std::mutex g_queuedIedEvaluationMutex;
 std::unordered_map<RE::FormID, std::uint64_t> g_queuedIedEvaluations;
 std::uint64_t g_nextIedEvaluationToken{0};
@@ -2014,6 +2015,92 @@ GetEntryArmor(RE::InventoryEntryData *a_entryData) {
   return a_entryData->object->As<RE::TESObjectARMO>();
 }
 
+// Intercept the known engine InitWornVisitor's three base-interface callbacks,
+// not the opaque provider's CALL or its concrete object. The vptr, RTTI and all
+// concrete fields remain unchanged. Install once, before gameplay; ordinary
+// visits always chain unchanged. Only the exact visitor in a synchronous SFS
+// invocation on this thread is filtered. No inventory/extra-data mutation.
+class ScopedHiddenWornVisitorFilter final {
+public:
+  using Visitor = RE::InventoryChanges::IItemChangeVisitor;
+  using Entry = RE::InventoryEntryData;
+  using Result = RE::BSContainer::ForEachResult;
+
+  ScopedHiddenWornVisitorFilter(Visitor *a_visitor, RE::Actor *a_actor,
+                               const DisplaySet &a_displaySet,
+                               bool a_filterRequired)
+      : previous_(current_), visitor_(a_visitor), actor_(a_actor),
+        displaySet_(a_displaySet), filterRequired_(a_filterRequired) {
+    current_ = this;
+  }
+  ~ScopedHiddenWornVisitorFilter() { current_ = previous_; }
+  ScopedHiddenWornVisitorFilter(const ScopedHiddenWornVisitorFilter &) = delete;
+  ScopedHiddenWornVisitorFilter &operator=(const ScopedHiddenWornVisitorFilter &) = delete;
+
+  static bool Install(std::uintptr_t a_vtable) {
+    if (installed_) { return true; }
+    if (!a_vtable) { return false; }
+    auto *slots = reinterpret_cast<const std::uintptr_t *>(a_vtable) + 1;
+    const std::array<std::uintptr_t, 3> original{slots[0], slots[1], slots[2]};
+    if (std::ranges::any_of(original, [](auto address) { return address == 0; })) {
+      return false;
+    }
+    originalVisit_ = reinterpret_cast<VisitFn>(original[0]);
+    originalShouldVisit_ = reinterpret_cast<ShouldVisitFn>(original[1]);
+    originalUnk03_ = reinterpret_cast<Unk03Fn>(original[2]);
+    const std::array<std::uintptr_t, 3> replacement{
+        reinterpret_cast<std::uintptr_t>(&Visit),
+        reinterpret_cast<std::uintptr_t>(&ShouldVisit),
+        reinterpret_cast<std::uintptr_t>(&Unk03)};
+    // One verified contiguous write; never leave a partially installed set
+    // after an expected-bytes mismatch. Destructor slot and COL are untouched.
+    installed_ = REL::safe_write(reinterpret_cast<std::uintptr_t>(slots),
+        replacement.data(), sizeof(replacement), original.data(), sizeof(original));
+    return installed_;
+  }
+
+private:
+  static bool ShouldSkip(Visitor *a_visitor, Entry *a_entry) {
+    for (auto *scope = current_; scope; scope = scope->previous_) {
+      if (scope->visitor_ == a_visitor) {
+        return scope->filterRequired_ && ShouldHideRealArmor(
+            scope->actor_, scope->displaySet_, GetEntryArmor(a_entry));
+      }
+    }
+    return false;
+  }
+  static Result Visit(Visitor *a_visitor, Entry *a_entry) {
+    return ShouldSkip(a_visitor, a_entry) ? Result::kContinue
+                                        : originalVisit_(a_visitor, a_entry);
+  }
+  static bool ShouldVisit(Visitor *a_visitor, Entry *a_entry,
+                          RE::TESBoundObject *a_object) {
+    return !ShouldSkip(a_visitor, a_entry) &&
+           originalShouldVisit_(a_visitor, a_entry, a_object);
+  }
+  static Result Unk03(Visitor *a_visitor, Entry *a_entry,
+                      void *a_arg2, bool *a_arg3) {
+    if (ShouldSkip(a_visitor, a_entry)) {
+      if (a_arg3) { *a_arg3 = true; }
+      return Result::kContinue;
+    }
+    return originalUnk03_(a_visitor, a_entry, a_arg2, a_arg3);
+  }
+  using VisitFn = Result (*)(Visitor *, Entry *);
+  using ShouldVisitFn = bool (*)(Visitor *, Entry *, RE::TESBoundObject *);
+  using Unk03Fn = Result (*)(Visitor *, Entry *, void *, bool *);
+  inline static VisitFn originalVisit_{};
+  inline static ShouldVisitFn originalShouldVisit_{};
+  inline static Unk03Fn originalUnk03_{};
+  inline static bool installed_{};
+  inline static thread_local ScopedHiddenWornVisitorFilter *current_{};
+  ScopedHiddenWornVisitorFilter *previous_;
+  Visitor *visitor_;
+  RE::Actor *actor_;
+  const DisplaySet &displaySet_;
+  bool filterRequired_;
+};
+
 class HiddenRealEquipmentFilterVisitor final
     : public RE::InventoryChanges::IItemChangeVisitor {
 public:
@@ -2373,6 +2460,17 @@ void ApplyArmorOnce(const RE::TESObjectARMO *a_armor,
 namespace sfs::native {
 void SetIedVisitWornItemsChainTarget(const std::uintptr_t a_chainTarget) {
   g_iedVisitWornItemsChainTarget.store(a_chainTarget);
+}
+
+void SetPassthroughVisitWornItemsChainTarget(const std::uintptr_t a_chainTarget) {
+  g_passthroughVisitWornItemsChainTarget.store(a_chainTarget);
+}
+
+bool InstallOriginalWornVisitorFilter() {
+  // CommonLib's versioned SE/AE table for the engine concrete visitor. The
+  // IItemChangeVisitor base slots 1/2/3 are identical on supported flat layouts.
+  static REL::Relocation<std::uintptr_t> vtable{RE::VTABLE___InitWornVisitor[0]};
+  return ScopedHiddenWornVisitorFilter::Install(vtable.address());
 }
 
 void SynchronizeArmorClassificationKeywords(RE::TESObjectARMO *a_armor) {
@@ -3191,7 +3289,19 @@ void VisitWornItemsWithHiddenRealEquipmentFilter(
       CollectHiddenWornSlotMask(target, displaySet) != 0;
   const auto iedChainTarget = g_iedVisitWornItemsChainTarget.load();
   const auto route = sfs::native::ied::rules::ResolveVisitorRoute(
-      filterRequired, a_visitWornItems, iedChainTarget);
+      filterRequired, a_visitWornItems, iedChainTarget,
+      g_passthroughVisitWornItemsChainTarget.load());
+  // Also shadow an enclosing opaque scope on an explicit nested dispatch that
+  // reuses the same visitor but selects another actor/route.
+  ScopedHiddenWornVisitorFilter scope{
+      a_visitor, actor, displaySet,
+      filterRequired && route == sfs::native::ied::rules::VisitorRoute::
+                                     CurrentTargetWithOriginalVisitorFilter};
+  if (route == sfs::native::ied::rules::VisitorRoute::
+                   CurrentTargetWithOriginalVisitorFilter) {
+    visitWornItems(a_inventory, a_visitor);
+    return;
+  }
   if (route == sfs::native::ied::rules::VisitorRoute::
                    CurrentTargetUnfiltered) {
     visitWornItems(a_inventory, a_visitor);
@@ -3372,12 +3482,15 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
         equipmentChangeRefresh ? "equipment change" : "display state";
     logger::debug("Refreshing actor {:08X} with DAVE API for {}",
                   a_actor->GetFormID(), reason);
-    if (!sfs::native::dave::RefreshActor(a_actor)) {
-      logger::warn("DAVE {} refresh failed for actor {:08X}", reason,
+    refresh_rules::RunDaveRefresh(
+        [&] { return sfs::native::dave::RefreshActor(a_actor); }, [&] {
+      logger::warn("DAVE {} refresh failed for actor {:08X}; rebuilding this actor's 3D through the existing DAVE engine hooks", reason,
                    a_actor->GetFormID());
-    } else {
-      queueFollowups();
-    }
+      // A rejected API refresh must not strand display/dye/heel changes. This
+      // is an actor-local engine rebuild, not a native backend ownership switch;
+      // DAVE still owns its installed armor hooks and active variants.
+      re::Update3D(a_actor);
+    }, queueFollowups);
     return;
   }
   case refresh_rules::Backend::DavFallback3D:

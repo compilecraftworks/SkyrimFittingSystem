@@ -56,6 +56,19 @@ struct Plan {
           .queueHighHeelSync = work};
 }
 
+// A failed public refresh still needs the same actor-local follow-ups after
+// an engine rebuild; it must not disable dye/pose/heel restoration as a group.
+template <class Refresh, class Rebuild, class Followups>
+bool RunDaveRefresh(Refresh &&a_refresh, Rebuild &&a_rebuild,
+                    Followups &&a_followups) {
+  const bool refreshed = a_refresh();
+  if (!refreshed) {
+    a_rebuild();
+  }
+  a_followups();
+  return refreshed;
+}
+
 // A slot shared by hidden and still-visible actual armor is not exclusively
 // owned by SFS's hidden set and must remain under DAVE's control.
 [[nodiscard]] inline constexpr std::uint32_t

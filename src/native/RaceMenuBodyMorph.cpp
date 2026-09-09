@@ -1,6 +1,7 @@
 #include "native/RaceMenuBodyMorph.h"
 
 #include "native/ArmorSkinning.h"
+#include "native/FittingDye.h"
 #include "native/RaceMenuInterfaces.h"
 #include "native/RegisteredAppearanceMorphRules.h"
 
@@ -1023,8 +1024,15 @@ public:
                 [[maybe_unused]] RE::NiNode *a_root) override {
     auto *actor = a_reference ? a_reference->As<RE::Actor>() : nullptr;
     if (!actor || !a_armor || !a_addon || !a_object ||
-        !IsRegisteredAppearanceDisplayActive(actor->GetFormID()) ||
         !sfs::native::IsDisplayedFittingArmor(actor, a_armor)) {
+      return;
+    }
+
+    // Independent appearance consumer: late DAVE attachments can arrive after
+    // dye's bounded rebuild retry. Rearm saved tint restoration from the actual
+    // event even if BodyMorph is absent; do not reset morph tracking/vertices.
+    sfs::native::dye::QueueSavedWorldTintRestore(actor);
+    if (!IsRegisteredAppearanceDisplayActive(actor->GetFormID())) {
       return;
     }
 
@@ -1399,7 +1407,8 @@ TryInterfaceExchange(const SKSE::MessagingInterface *a_messaging,
           ? message.interfaceMap->QueryInterface("BodyMorph")
           : nullptr;
   const auto bodyMorphVersion =
-      bodyMorphPlugin ? bodyMorphPlugin->GetVersion() : 0;
+      abi::HasCallableInterfacePrefix(bodyMorphPlugin, 3)
+          ? bodyMorphPlugin->GetVersion() : 0;
 
   logger::info(
       "RaceMenu interface exchange attempt {} via {}: dispatched={}, interfaceMap={}, BodyMorph={}, version={}",
@@ -1422,7 +1431,14 @@ TryInterfaceExchange(const SKSE::MessagingInterface *a_messaging,
 
 void InitializeBodyMorphInterface() {
   std::lock_guard initializeLock(g_initializeMutex);
-  if (g_bodyMorphInitializationComplete.load()) {
+  // A successful map exchange is not proof that every independently published
+  // interface/hook was ready. Retry missing pieces at later lifecycle fences,
+  // retaining already-connected objects and idempotent hook registrations.
+  if (g_bodyMorphInterface.load() && g_applyBodyMorphsHookInstalled.load() &&
+      g_updateModelWeightTaskHookInstalled.load() &&
+      g_attachmentObserverRegistered.load() &&
+      rules::ResolveHighHeelTransformRoute(g_transformInterfaceVersion.load()) !=
+          rules::HighHeelTransformRoute::Unavailable) {
     return;
   }
 
@@ -1437,8 +1453,8 @@ void InitializeBodyMorphInterface() {
 
   // Match OBody NG's public RaceMenu exchange path exactly: request the
   // interface from RaceMenu's registered SKSE receiver name after PostPostLoad.
-  // The second call from DataLoaded provides one bounded retry for load-order
-  // differences without polling or replacing skee64.dll.
+  // DataLoaded and its queued post-broadcast fence retry missing components
+  // without polling or replacing skee64.dll.
   auto exchange = TryInterfaceExchange(
       messaging, attempt, "skee", "OBody-compatible named receiver 'skee'");
   if (!exchange) {
@@ -1447,7 +1463,7 @@ void InitializeBodyMorphInterface() {
           "RaceMenu interfaces are not available yet; registered appearance morph compatibility will retry at DataLoaded");
     } else {
       logger::warn(
-          "RaceMenu interfaces remained unavailable after {} initialization attempts; registered appearance morph compatibility is inactive for this game session",
+          "RaceMenu interface map unavailable on initialization attempt {}; existing connections remain intact and later lifecycle fences may retry missing components",
           attempt);
     }
     return;
@@ -1455,42 +1471,64 @@ void InitializeBodyMorphInterface() {
   logger::info("Received RaceMenu interface map via {}",
                exchange->route);
 
-  auto *bodyMorph =
-      rules::IsPublicBodyMorphInterfaceCompatible(
-          exchange->bodyMorphVersion)
+  auto *bodyMorph = g_bodyMorphInterface.load();
+  if (!bodyMorph) {
+    bodyMorph = rules::IsPublicBodyMorphInterfaceCompatible(
+          exchange->bodyMorphVersion) &&
+          abi::HasCallableInterfacePrefix(exchange->bodyMorphPlugin, 14)
           ? static_cast<skee::IBodyMorphInterface *>(
                 exchange->bodyMorphPlugin)
           : nullptr;
-  g_bodyMorphInterface.store(bodyMorph);
+    g_bodyMorphInterface.store(bodyMorph);
+    if (bodyMorph && exchange->bodyMorphVersion > 5) {
+      logger::warn("RaceMenu BodyMorph version {} exceeds audited versions; using the last compatible v4 public prefix, forward compatibility assumed (not binary-verified)",
+                   exchange->bodyMorphVersion);
+    }
+  }
 
-  auto *transformPlugin =
-      exchange->interfaceMap->QueryInterface("NiTransform");
-  const auto transformVersion =
-      transformPlugin ? transformPlugin->GetVersion() : 0;
-  const auto transformRoute =
-      rules::ResolveHighHeelTransformRoute(transformVersion);
-  g_transformInterfaceVersion.store(transformVersion,
-                                    std::memory_order_release);
-  if (transformRoute == rules::HighHeelTransformRoute::PublicInterface) {
-    // Version 3 introduced the public INiTransformInterface ABI. Older
-    // concrete vtables are intentionally never cast to this type.
-    auto *transform =
-        static_cast<skee::INiTransformInterface *>(transformPlugin);
-    g_transformInterface.store(transform, std::memory_order_release);
-    logger::info(
-        "Connected to RaceMenu NiTransform interface version {} for registered-appearance HH_OFFSET synchronization",
-        transformVersion);
-  } else if (transformRoute ==
-             rules::HighHeelTransformRoute::LegacyPapyrus) {
-    g_transformInterface.store(nullptr, std::memory_order_release);
-    logger::info(
-        "Connected to RaceMenu NiTransform version {}; registered-appearance HH_OFFSET synchronization will use the ABI-neutral NiOverride Papyrus route",
-        transformVersion);
-  } else {
-    g_transformInterface.store(nullptr, std::memory_order_release);
-    logger::warn(
-        "RaceMenu NiTransform interface is missing or has no verified ABI (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
-        transformVersion);
+  if (rules::ResolveHighHeelTransformRoute(g_transformInterfaceVersion.load()) ==
+      rules::HighHeelTransformRoute::Unavailable) {
+    auto *transformPlugin =
+        exchange->interfaceMap->QueryInterface("NiTransform");
+    const auto transformVersion =
+      abi::HasCallableInterfacePrefix(transformPlugin, 3)
+          ? transformPlugin->GetVersion() : 0;
+    auto transformRoute =
+        rules::ResolveHighHeelTransformRoute(transformVersion);
+    if (transformRoute == rules::HighHeelTransformRoute::PublicInterface &&
+        !abi::HasCallableInterfacePrefix(transformPlugin, 25)) {
+      // Invalid callable memory must not stop independently usable Papyrus
+      // transforms. Other independently callable components remain connected.
+      transformRoute = rules::HighHeelTransformRoute::LegacyPapyrus;
+      logger::warn("RaceMenu NiTransform public prefix is not callable; using independent NiOverride Papyrus transforms");
+    }
+    g_transformInterfaceVersion.store(
+        transformRoute == rules::HighHeelTransformRoute::LegacyPapyrus ? 2 : transformVersion,
+                                      std::memory_order_release);
+    if (transformRoute == rules::HighHeelTransformRoute::PublicInterface) {
+      // Version 3 introduced the public INiTransformInterface ABI. Older
+      // concrete vtables are intentionally never cast to this type.
+      auto *transform =
+          static_cast<skee::INiTransformInterface *>(transformPlugin);
+      g_transformInterface.store(transform, std::memory_order_release);
+      if (transformVersion > 3) {
+        logger::warn("RaceMenu NiTransform version {} exceeds audited versions; using the last compatible v3 public prefix, forward compatibility assumed (not binary-verified)", transformVersion);
+      }
+      logger::info(
+          "Connected to RaceMenu NiTransform interface version {} for registered-appearance HH_OFFSET synchronization",
+          transformVersion);
+    } else if (transformRoute ==
+               rules::HighHeelTransformRoute::LegacyPapyrus) {
+      g_transformInterface.store(nullptr, std::memory_order_release);
+      logger::info(
+          "Connected to RaceMenu NiTransform version {}; registered-appearance HH_OFFSET synchronization will use the ABI-neutral NiOverride Papyrus route",
+          transformVersion);
+    } else {
+      g_transformInterface.store(nullptr, std::memory_order_release);
+      logger::warn(
+          "RaceMenu NiTransform interface is missing or has no verified ABI (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
+          transformVersion);
+    }
   }
 
   if (bodyMorph) {
@@ -1506,7 +1544,7 @@ void InitializeBodyMorphInterface() {
     }
   } else {
     logger::info(
-        "RaceMenu BodyMorph version {} has no verified public ABI (supported: 4, 5); direct registered-appearance morph calls are disabled; HH_OFFSET compatibility is determined independently by NiTransform",
+        "RaceMenu BodyMorph version {} is missing, predates the public v4 prefix, or has invalid callable memory; direct morph connection remains retryable, other interfaces remain independent",
         exchange->bodyMorphVersion);
   }
 
@@ -1516,7 +1554,7 @@ void InitializeBodyMorphInterface() {
   if (attachmentRegistration.status ==
       abi::AttachmentRegistrationStatus::Registered) {
     logger::info(
-        "Registered RaceMenu ActorUpdateManager attachment observer for SFS appearance morphs (reported version {}, verified layout {})",
+        "Registered RaceMenu ActorUpdateManager attachment observer for SFS appearance morphs (reported version {}, route {})",
         attachmentRegistration.version,
         abi::AttachmentInterfaceLayoutName(attachmentRegistration.layout));
   } else if (attachmentRegistration.status ==

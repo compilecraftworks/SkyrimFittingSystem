@@ -34,9 +34,11 @@ ResolveLegacyHighHeelCompletion(bool a_updateSucceeded,
 // Released version-2 builds expose the same HH_OFFSET behavior through the
 // long-standing NiOverride Papyrus API, but their concrete C++ vtable is not
 // ABI-compatible with the public interface. Never cast those objects to v3.
+// Higher interface versions use this last public prefix, with the runtime
+// caller checking callable memory and logging the compatibility assumption.
 [[nodiscard]] inline constexpr HighHeelTransformRoute
 ResolveHighHeelTransformRoute(const std::uint32_t a_version) noexcept {
-  if (a_version == 3) {
+  if (a_version >= 3) {
     return HighHeelTransformRoute::PublicInterface;
   }
   if (a_version == 1 || a_version == 2) {
@@ -51,9 +53,11 @@ ResolveHighHeelTransformRoute(const std::uint32_t a_version) noexcept {
 [[nodiscard]] inline constexpr bool
 IsPublicBodyMorphInterfaceCompatible(
     const std::uint32_t a_version) noexcept {
-  // v5 appends a callback; the v4 prefix is unchanged. Never assume an
-  // unverified future interface has the same vtable.
-  return a_version == 4 || a_version == 5;
+  // Use the last compatible public prefix, not a package/version allowlist.
+  // v5 only appends a callback. Higher versions optimistically retain v4's
+  // used prefix; the caller validates callable slots and logs this assumption.
+  // This is forward-compatibility policy, not proof of a future ABI's meaning.
+  return a_version >= 4;
 }
 
 [[nodiscard]] inline constexpr bool ShouldTrackRegisteredAppearanceNodes(

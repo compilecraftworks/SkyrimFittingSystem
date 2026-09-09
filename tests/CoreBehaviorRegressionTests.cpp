@@ -6,6 +6,7 @@
 #include "native/GenitalCompatibilityRules.h"
 #include "native/HelmetToggle2Rules.h"
 #include "native/IedVisitorRoutingRules.h"
+#include "native/IntegrationCompatibilityRules.h"
 #include "native/PapyrusObserverInstallRules.h"
 #include "native/RegisteredAppearanceMorphRules.h"
 #include "native/SexLabPPlusRules.h"
@@ -332,19 +333,19 @@ void TestBodyMorphActivity() {
   Expect(ResolveHighHeelTransformRoute(3) ==
              HighHeelTransformRoute::PublicInterface &&
              ResolveHighHeelTransformRoute(4) ==
-                 HighHeelTransformRoute::Unavailable &&
+                 HighHeelTransformRoute::PublicInterface &&
              ResolveHighHeelTransformRoute(UINT32_MAX) ==
-                 HighHeelTransformRoute::Unavailable,
-         "Only verified NiTransform v3 may use the public interface route");
+                 HighHeelTransformRoute::PublicInterface,
+         "NiTransform v3 and higher must retain the last compatible public prefix");
   Expect(!IsPublicBodyMorphInterfaceCompatible(0) &&
              !IsPublicBodyMorphInterfaceCompatible(1) &&
              !IsPublicBodyMorphInterfaceCompatible(2) &&
              !IsPublicBodyMorphInterfaceCompatible(3) &&
              IsPublicBodyMorphInterfaceCompatible(4) &&
              IsPublicBodyMorphInterfaceCompatible(5) &&
-             !IsPublicBodyMorphInterfaceCompatible(6) &&
-             !IsPublicBodyMorphInterfaceCompatible(UINT32_MAX),
-         "Only RaceMenu BodyMorph v4/v5 may use the public C++ ABI");
+             IsPublicBodyMorphInterfaceCompatible(6) &&
+             IsPublicBodyMorphInterfaceCompatible(UINT32_MAX),
+         "BodyMorph v4 and higher must retain the public prefix, never cast the incompatible concrete v3");
 
   Expect(ShouldTrackRegisteredAppearanceNodes(true, 1),
          "A visible saved registered appearance must enable morph tracking");
@@ -394,6 +395,13 @@ void ExpectBackendFollowups(
 
 void TestRefreshBackends() {
   using namespace sfs::native::refresh_rules;
+  for (const bool succeeds : {false, true}) {
+    std::vector<int> steps;
+    const bool result = RunDaveRefresh([&] { steps.push_back(1); return succeeds; },
+        [&] { steps.push_back(2); }, [&] { steps.push_back(3); });
+    Expect(result == succeeds && steps == (succeeds ? std::vector<int>{1, 3} : std::vector<int>{1, 2, 3}),
+           "a rejected DAVE refresh must rebuild once then retain dye/pose/heel followups without a backend switch");
+  }
   auto plan = BuildPlan({.daveApiReady = true});
   Expect(plan.backend == Backend::DaveApi,
          "DAVE API must be the primary display refresh backend");
@@ -465,6 +473,12 @@ void TestIedVisitorRoutingIsolation() {
   using namespace sfs::native::ied::rules;
   constexpr std::uintptr_t engineTarget = 0x1000;
   constexpr std::uintptr_t iedChainTarget = 0x2000;
+  constexpr std::uintptr_t opaqueTarget = 0x3000;
+  for (bool filter : {false, true}) {
+    Expect(ResolveVisitorRoute(filter, opaqueTarget, 0, opaqueTarget) ==
+               VisitorRoute::CurrentTargetWithOriginalVisitorFilter,
+           "opaque calls must retain original-object scope even when inactive to isolate nested visits");
+  }
 
   Expect(ResolveVisitorRoute(false, iedChainTarget, iedChainTarget) ==
              VisitorRoute::CurrentTargetUnfiltered,
@@ -720,6 +734,17 @@ void TestMenuCameraZoomSynchronization() {
 } // namespace
 
 int main() {
+  using sfs::native::integration_rules::CanReadCostumePrefix;
+  Expect(CanReadCostumePrefix(24, 24, 1, true) &&
+             CanReadCostumePrefix(32, 32, 1, true) &&
+             CanReadCostumePrefix(32, 24, 0, false),
+         "Grid messages retain the existing prefix, including appended fields");
+  Expect(!CanReadCostumePrefix(23, 24, 1, true) &&
+             !CanReadCostumePrefix(24, 32, 1, true) &&
+             !CanReadCostumePrefix(24, 23, 1, true) &&
+             !CanReadCostumePrefix(24, 24, 1025, true) &&
+             !CanReadCostumePrefix(24, 24, 1, false),
+         "Malformed Grid message bounds remain invalid independently of version");
   TestStripLinkPolicies();
   TestPapyrusPostLinkInspectionBoundary();
   TestVanillaAnchorResolution();

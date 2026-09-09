@@ -46,8 +46,21 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::workbench::EquipmentRefreshEventSink::Register();
     sfs::native::RequestSOSStorageSync();
     sfs::native::QueuePlayerArmorRefresh();
+    // Run after every plugin's DataLoaded listener, so a provider initialized
+    // later in that same broadcast is not mistaken for an absent interface.
+    if (auto *tasks = SKSE::GetTaskInterface()) {
+      tasks->AddTask([] {
+        sfs::native::FinalizeRealEquipmentSkinningBackend();
+        sfs::native::racemenu::InitializeBodyMorphInterface();
+        sfs::native::oar::RegisterConditions();
+        sfs::native::QueuePlayerArmorRefresh();
+      });
+    } else {
+      sfs::native::FinalizeRealEquipmentSkinningBackend();
+    }
     break;
   case SKSE::MessagingInterface::kPostPostLoad:
+    sfs::native::oar::RegisterConditions();
     sfs::native::smoothcam::RequestInterface();
     sfs::hooks::Install();
     sfs::native::InstallArmorSkinningHooks();

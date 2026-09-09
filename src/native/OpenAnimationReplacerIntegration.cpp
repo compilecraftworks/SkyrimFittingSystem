@@ -185,7 +185,11 @@ protected:
   }
 };
 
-template <class T> void RegisterCondition() {
+template <class T> bool RegisterCondition() {
+  // The outer startup mutex serializes this per-condition success latch.
+  // A failed attempt must not make any condition permanently unavailable.
+  static bool registered = false;
+  if (registered) { return true; }
   const auto result = OAR_API::Conditions::GetAPI()
                           ->AddCustomCondition(SKSE::GetPluginHandle(),
                                                Plugin::NAME.data(), Plugin::VERSION,
@@ -193,10 +197,12 @@ template <class T> void RegisterCondition() {
                                                Conditions::CustomCondition::GetFactory<T>());
   switch (result) {
   case OARResult::OK:
+    registered = true;
     logger::info("Registered Open Animation Replacer condition {}",
                  T::CONDITION_NAME);
     break;
   case OARResult::AlreadyRegistered:
+    registered = true;
     logger::info("Open Animation Replacer condition {} is already registered",
                  T::CONDITION_NAME);
     break;
@@ -205,23 +211,28 @@ template <class T> void RegisterCondition() {
                  T::CONDITION_NAME, static_cast<int>(result));
     break;
   }
+  return registered;
 }
 
-void RegisterConditionsImpl() {
+bool RegisterConditionsImpl() {
   if (!OAR_API::Conditions::GetAPI()) {
-    logger::info("Open Animation Replacer Conditions API is unavailable; SFS OAR conditions are disabled");
-    return;
+    logger::info("Open Animation Replacer Conditions API is not available yet; SFS will retry at later startup fences");
+    return false;
   }
-  RegisterCondition<IsShownArmorEquipped>();
-  RegisterCondition<ShownArmorHasKeyword>();
-  RegisterCondition<ShownArmorInSlotHasKeyword>();
-  RegisterCondition<IsShownBodyNaked>();
+  // Evaluate all four even when one fails. Completed registrations stay put.
+  const bool armor = RegisterCondition<IsShownArmorEquipped>();
+  const bool keyword = RegisterCondition<ShownArmorHasKeyword>();
+  const bool slot = RegisterCondition<ShownArmorInSlotHasKeyword>();
+  const bool naked = RegisterCondition<IsShownBodyNaked>();
+  return armor && keyword && slot && naked;
 }
 } // namespace
 
 namespace sfs::native::oar {
 void RegisterConditions() {
-  static std::once_flag once;
-  std::call_once(once, RegisterConditionsImpl);
+  static std::mutex mutex;
+  static bool complete = false;
+  const std::scoped_lock lock(mutex);
+  if (!complete) { complete = RegisterConditionsImpl(); }
 }
 } // namespace sfs::native::oar

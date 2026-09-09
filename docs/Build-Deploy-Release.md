@@ -1,6 +1,6 @@
 # Build, Deploy, And Release
 
-This document describes the v1.6.0 build and release workflow for:
+This document describes the v1.6.1 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.6.0/windows/x64/<mode>/SFSCore.dll`
-- local-only SE/AE PDB when present: `build/v1.6.0/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.6.1/windows/x64/<mode>/SFSCore.dll`
+- local-only SE/AE PDB when present: `build/v1.6.1/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -71,7 +71,8 @@ Before deployment or packaging, run:
 
 The suite builds and runs RuntimeLayout, Kit Generator, BodyFamily, Condition
 CNF, Condition Drop, Fitting Dye, Kit navigation, core behavior, RaceMenu
-interface, and RaceMenu morph-tracking tests (ten executables), followed by
+interface, RaceMenu morph-tracking, production custom-skin and integration
+initialization tests (twelve executables), followed by
 source-boundary checks.
 The morph-tracking target generates a test-only include from production
 function definitions and runs them with fake engine attachments. It covers
@@ -146,10 +147,10 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.6.0 SE-AE.zip`
-- `Sources/Skyrim Fitting System v1.6.0 Source.zip`
+- `Release/Skyrim Fitting System v1.6.1 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.6.1 Source.zip`
 - matching copies under `dist/`
-- `Release/SHA256SUMS-v1.6.0.txt`
+- `Release/SHA256SUMS-v1.6.1.txt`
 
 The runtime archive has a flat MO2-installable root. It contains the main DLL,
 VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;

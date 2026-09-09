@@ -9,6 +9,7 @@
 
 #include <array>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -20,6 +21,8 @@
 namespace {
 SKSE::Trampoline g_localTrampoline{"SFS native armor skinning"};
 std::once_flag g_installOnce;
+std::once_flag g_finalizeBackendOnce;
+bool g_realEquipmentBackendConfigured{false}; // startup main-thread only
 
 struct CallSiteBranch {
   std::uint8_t opcode{0};
@@ -152,27 +155,40 @@ struct ModuleChainMatch {
 };
 
 [[nodiscard]] std::optional<ModuleChainMatch> ResolveBranchChainOwner(
-    const std::uintptr_t a_start, const std::wstring_view a_moduleName) {
+    const std::uintptr_t a_start, const std::wstring_view a_moduleName,
+    const std::uintptr_t a_expectedTarget = 0) {
   constexpr std::size_t kMaximumTrampolineDepth = 8;
-  constexpr std::size_t kDecodeWindow = 16;
+  // ENDBR64 + mov-r11/jmp-r11 needs 17 bytes. Read only the accessible
+  // prefix so even a short veneer at the end of a committed page is valid.
+  constexpr std::size_t kDecodeWindow = 20;
 
   std::uintptr_t current = a_start;
   std::unordered_set<std::uintptr_t> visited;
   for (std::size_t depth = 0; depth <= kMaximumTrampolineDepth; ++depth) {
-    if (IsAddressInModule(current, a_moduleName)) {
+    if ((a_expectedTarget != 0 && current == a_expectedTarget) ||
+        (!a_moduleName.empty() && IsAddressInModule(current, a_moduleName))) {
       return ModuleChainMatch{current, depth};
     }
     if (depth == kMaximumTrampolineDepth || !visited.insert(current).second) {
       break;
     }
 
-    const auto bytes =
-        TryReadMemory<std::array<std::uint8_t, kDecodeWindow>>(current, true);
-    if (!bytes.has_value()) {
-      break;
+    std::array<std::uint8_t, kDecodeWindow> bytes{};
+    std::size_t readableLength = 0;
+    for (; readableLength < bytes.size(); ++readableLength) {
+      if (current > (std::numeric_limits<std::uintptr_t>::max)() -
+                        readableLength) {
+        break;
+      }
+      const auto byte = TryReadMemory<std::uint8_t>(
+          current + readableLength, true);
+      if (!byte.has_value()) {
+        break;
+      }
+      bytes[readableLength] = *byte;
     }
     const auto transfer = sfs::native::branch_chain::rules::DecodeTransfer(
-        current, std::span<const std::uint8_t>(*bytes));
+        current, std::span<const std::uint8_t>(bytes.data(), readableLength));
     if (!transfer.has_value()) {
       break;
     }
@@ -198,7 +214,18 @@ struct ModuleChainMatch {
 [[nodiscard]] bool
 ConfigureIedCustomSkinCompatibility(const CallSiteBranch &a_callSite,
                                     const std::string_view a_runtime) {
+  sfs::native::SetPassthroughVisitWornItemsChainTarget(0);
   if (a_callSite.expected) {
+    sfs::native::SetIedVisitWornItemsChainTarget(0);
+    return true;
+  }
+
+  // A transparent veneer ending at the exact engine visitor has the same
+  // generic visitor ABI. Preserve full filtering without guessing by DLL name.
+  static REL::Relocation<std::uintptr_t> engineVisitWornItems{
+      RELOCATION_ID(15856, 16096)};
+  if (ResolveBranchChainOwner(a_callSite.target, {},
+                              engineVisitWornItems.address()).has_value()) {
     sfs::native::SetIedVisitWornItemsChainTarget(0);
     return true;
   }
@@ -216,14 +243,22 @@ ConfigureIedCustomSkinCompatibility(const CallSiteBranch &a_callSite,
     return true;
   }
 
-  // A pre-patched visitor target whose ownership cannot be proven may require
-  // a concrete visitor layout just like IED. Installing SFS on top and passing
-  // its filtering visitor through that target would be an ABI guess. Leave the
-  // existing hook untouched and fail closed instead.
+  // An opaque CALL target still accepts the game's original concrete visitor.
+  // Preserve that object and the existing chain; only the SFS wrapper visitor
+  // is unsafe here. Skipping this whole hook also skips the sole registered-
+  // armor attachment pass, making every wig/clothing appearance disappear.
+  // Filter the engine concrete visitor's callbacks in an actor/visitor-local
+  // scope instead of substituting its object. Keep the foreign chain intact.
+  sfs::native::SetPassthroughVisitWornItemsChainTarget(a_callSite.target);
+  const bool callbackFilter = sfs::native::InstallOriginalWornVisitorFilter();
+  if (!callbackFilter) {
+    logger::error(
+        "SFS original-visitor callback filter could not be installed; retaining registered attachments and existing vanilla/DAV/DAVE hiding paths");
+  }
   logger::warn(
-      "Skipped SFS {} custom-skin hook because pre-patched target {:X} could not be resolved through a verified trampoline chain",
-      a_runtime, a_callSite.target);
-  return false;
+      "SFS {} custom-skin target {:X} has unverified visitor ownership; preserving the original visitor and registered-appearance attachment; scoped original-visitor actual-equipment filter={}",
+      a_runtime, a_callSite.target, callbackFilter);
+  return true;
 }
 
 bool InstallDavInitWornChainHook(const sfs::runtime::HookLayout &a_layout) {
@@ -357,6 +392,30 @@ bool InstallDontVanillaSkinHook(const sfs::runtime::HookLayout &a_layout) {
   logger::info(
       "Installed SFS native armor skinning vanilla block hook{}",
       callSite.expected ? "" : " with chained pre-patched target");
+  return true;
+}
+
+bool ConfigureRealEquipmentSkinningBackend(
+    const sfs::runtime::HookLayout &a_layout, const bool a_finalAttempt) {
+  if (g_realEquipmentBackendConfigured) { return true; }
+  const bool davLoaded = sfs::native::dave::IsDynamicArmorVariantsLoaded();
+  const bool daveApiAvailable = davLoaded &&
+      sfs::native::dave::HasNativeApi(a_finalAttempt);
+  if (davLoaded && !daveApiAvailable && !a_finalAttempt) {
+    logger::info("SFS real-equipment backend selection deferred until after DataLoaded; registered attachments and worn-mask hooks remain active");
+    return false;
+  }
+  if (daveApiAvailable) {
+    logger::info("SFS real-equipment backend: DAVE API; conflicting native skin-block hook remains uninstalled");
+  } else {
+    if (davLoaded) {
+      sfs::native::dave::LockToNativeFallback();
+      logger::info("SFS real-equipment backend: DAV/native fallback after final API rendezvous");
+    }
+    InstallDontVanillaSkinHook(a_layout);
+  }
+  // Never switch ownership after native code hooks have been installed.
+  g_realEquipmentBackendConfigured = true;
   return true;
 }
 
@@ -698,25 +757,7 @@ void InstallArmorSkinningHooks() {
       g_localTrampoline.create(64 * 1024);
     }
 
-    const bool dynamicArmorVariantsLoaded =
-        sfs::native::dave::IsDynamicArmorVariantsLoaded();
-    const bool daveNativeApiAvailable =
-        dynamicArmorVariantsLoaded && sfs::native::dave::HasNativeApi();
-    if (daveNativeApiAvailable) {
-      logger::info(
-          "DynamicArmorVariants.dll is loaded. SFS will skip its conflicting real-equipment skin block hook and use DAVE native API for real-equipment hiding when available.");
-    } else if (dynamicArmorVariantsLoaded) {
-      sfs::native::dave::LockToNativeFallback();
-      logger::warn(
-          "DynamicArmorVariants.dll is loaded, but its native API is unavailable. SFS will install the native real-equipment skin block hook as a fallback.");
-    }
-
-    if (daveNativeApiAvailable) {
-      logger::info(
-          "Skipped SFS native armor skinning vanilla block hook for DAV/DAVE compatibility");
-    } else {
-      InstallDontVanillaSkinHook(*layout);
-    }
+    ConfigureRealEquipmentSkinningBackend(*layout, false);
     if (layout->isAE) {
       InstallShimWornFlagsHookAE(*layout);
       InstallCustomSkinHookAE(*layout);
@@ -724,6 +765,13 @@ void InstallArmorSkinningHooks() {
       InstallShimWornFlagsHookSE(*layout);
       InstallCustomSkinHookSE(*layout);
     }
+  });
+}
+
+void FinalizeRealEquipmentSkinningBackend() {
+  std::call_once(g_finalizeBackendOnce, [] {
+    const auto layout = sfs::runtime::ResolveHookLayout(REL::Module::get().version());
+    if (layout) { ConfigureRealEquipmentSkinningBackend(*layout, true); }
   });
 }
 } // namespace sfs::native

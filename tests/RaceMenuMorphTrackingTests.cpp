@@ -93,6 +93,10 @@ struct Tasks {
 Tasks* GetTaskInterface() { return &tasks; }
 }
 namespace sfs::native {
+namespace dye {
+std::unordered_map<RE::FormID, unsigned> restoreRequests;
+void QueueSavedWorldTintRestore(RE::Actor* actor) { ++restoreRequests[actor->id]; }
+}
 bool IsDisplayedFittingArmor(RE::Actor* actor, const RE::TESObjectARMO* armor) {
   return actor->displayed.contains(armor->id);
 }
@@ -288,6 +292,10 @@ int main() {
   Check(SKSE::tasks.pending.size() == 1, "attachment burst must coalesce per actor");
   DrainAll();
   g_bodyMorphInterface = nullptr;
+  const auto lateDyeRequests = sfs::native::dye::restoreRequests[player.id];
+  attach(player, playerNode);
+  Check(sfs::native::dye::restoreRequests[player.id] == lateDyeRequests + 1,
+        "late registered attachments must rearm dye even without a BodyMorph interface");
   const auto hhWithoutMorph = highHeelObservations;
   const auto npcNodes = g_registeredAppearanceNodes[npc.id].size();
   RE::NiAVObject heelOnlyRoot{npc.Get3D(false)};

@@ -126,7 +126,8 @@ BuildHiddenVariantPayload(const std::string &a_name,
   return payload;
 }
 
-[[nodiscard]] IDynamicArmorVariantsExtendedInterface001 *TryGetDaveInterface() {
+[[nodiscard]] IDynamicArmorVariantsExtendedInterface001 *TryGetDaveInterface(
+    const bool a_forceRetry = false) {
   std::lock_guard interfaceLock(g_interfaceMutex);
   if (g_daveInterface) {
     return g_daveInterface;
@@ -141,7 +142,7 @@ BuildHiddenVariantPayload(const std::string &a_name,
   }
 
   const auto now = std::chrono::steady_clock::now();
-  if (g_interfaceWarningLogged && now < g_nextInterfaceQueryTime) {
+  if (!a_forceRetry && g_interfaceWarningLogged && now < g_nextInterfaceQueryTime) {
     return nullptr;
   }
 
@@ -155,10 +156,10 @@ BuildHiddenVariantPayload(const std::string &a_name,
       DynamicArmorVariantsExtendedMessage::kMessage_QueryInterface,
       std::addressof(message), sizeof(message), kDavePluginName);
   if (!dispatched) {
-    g_nativeApiUnavailable = true;
+    g_nextInterfaceQueryTime = now + kInterfaceQueryRetryDelay;
     if (!g_interfaceWarningLogged) {
       logger::warn(
-          "DynamicArmorVariants.dll is loaded without a DAVE native API listener. SFS will treat it as ordinary DAV and use the native real-equipment hiding fallback.");
+          "DynamicArmorVariants.dll has not provided a DAVE native API listener yet; SFS will retry after DataLoaded before finalizing native fallback.");
       g_interfaceWarningLogged = true;
     }
     return nullptr;
@@ -196,7 +197,9 @@ bool IsDynamicArmorVariantsLoaded() {
   return ::GetModuleHandleW(kDaveModuleName) != nullptr;
 }
 
-bool HasNativeApi() { return TryGetDaveInterface() != nullptr; }
+bool HasNativeApi(const bool a_forceRetry) {
+  return TryGetDaveInterface(a_forceRetry) != nullptr;
+}
 
 bool IsApiReady() {
   auto *api = TryGetDaveInterface();
