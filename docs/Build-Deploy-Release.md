@@ -148,7 +148,7 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.6.2 SE-AE.zip`
+- `Release/Skyrim Fitting System v1.6.2 SE.zip`
 - `Sources/Skyrim Fitting System v1.6.2 Source.zip`
 - matching copies under `dist/`
 - `Release/SHA256SUMS-v1.6.2.txt`
