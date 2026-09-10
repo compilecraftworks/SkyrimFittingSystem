@@ -343,6 +343,11 @@ bool Menu::DrawConditionEditorClauseTable(
         tooltip.push_back(' ');
         tooltip.append(localization->Get("conditions.clauses.argument_required"));
       }
+      if (functionInfo && paramIndex < argumentCount &&
+          functionInfo->parameterTypes[paramIndex] == RE::SCRIPT_PARAM_TYPE::kVMScriptVar) {
+        tooltip.append("\n\n");
+        tooltip.append(localization->Get("conditions.vm_variable_hint"));
+      }
       DrawHoverDescription("conditions:editor:arg:" + std::to_string(index) +
                                ":" + std::to_string(paramIndex),
                            tooltip);

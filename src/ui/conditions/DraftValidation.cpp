@@ -1,6 +1,7 @@
 #include "ui/conditions/DraftValidation.h"
 
 #include "conditions/Validation.h"
+#include "conditions/ValueParsing.h"
 #include "ui/Localization.h"
 #include "ui/conditions/FunctionRegistry.h"
 #include "ui/conditions/ValueEditors.h"
@@ -121,25 +122,38 @@ ValidateConditionDraft(const Definition &a_definition,
             std::make_format_args(parameterLabel, clauseNumber));
       }
 
-      const auto editorKind = GetEditorKindForParamType(
-          ResolveEditorParamType(functionInfo->name, paramIndex,
-                                 functionInfo->parameterTypes[paramIndex]));
+      const auto paramType = ResolveEditorParamType(
+          functionInfo->name, paramIndex, functionInfo->parameterTypes[paramIndex]);
+      const auto editorKind = GetEditorKindForParamType(paramType);
+      if (!argument.empty() &&
+          ((paramType == RE::SCRIPT_PARAM_TYPE::kAxis &&
+            !sfs::conditions::ParseAxisArgument(argument)) ||
+           (paramType == RE::SCRIPT_PARAM_TYPE::kActorValue &&
+            !sfs::conditions::ParseActorValueArgument(argument)))) {
+        return sfs::strings::SafeVFormat(
+            std::string(localization->Get("conditions.validation.parameter_choice")),
+            std::make_format_args(parameterLabel, clauseNumber, argument));
+      }
       if (editorKind == ValueEditorKind::Unsupported) {
         return sfs::strings::SafeVFormat(
             std::string(localization->Get("conditions.validation.parameter_unsupported")),
             std::make_format_args(parameterLabel, clauseNumber));
       }
 
+      if (editorKind == ValueEditorKind::Text &&
+          argument.find('\0') != std::string::npos) {
+        return sfs::strings::SafeVFormat(
+            std::string(localization->Get("conditions.validation.parameter_text")),
+            std::make_format_args(parameterLabel, clauseNumber));
+      }
+
       if ((editorKind == ValueEditorKind::Integer ||
            editorKind == ValueEditorKind::Number) &&
           !argument.empty()) {
-        try {
-          if (editorKind == ValueEditorKind::Integer) {
-            (void)std::stoi(argument);
-          } else {
-            (void)std::stod(argument);
-          }
-        } catch (const std::exception &) {
+        const bool valid = editorKind == ValueEditorKind::Integer
+                               ? sfs::conditions::TryParseInt(argument).has_value()
+                               : sfs::conditions::TryParseFloat(argument).has_value();
+        if (!valid) {
           return sfs::strings::SafeVFormat(
               std::string(localization->Get(
                   editorKind == ValueEditorKind::Integer
@@ -169,9 +183,7 @@ ValidateConditionDraft(const Definition &a_definition,
             std::make_format_args(clauseNumber));
       }
 
-      try {
-        (void)std::stod(comparand);
-      } catch (const std::exception &) {
+      if (!sfs::conditions::TryParseFloat(comparand)) {
         return sfs::strings::SafeVFormat(
             std::string(localization->Get("conditions.validation.comparison_numeric")),
             std::make_format_args(clauseNumber));
@@ -188,10 +200,7 @@ bool ParseBooleanComparand(std::string_view a_text, bool a_defaultValue) {
     return a_defaultValue;
   }
 
-  try {
-    return std::stod(trimmed) != 0.0;
-  } catch (const std::exception &) {
-    return a_defaultValue;
-  }
+  const auto value = sfs::conditions::TryParseFloat(trimmed);
+  return value ? *value != 0.0f : a_defaultValue;
 }
 } // namespace sfs::ui::condition_editor

@@ -20,6 +20,28 @@ int main() {
   using sfs::runtime::FlatRuntimeProfile;
   using sfs::runtime::ResolveHookLayout;
 
+  // Every requested SKSE-supported AE release, not only family endpoints.
+  // This checks routing, not the contents of each game's executable. Epic
+  // 1.6.678 has an existing profile entry but no official SKSE support.
+  for (const auto patch : {317, 318, 323, 342, 353, 629, 640, 659,
+                           1130, 1170, 1179}) {
+    const auto layout = ResolveHookLayout(
+        REL::Version{1, 6, static_cast<std::uint16_t>(patch), 0});
+    Expect(layout && layout->isAE &&
+               layout->profile == (patch < 629
+                   ? FlatRuntimeProfile::SkyrimAEPre629
+                   : FlatRuntimeProfile::SkyrimAEPost629),
+           "every requested SKSE-supported AE release must select its profile");
+    Expect(layout && layout->inputPollRelocationID == 68617 &&
+               layout->registerClassRelocationID == 77226 &&
+               layout->d3dInitRelocationID == 77226 &&
+               layout->presentRelocationID == 77246 &&
+               layout->armorUpdateRelocationID == 24736 &&
+               layout->wornMaskRelocationID == 24724 &&
+               layout->customSkinRelocationID == 24725,
+           "every AE profile must retain the audited relocation IDs");
+  }
+
   const auto se = ResolveHookLayout(REL::Version{1, 5, 97, 0});
   Expect(se.has_value(), "Skyrim SE 1.5.97 must be supported");
   Expect(se && se->profile == FlatRuntimeProfile::SkyrimSE1597,

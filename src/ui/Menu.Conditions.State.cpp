@@ -11,6 +11,7 @@
 #include "ui/conditions/EditorSupport.h"
 
 #include <algorithm>
+#include "conditions/ValueParsing.h"
 #include <format>
 
 namespace sfs {
@@ -352,6 +353,13 @@ bool Menu::SaveConditionEditor(ConditionEditorState &a_editor) {
       const auto paramType = ResolveEditorParamType(
           clause.functionName, paramIndex, functionInfo->parameterTypes[paramIndex]);
       const auto editorKind = GetEditorKindForParamType(paramType);
+      if (editorKind == ConditionValueEditorKind::Text &&
+          clause.arguments[paramIndex].find('\0') != std::string::npos) {
+        a_editor.error = sfs::strings::SafeVFormat(
+            std::string(localization->Get("conditions.validation.parameter_text")),
+            std::make_format_args(parameterLabel, clauseNumber));
+        return false;
+      }
       if (!clause.arguments[paramIndex].empty() &&
           ui::conditions::ConditionParamOptionCache::SupportsFormTokens(paramType)) {
         auto *form = sfs::conditions::ResolveConditionFormArgument(
@@ -381,29 +389,26 @@ bool Menu::SaveConditionEditor(ConditionEditorState &a_editor) {
       }
       if (editorKind == ConditionValueEditorKind::Integer &&
           !clause.arguments[paramIndex].empty()) {
-        try {
-          clause.arguments[paramIndex] =
-              std::to_string(std::stoi(clause.arguments[paramIndex]));
-        } catch (const std::exception &) {
+        const auto value = conditions::TryParseInt(clause.arguments[paramIndex]);
+        if (!value) {
           a_editor.error = sfs::strings::SafeVFormat(
               std::string(
                   localization->Get("conditions.validation.parameter_integer")),
               std::make_format_args(parameterLabel, clauseNumber));
           return false;
         }
+        clause.arguments[paramIndex] = std::to_string(*value);
       } else if (editorKind == ConditionValueEditorKind::Number &&
                  !clause.arguments[paramIndex].empty()) {
-        try {
-          clause.arguments[paramIndex] =
-              ui::condition_editor::FormatNumberString(
-                  std::stod(clause.arguments[paramIndex]));
-        } catch (const std::exception &) {
+        const auto value = conditions::TryParseFloat(clause.arguments[paramIndex]);
+        if (!value) {
           a_editor.error = sfs::strings::SafeVFormat(
               std::string(
                   localization->Get("conditions.validation.parameter_numeric")),
               std::make_format_args(parameterLabel, clauseNumber));
           return false;
         }
+        clause.arguments[paramIndex] = ui::condition_editor::FormatNumberString(*value);
       }
     }
 
@@ -428,16 +433,15 @@ bool Menu::SaveConditionEditor(ConditionEditorState &a_editor) {
         return false;
       }
 
-      try {
-        clause.comparand = ui::condition_editor::FormatNumberString(
-            std::stod(clause.comparand));
-      } catch (const std::exception &) {
+      const auto value = conditions::TryParseFloat(clause.comparand);
+      if (!value) {
         a_editor.error = sfs::strings::SafeVFormat(
             std::string(
                 localization->Get("conditions.validation.comparison_numeric")),
             std::make_format_args(clauseNumber));
         return false;
       }
+      clause.comparand = ui::condition_editor::FormatNumberString(*value);
     }
   }
 

@@ -11,6 +11,7 @@ enum class ValueEditorKind : std::uint8_t {
   Unsupported,
   Integer,
   Number,
+  Text,
   CachedOption
 };
 

@@ -1,0 +1,43 @@
+# Skyrim Fitting System v1.6.3
+
+## Changes
+
+- Fixed text-based condition arguments being treated as numbers. GetGraphVariableInt and GetGraphVariableFloat now accept variable names without numeric conversion.
+- Added text input and native string-argument handling for GetVMScriptVariable and GetVMQuestVariable. Reference/Quest targets remain separate from variable names.
+- Kept condition strings alive until the last evaluator releases them, including after draft changes, condition expansion and cache invalidation.
+- Added dynamically sized text fields, preserving long names and leading zeros. Embedded NUL characters now produce a localized validation error.
+- Unified numeric validation across input, saving and evaluation. Trailing garbage such as 12abc, overflow, NaN and infinity are rejected instead of silently changing the value.
+- Fixed invalid Axis values silently becoming Z and unknown ActorValue names being passed as -1. Invalid values remain editable with an error.
+- Added English, Korean and Chinese validation messages and VM-variable naming guidance.
+- Expanded regression coverage for string lifetime, numeric/selection validation and the requested SE/AE runtime branches. All 16 regression targets passed.
+
+## Compatibility and update notes
+
+No new game runtime or RaceMenu package support is introduced. Skyrim 1.6.678 is the Epic edition and is not supported by official SKSE; an existing SFS routing entry is not a support guarantee. Skyrim 1.7.x and VR are not supported by this release.
+
+RaceMenu integration, BodyMorph refresh routing, DAVE/DAV/native display backends, stripping links, dye and the three optional compatibility patches are unchanged. Keep existing settings, presets and user kits.
+
+VM conditions require exact names of engine-accessible conditional variables. Legacy GetScriptVariable/GetQuestVariable are not converted into Papyrus conditions. Automated checks and ABI/source inspection do not certify every game/RaceMenu combination in gameplay.
+
+---
+
+# Skyrim Fitting System v1.6.3
+
+## 변경 사항
+
+- 문자열 조건 인수가 숫자로 처리되던 문제를 수정했습니다. GetGraphVariableInt와 GetGraphVariableFloat에 변수명을 숫자 변환 없이 입력할 수 있습니다.
+- GetVMScriptVariable과 GetVMQuestVariable에 문자열 입력 및 엔진 전달 처리를 추가했습니다. 참조·퀘스트 대상과 변수명은 별도로 유지합니다.
+- 초안 변경·조건식 확장·캐시 무효화 이후에도 마지막 평가자가 사용을 끝낼 때까지 조건 문자열이 유지되도록 수명을 관리합니다.
+- 길이에 따라 확장되는 텍스트 입력란을 적용하고 긴 이름과 앞자리 0을 보존합니다. 중간 NUL 문자는 현지화된 오류로 안내합니다.
+- 입력·저장·평가의 숫자 검증 기준을 통일했습니다. 12abc 같은 뒤섞인 입력, 범위 초과, NaN·무한대를 임의의 숫자로 바꾸지 않고 오류로 처리합니다.
+- 잘못된 축 값을 Z로 처리하거나 존재하지 않는 ActorValue 이름을 -1로 전달하던 문제를 수정했습니다. 잘못된 값은 수정할 수 있도록 유지하고 오류를 표시합니다.
+- 영문·한글·중문 오류 메시지와 VM 변수명 입력 안내를 추가했습니다.
+- 문자열 수명, 숫자·선택값 검증 및 요청된 SE/AE 버전 분기의 회귀 검사를 보강했습니다. 회귀 테스트 16개를 모두 통과했습니다.
+
+## 호환성 및 업데이트 안내
+
+새로운 게임 버전이나 RaceMenu 배포본 지원을 추가한 릴리즈는 아닙니다. Skyrim 1.6.678은 Epic판으로 공식 SKSE가 지원하지 않으며, 기존 SFS 내부 분기만으로 지원이 보장되지는 않습니다. 이번 릴리즈는 Skyrim 1.7.x·VR을 지원하지 않습니다.
+
+RaceMenu 연동, 바디모프 갱신 경로, DAVE/DAV/네이티브 표시, 탈의연동, 염색 및 선택 호환 패치 3종은 변경하지 않았습니다. 기존 설정·프리셋·사용자 키트는 유지하세요.
+
+VM 조건은 엔진에서 접근 가능한 conditional 변수의 정확한 이름이 필요합니다. 기존 GetScriptVariable/GetQuestVariable을 Papyrus 조건으로 변환하지는 않습니다. 자동 검사와 ABI·소스 점검이 모든 게임·RaceMenu 조합의 인게임 검증 완료를 뜻하지는 않습니다.

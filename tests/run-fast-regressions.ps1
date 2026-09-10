@@ -13,6 +13,8 @@ $targets = @(
     "ConditionDropLogicTests",
     "ConditionFormTokenTests",
     "ConditionDropdownTests",
+    "ConditionStringLifetimeTests",
+    "ConditionValueParsingTests",
     "FittingDyeRulesTests",
     "KitListNavigationTests",
     "CoreBehaviorRegressionTests",
@@ -49,9 +51,44 @@ try {
     }
     $conditionSave = Get-Content -LiteralPath (
         Join-Path $repository "src/ui/Menu.Conditions.State.cpp") -Raw
+    $conditionValueEditors = Get-Content -LiteralPath (
+        Join-Path $repository "src/ui/conditions/ValueEditors.cpp") -Raw
+    if ($conditionValueEditors -notmatch 'case RE::SCRIPT_PARAM_TYPE::kChar:\s*case RE::SCRIPT_PARAM_TYPE::kVMScriptVar:\s*return ValueEditorKind::Text;' -or
+        -not $conditionValueEditors.Contains('DrawTextClauseValueEditor(a_id, a_value, a_width)') -or
+        $conditionLowering -match 'case ParamType::kChar:\s*case ParamType::kInt:' -or
+        -not $conditionLowering.Contains('a_storage.StoreText(argument)') -or
+        -not $conditionLowering.Contains('a_literal.parameterTypes[paramIndex] == ParamType::kVMScriptVar') -or
+        -not $conditionLowering.Contains('std::shared_ptr<RE::TESCondition>(storage, &storage->condition)')) {
+        throw "kChar requires text input and condition-owned stable BSFixedString objects, never integers or draft c_str pointers"
+    }
+    $conditionDraft = Get-Content -LiteralPath (
+        Join-Path $repository "src/ui/conditions/DraftValidation.cpp") -Raw
+    foreach ($valuePath in @($conditionLowering, $conditionDraft, $conditionSave, $conditionValueEditors)) {
+        if ($valuePath -match 'std::sto[ifd]\(' -or
+            -not $valuePath.Contains('TryParseFloat(') -or
+            -not $valuePath.Contains('TryParseInt(')) {
+            throw "Condition editing, validation, saving and lowering must share strict scalar parsing"
+        }
+    }
+    foreach ($valuePath in @($conditionLowering, $conditionDraft)) {
+        if (-not $valuePath.Contains('ParseAxisArgument(') -or
+            -not $valuePath.Contains('ParseActorValueArgument(')) {
+            throw "Draft validation and lowering must validate axis and runtime ActorValue names"
+        }
+    }
+    if (-not $conditionSave.Contains('conditions.validation.parameter_text') -or
+        -not $conditionDraft.Contains('conditions.validation.parameter_text')) {
+        throw "Both condition draft validation and saving must report malformed string arguments"
+    }
     if (-not $conditionSave.Contains('ResolveConditionFormArgument') -or
         -not $conditionSave.Contains('conditions.validation.parameter_form')) {
         throw "Free-form condition input requires typed save-time validation"
+    }
+    $conditionSerialization = Get-Content -LiteralPath (
+        Join-Path $repository "src/ui/Menu.Conditions.Serialization.cpp") -Raw
+    if (-not $conditionSerialization.Contains('clauseJson.value("arg2", std::string{})') -or
+        -not $conditionSerialization.Contains('{"arg2", clause.arguments[1]}')) {
+        throw "VM variable names must retain their string representation through save/load"
     }
     $conditionOptions = Get-Content -LiteralPath (
         Join-Path $repository "src/ui/ConditionParamOptionCache.cpp") -Raw
@@ -64,6 +101,15 @@ try {
             Join-Path $repository "data/Interface/SkyrimFittingSystem/locales/$conditionLocale.json") -Raw | ConvertFrom-Json
         if (-not $conditionLocaleJson.strings.'conditions.validation.parameter_form') {
             throw "Missing condition form-input error translation: $conditionLocale"
+        }
+        if (-not $conditionLocaleJson.strings.'conditions.validation.parameter_text') {
+            throw "Missing condition string-input error translation: $conditionLocale"
+        }
+        if (-not $conditionLocaleJson.strings.'conditions.vm_variable_hint') {
+            throw "Missing VM variable-name guidance: $conditionLocale"
+        }
+        if (-not $conditionLocaleJson.strings.'conditions.validation.parameter_choice') {
+            throw "Missing invalid named value guidance: $conditionLocale"
         }
     }
     Write-Host "Condition form-input, actor-type, and localized validation checks passed"

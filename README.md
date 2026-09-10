@@ -7,6 +7,11 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.6.3 repairs condition string/VM-variable arguments and numeric/choice validation.
+See the [English](docs/RELEASE-NOTES-v1.6.3.md) / [Korean](docs/RELEASE-NOTES-v1.6.3-ko.md)
+release notes and the [runtime/RaceMenu audit](docs/V1.6.3-RUNTIME-RACEMENU-AUDIT.md)
+for the 16-test verification scope and remaining in-game verification limits.
+
 v1.6.2 repairs CELL and shared form-argument input, separates Actor references
 from ActorBase records, and removes confirmed unreachable SFS-owned code.
 See the [English](docs/RELEASE-NOTES-v1.6.2.md) / [Korean](docs/RELEASE-NOTES-v1.6.2-ko.md)

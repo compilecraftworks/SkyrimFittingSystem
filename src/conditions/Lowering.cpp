@@ -1,7 +1,8 @@
 #include "conditions/Lowering.h"
 #include "conditions/FormTokens.h"
+#include "conditions/NativeConditionStorage.h"
 
-#include "RE/A/ActorValueList.h"
+#include "conditions/ValueParsing.h"
 #include "StringUtils.h"
 #include "conditions/CnfBuilder.h"
 #include "conditions/ParamEnumOptions.h"
@@ -14,8 +15,6 @@
 #include <algorithm>
 #include <array>
 #include <bit>
-#include <cctype>
-#include <charconv>
 #include <cstdint>
 #include <exception>
 #include <optional>
@@ -30,6 +29,8 @@ using Clause = sfs::conditions::Clause;
 using Comparator = sfs::conditions::Comparator;
 using Definition = sfs::conditions::Definition;
 using ParamType = RE::SCRIPT_PARAM_TYPE;
+using sfs::conditions::TryParseInt;
+using sfs::conditions::TryParseFloat;
 
 struct NativeLiteral {
   const RE::SCRIPT_FUNCTION *command{nullptr};
@@ -44,7 +45,6 @@ struct NativeLiteral {
 using ConditionCnf = sfs::conditions::cnf::Expression<NativeLiteral>;
 
 union ConditionParam {
-  char c;
   std::int32_t i;
   float f;
   RE::TESForm *form;
@@ -61,15 +61,6 @@ ParamType ResolveEditorParamType(const std::string_view a_functionName,
   }
 
   return a_type;
-}
-
-std::string Uppercase(std::string_view a_text) {
-  std::string result(a_text);
-  std::ranges::transform(result, result.begin(),
-                         [](const unsigned char a_char) {
-                           return static_cast<char>(std::toupper(a_char));
-                         });
-  return result;
 }
 
 Comparator InvertComparator(const Comparator a_comparator) {
@@ -131,7 +122,6 @@ RE::CONDITION_ITEM_DATA::OpCode ToOpCode(const Comparator a_comparator) {
 
 bool IsIntegerParamType(const ParamType a_type) {
   switch (a_type) {
-  case ParamType::kChar:
   case ParamType::kInt:
   case ParamType::kStage:
   case ParamType::kRelationshipRank:
@@ -203,39 +193,6 @@ RE::TESForm *LookupGenericFormByToken(const std::string &a_token) {
   return sfs::conditions::LookupFormToken(a_token);
 }
 
-std::optional<std::int32_t> TryParseInt(std::string_view a_text) {
-  const auto trimmed = sfs::strings::TrimText(a_text);
-  if (trimmed.empty()) {
-    return std::nullopt;
-  }
-
-  std::int32_t value = 0;
-  const auto *begin = trimmed.data();
-  const auto *end = begin + trimmed.size();
-  const auto [ptr, error] = std::from_chars(begin, end, value);
-  if (error == std::errc{} && ptr == end) {
-    return value;
-  }
-  return std::nullopt;
-}
-
-std::optional<float> TryParseFloat(std::string_view a_text) {
-  const auto trimmed = sfs::strings::TrimText(a_text);
-  if (trimmed.empty()) {
-    return std::nullopt;
-  }
-
-  try {
-    std::size_t parsed = 0;
-    const auto value = std::stof(trimmed, std::addressof(parsed));
-    if (parsed == trimmed.size()) {
-      return value;
-    }
-  } catch (const std::exception &) {
-  }
-  return std::nullopt;
-}
-
 std::optional<ConditionParam> ParseParam(const std::string &a_text,
                                          const ParamType a_type) {
   ConditionParam param{};
@@ -243,6 +200,10 @@ std::optional<ConditionParam> ParseParam(const std::string &a_text,
 
   switch (a_type) {
   case ParamType::kChar:
+  case ParamType::kVMScriptVar:
+    // String storage belongs to the emitted condition, never this temporary
+    // parsing union or a form lookup. Handled by BuildConditionItemData.
+    return std::nullopt;
   case ParamType::kInt:
   case ParamType::kStage:
   case ParamType::kRelationshipRank:
@@ -278,20 +239,17 @@ std::optional<ConditionParam> ParseParam(const std::string &a_text,
     }
     break;
   case ParamType::kActorValue: {
-    auto actorValue =
-        RE::ActorValueList::LookupActorValueByName(trimmed.c_str());
-    if (actorValue == RE::ActorValue::kNone) {
-      actorValue = RE::ActorValueList::LookupActorValueByName(
-          Uppercase(trimmed).c_str());
-    }
-    param.i = static_cast<std::int32_t>(std::to_underlying(actorValue));
+    const auto value = sfs::conditions::ParseActorValueArgument(trimmed);
+    if (!value) { return std::nullopt; }
+    param.i = *value;
     break;
   }
-  case ParamType::kAxis:
-    param.i = sfs::strings::EqualsInsensitive(trimmed, "X")
-                  ? 0
-                  : (sfs::strings::EqualsInsensitive(trimmed, "Y") ? 1 : 2);
+  case ParamType::kAxis: {
+    const auto value = sfs::conditions::ParseAxisArgument(trimmed);
+    if (!value) { return std::nullopt; }
+    param.i = *value;
     break;
+  }
   case ParamType::kSex:
     if (const auto value =
             sfs::conditions::ParseParamEnumOption(a_type, trimmed)) {
@@ -536,7 +494,8 @@ std::optional<NativeLiteral> BuildNativeLiteral(const Clause &a_clause) {
 
 std::optional<RE::CONDITION_ITEM_DATA>
 BuildConditionItemData(const NativeLiteral &a_literal,
-                       const bool a_isORToNext) {
+                       const bool a_isORToNext,
+                       sfs::conditions::NativeConditionStorage &a_storage) {
   RE::CONDITION_ITEM_DATA data{};
 
   const auto functionIndex = std::to_underlying(a_literal.command->output) -
@@ -548,6 +507,16 @@ BuildConditionItemData(const NativeLiteral &a_literal,
        paramIndex < a_literal.parameterCount && paramIndex < 2; ++paramIndex) {
     const auto &argument = a_literal.arguments[paramIndex];
     if (argument.empty()) {
+      continue;
+    }
+
+    if (a_literal.parameterTypes[paramIndex] == ParamType::kChar ||
+        a_literal.parameterTypes[paramIndex] == ParamType::kVMScriptVar) {
+      auto *text = a_storage.StoreText(argument);
+      if (!text) {
+        return std::nullopt;
+      }
+      data.functionData.params[paramIndex] = text;
       continue;
     }
 
@@ -578,14 +547,16 @@ BuildConditionItemData(const NativeLiteral &a_literal,
 
 std::optional<std::shared_ptr<RE::TESCondition>>
 EmitCondition(const ConditionCnf &a_cnf) {
-  auto condition = std::make_shared<RE::TESCondition>();
+  auto storage = std::make_shared<sfs::conditions::NativeConditionStorage>();
+  auto condition = std::shared_ptr<RE::TESCondition>(storage, &storage->condition);
   RE::TESConditionItem *previous = nullptr;
 
   for (const auto &group : a_cnf) {
     for (std::size_t literalIndex = 0; literalIndex < group.size();
          ++literalIndex) {
       const auto data = BuildConditionItemData(group[literalIndex],
-                                               literalIndex + 1 < group.size());
+                                               literalIndex + 1 < group.size(),
+                                               *storage);
       if (!data) {
         return std::nullopt;
       }
@@ -609,7 +580,8 @@ EmitCondition(const ConditionCnf &a_cnf) {
 namespace sfs::conditions {
 RE::TESForm *ResolveConditionFormArgument(const std::string &a_text,
                                          const RE::SCRIPT_PARAM_TYPE a_type) {
-  if (IsValueParamType(a_type)) { return nullptr; }
+  if (IsValueParamType(a_type) || a_type == ParamType::kChar ||
+      a_type == ParamType::kVMScriptVar) { return nullptr; }
   const auto param = ParseParam(a_text, a_type);
   return param ? param->form : nullptr;
 }

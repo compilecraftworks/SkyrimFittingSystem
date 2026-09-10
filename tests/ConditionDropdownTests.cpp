@@ -1,5 +1,6 @@
 // Real ImGui and the production dropdown: no game window/GPU required.
 #include "ui/components/EditableCombo.h"
+#include "ui/conditions/TextValueEditor.h"
 #include <imgui_internal.h>
 #include <cstdlib>
 #include <iostream>
@@ -20,6 +21,7 @@ int main() {
   std::vector<std::string> options;
   bool custom = true;
   bool referenceMode = false;
+  bool textMode = false;
   const std::vector<sfs::ui::components::EditableDropdownItem<std::string>> referenceOptions{
       {.label = "Existing NPC [00000014]", .value = "Player"}};
   int referenceSelection = 0;
@@ -30,7 +32,9 @@ int main() {
     ImGui::SetNextWindowSize({750, 550});
     ImGui::Begin("Fixture", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
     ImGui::SetCursorScreenPos({20, 20});
-    if (referenceMode) {
+    if (textMode) {
+      changed = sfs::ui::condition_editor::DrawTextClauseValueEditor("##text", value, 400);
+    } else if (referenceMode) {
       char buffer[1024];
       std::snprintf(buffer, sizeof(buffer), "%s", value.c_str());
       std::optional<std::string> selectedValue;
@@ -89,6 +93,29 @@ int main() {
          "reference typing clears stale selection instead of restoring Player");
   click(45, 460); frame();
   Expect(value == "0x00012345", "reference custom input survives blur");
+  textMode = true; value.clear(); frame(); frame();
+  click(45, 28); type("iState");
+  Expect(value == "iState" && changed, "kChar name accepts alphabetic text");
+  click(45, 460); frame();
+  Expect(value == "iState", "kChar survives focus loss");
+  value = "0012"; frame(); click(45, 28);
+  io.AddKeyEvent(ImGuiMod_Ctrl, true); io.AddKeyEvent(ImGuiKey_A, true); frame();
+  io.AddKeyEvent(ImGuiKey_A, false); io.AddKeyEvent(ImGuiMod_Ctrl, false); frame();
+  const std::string longName = "Variable_" + std::string(4096, 'x');
+  type(longName.c_str());
+  Expect(value == longName, "kChar paste grows beyond initial buffer without truncation");
+  click(45, 460); frame();
+  Expect(value == longName, "long kChar survives blur");
+  value = "0012"; frame(); click(45, 28); click(45, 460); frame();
+  Expect(value == "0012", "numeric-looking variable name is not normalized");
+  click(45, 28);
+  io.AddKeyEvent(ImGuiMod_Ctrl, true); io.AddKeyEvent(ImGuiKey_A, true); frame();
+  io.AddKeyEvent(ImGuiKey_A, false); io.AddKeyEvent(ImGuiMod_Ctrl, false); frame();
+  io.AddKeyEvent(ImGuiKey_Backspace, true); frame();
+  io.AddKeyEvent(ImGuiKey_Backspace, false); frame();
+  Expect(value.empty(), "deleting a text argument updates string length to zero");
+  type("::MyProperty_var"); click(45, 460); frame();
+  Expect(value == "::MyProperty_var", "punctuation in variable identifiers stays intact");
   ImGui::DestroyContext();
   std::cout << "Condition dropdown real-ImGui input/focus tests passed\n";
 }

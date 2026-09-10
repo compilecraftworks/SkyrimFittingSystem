@@ -6,11 +6,13 @@
 #include "conditions/ParamEnumOptions.h"
 #include "conditions/FormTokens.h"
 #include "conditions/Status.h"
+#include "conditions/ValueParsing.h"
 #include "ui/ConditionParamOptionCache.h"
 #include "ui/Localization.h"
 #include "ui/Menu.h"
 #include "ui/components/EditableCombo.h"
 #include "ui/conditions/FunctionRegistry.h"
+#include "ui/conditions/TextValueEditor.h"
 
 #include <imgui.h>
 
@@ -55,6 +57,8 @@ GetEditorKindForParamTypeImpl(const RE::SCRIPT_PARAM_TYPE a_type) {
 
   switch (a_type) {
   case RE::SCRIPT_PARAM_TYPE::kChar:
+  case RE::SCRIPT_PARAM_TYPE::kVMScriptVar:
+    return ValueEditorKind::Text;
   case RE::SCRIPT_PARAM_TYPE::kInt:
   case RE::SCRIPT_PARAM_TYPE::kStage:
   case RE::SCRIPT_PARAM_TYPE::kRelationshipRank:
@@ -94,10 +98,11 @@ bool DrawNumericClauseValueEditorImpl(const char *a_id, std::string &a_value,
   if (a_kind == ValueEditorKind::Integer) {
     int numericValue = 0;
     if (!a_value.empty()) {
-      try {
-        numericValue = std::stoi(a_value);
-      } catch (const std::exception &) {
+      const auto parsed = sfs::conditions::TryParseInt(a_value);
+      if (!parsed) {
+        return sfs::ui::condition_editor::DrawTextClauseValueEditor(a_id, a_value, a_width);
       }
+      numericValue = *parsed;
     }
 
     if (ImGui::InputInt(a_id, &numericValue, 0, 0)) {
@@ -110,10 +115,11 @@ bool DrawNumericClauseValueEditorImpl(const char *a_id, std::string &a_value,
   if (a_kind == ValueEditorKind::Number) {
     double numericValue = 0.0;
     if (!a_value.empty()) {
-      try {
-        numericValue = std::stod(a_value);
-      } catch (const std::exception &) {
+      const auto parsed = sfs::conditions::TryParseFloat(a_value);
+      if (!parsed) {
+        return sfs::ui::condition_editor::DrawTextClauseValueEditor(a_id, a_value, a_width);
       }
+      numericValue = *parsed;
     }
 
     if (ImGui::InputDouble(a_id, &numericValue, 0.0, 0.0, "%.3f")) {
@@ -400,6 +406,9 @@ bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
   }
 
   const auto editorKind = GetEditorKindForParamTypeImpl(a_type);
+  if (editorKind == ValueEditorKind::Text) {
+    return DrawTextClauseValueEditor(a_id, a_value, a_width);
+  }
   if (editorKind == ValueEditorKind::Integer ||
       editorKind == ValueEditorKind::Number) {
     return DrawNumericClauseValueEditorImpl(a_id, a_value, editorKind, a_width);
