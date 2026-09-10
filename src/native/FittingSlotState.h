@@ -34,8 +34,6 @@ void ClearAllHeadgearToggleFittingSlotStates();
 bool SetHeadgearToggleFittingSlotsManualVisible(RE::Actor *a_actor,
                                                 std::uint32_t a_slotMask,
                                                 bool a_visible);
-void ReconcileFittingSlotState(RE::Actor *a_actor);
-void ClearFittingSlotState(RE::Actor *a_actor);
 void ClearAllFittingSlotStates();
 void SerializeFittingSlotStates(SKSE::SerializationInterface *a_skse);
 void DeserializeFittingSlotStates(SKSE::SerializationInterface *a_skse);

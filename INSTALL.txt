@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.6.1 - First Install And F6 Troubleshooting
+Skyrim Fitting System v1.6.2 - First Install And F6 Troubleshooting
 
 SFS is an SKSE64 plugin. It is not a standalone program and it is not a Skyrim
 Creations-menu mod. The included SkyrimFittingSystem-VirtualTokens.esl is only

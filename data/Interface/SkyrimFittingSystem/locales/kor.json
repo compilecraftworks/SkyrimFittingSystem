@@ -309,6 +309,7 @@
     "conditions.validation.self_reference": "조건식 {}에서 조건이 자신을 참조할 수 없습니다.",
     "conditions.validation.parameter_required": "조건식 {}에 {}이 필요합니다.",
     "conditions.validation.parameter_unsupported": "조건식 {}에서 {}은 지원되지 않는 매개변수 유형을 사용합니다.",
+    "conditions.validation.parameter_form": "{1}번 조건식의 {0} 인수 '{2}'를 필요한 폼 유형으로 찾지 못했습니다. EditorID, 16진수 FormID 또는 Plugin.esp|LocalFormID를 입력하세요. 입력 내용은 유지됩니다.",
     "conditions.validation.parameter_integer": "조건식 {}에서 {}은 정수여야 합니다.",
     "conditions.validation.parameter_numeric": "조건식 {}에서 {}은 숫자여야 합니다.",
     "conditions.validation.boolean_comparator": "조건식 {}에서는 불리언 반환 조건이 == 및 !=만 지원합니다.",

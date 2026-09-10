@@ -65,7 +65,6 @@ enum class AttachmentRegistrationStatus : std::uint8_t {
   Registered,
   AlreadyRegistered,
   Unavailable,
-  UnsupportedVersion,
   UnsupportedLayout,
 };
 

@@ -309,6 +309,7 @@
     "conditions.validation.self_reference": "条件不能在子句 {} 中引用自身。",
     "conditions.validation.parameter_required": "子句 {} 中 {} 为必填项。",
     "conditions.validation.parameter_unsupported": "子句 {} 中 {} 使用了不支持的参数类型。",
+    "conditions.validation.parameter_form": "无法将第 {1} 个子句的 {0} 参数 '{2}' 解析为所需的表单类型。请输入 EditorID、十六进制 FormID 或 Plugin.esp|LocalFormID。输入内容已保留。",
     "conditions.validation.parameter_integer": "子句 {} 中 {} 必须为整数。",
     "conditions.validation.parameter_numeric": "子句 {} 中 {} 必须为数值。",
     "conditions.validation.boolean_comparator": "返回布尔值的条件在子句 {} 中仅支持 == 和 !=。",

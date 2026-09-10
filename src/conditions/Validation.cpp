@@ -176,22 +176,6 @@ std::string FormatMissingDependencyChain(const MissingDependencyChain &a_chain,
   return formatted;
 }
 
-void RenameConditionReferences(std::vector<Definition> &a_definitions,
-                               std::string_view a_oldId,
-                               std::string_view a_newId) {
-  if (a_oldId.empty() || a_oldId == a_newId) {
-    return;
-  }
-
-  for (auto &definition : a_definitions) {
-    for (auto &clause : definition.clauses) {
-      if (clause.customConditionId == a_oldId) {
-        clause.customConditionId = std::string(a_newId);
-      }
-    }
-  }
-}
-
 std::string ValidateDefinitionNameAndGraph(
     const Definition &a_definition, const std::vector<Definition> &a_conditions,
     const std::function<bool(std::string_view)> &a_reservedNameConflict) {

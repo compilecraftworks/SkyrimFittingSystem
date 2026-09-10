@@ -6,8 +6,6 @@
 #include <vector>
 
 namespace sfs::conditions {
-[[nodiscard]] Clause BuildDefaultPlayerClause();
-[[nodiscard]] Definition BuildDefaultPlayerCondition();
 [[nodiscard]] std::vector<Definition> BuildBuiltInConditions();
 [[nodiscard]] std::vector<Definition> BuildSampleConditions();
 [[nodiscard]] bool IsBuiltInCondition(std::string_view a_id);

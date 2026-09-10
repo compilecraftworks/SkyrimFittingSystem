@@ -1558,11 +1558,6 @@ void InitializeBodyMorphInterface() {
         attachmentRegistration.version,
         abi::AttachmentInterfaceLayoutName(attachmentRegistration.layout));
   } else if (attachmentRegistration.status ==
-             abi::AttachmentRegistrationStatus::UnsupportedVersion) {
-    logger::warn(
-        "RaceMenu ActorUpdateManager version {} has no verified attachment ABI; observer registration skipped, retaining native attachment-scene capture",
-        attachmentRegistration.version);
-  } else if (attachmentRegistration.status ==
              abi::AttachmentRegistrationStatus::UnsupportedLayout) {
     logger::warn(
         "RaceMenu ActorUpdateManager version {} has an unrecognized vtable layout; observer registration skipped without calling an uncertain slot, retaining native attachment-scene capture",

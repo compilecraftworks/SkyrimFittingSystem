@@ -35,10 +35,6 @@ CollectMissingDependencyChains(const Definition &a_definition,
 FormatMissingDependencyChain(const MissingDependencyChain &a_chain,
                              std::size_t a_skipFrontCount = 0);
 
-void RenameConditionReferences(std::vector<Definition> &a_definitions,
-                               std::string_view a_oldId,
-                               std::string_view a_newId);
-
 [[nodiscard]] std::string ValidateDefinitionNameAndGraph(
     const Definition &a_definition, const std::vector<Definition> &a_conditions,
     const std::function<bool(std::string_view)> &a_reservedNameConflict = {});

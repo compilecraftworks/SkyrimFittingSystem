@@ -40,16 +40,6 @@ public:
     virtual void Visit(const char *, float) = 0;
   };
 
-  class StringVisitor {
-  public:
-    virtual void Visit(const char *) = 0;
-  };
-
-  class ActorVisitor {
-  public:
-    virtual void Visit(RE::TESObjectREFR *) = 0;
-  };
-
   class MorphValueVisitor {
   public:
     virtual void Visit(RE::TESObjectREFR *, const char *, const char *,

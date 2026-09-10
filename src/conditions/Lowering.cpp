@@ -1,6 +1,6 @@
 #include "conditions/Lowering.h"
+#include "conditions/FormTokens.h"
 
-#include "ArmorUtils.h"
 #include "RE/A/ActorValueList.h"
 #include "StringUtils.h"
 #include "conditions/CnfBuilder.h"
@@ -174,48 +174,14 @@ FindConditionFunction(const std::string_view a_name) {
 }
 
 template <class T> T *LookupTypedFormByToken(const std::string &a_token) {
-  if (auto *form = RE::TESForm::LookupByEditorID(a_token)) {
-    if (auto *typed = form->As<T>()) {
-      return typed;
-    }
-  }
-
-  auto *dataHandler = RE::TESDataHandler::GetSingleton();
-  if (!dataHandler) {
-    return nullptr;
-  }
-
-  for (auto *form : dataHandler->GetFormArray<T>()) {
-    if (sfs::armor::GetEditorID(form) == a_token) {
-      return form;
-    }
-  }
-
-  return nullptr;
+  return sfs::conditions::LookupFormToken<T>(a_token);
 }
 
 template <class T>
 RE::TESForm *LookupAssignableFormByToken(const std::string &a_token) {
-  if (auto *form = RE::TESForm::LookupByEditorID(a_token)) {
-    if (form->As<T>()) {
-      return form;
-    }
-  }
-
-  auto *dataHandler = RE::TESDataHandler::GetSingleton();
-  if (!dataHandler) {
-    return nullptr;
-  }
-
-  for (const auto &forms : dataHandler->formArrays) {
-    for (auto *form : forms) {
-      if (form && form->As<T>() && sfs::armor::GetEditorID(form) == a_token) {
-        return form;
-      }
-    }
-  }
-
-  return nullptr;
+  return sfs::conditions::LookupFormTokenIf(a_token, [](RE::TESForm *a_form) {
+    return a_form->As<T>() != nullptr;
+  });
 }
 
 template <class... T>
@@ -230,52 +196,11 @@ RE::TESObjectREFR *LookupReferenceByToken(const std::string &a_token) {
     return RE::PlayerCharacter::GetSingleton();
   }
 
-  if (auto *ref = sfs::armor::LookupByIdentifier<RE::TESObjectREFR>(a_token)) {
-    return ref;
-  }
-
-  if (auto *form = RE::TESForm::LookupByEditorID(a_token)) {
-    if (auto *ref = form->As<RE::TESObjectREFR>()) {
-      return ref;
-    }
-  }
-
-  const auto trimmed = sfs::strings::TrimText(a_token);
-  if (!trimmed.empty() &&
-      std::ranges::all_of(trimmed, [](const unsigned char a_char) {
-        return std::isxdigit(a_char) != 0;
-      })) {
-    RE::FormID formID = 0;
-    const auto *begin = trimmed.data();
-    const auto *end = begin + trimmed.size();
-    if (const auto [ptr, ec] = std::from_chars(begin, end, formID, 16);
-        ec == std::errc{} && ptr == end) {
-      return RE::TESForm::LookupByID<RE::TESObjectREFR>(formID);
-    }
-  }
-
-  return nullptr;
+  return sfs::conditions::LookupFormToken<RE::TESObjectREFR>(a_token);
 }
 
 RE::TESForm *LookupGenericFormByToken(const std::string &a_token) {
-  if (auto *form = RE::TESForm::LookupByEditorID(a_token)) {
-    return form;
-  }
-
-  auto *dataHandler = RE::TESDataHandler::GetSingleton();
-  if (!dataHandler) {
-    return nullptr;
-  }
-
-  for (const auto &forms : dataHandler->formArrays) {
-    for (auto *form : forms) {
-      if (form && sfs::armor::GetEditorID(form) == a_token) {
-        return form;
-      }
-    }
-  }
-
-  return nullptr;
+  return sfs::conditions::LookupFormToken(a_token);
 }
 
 std::optional<std::int32_t> TryParseInt(std::string_view a_text) {
@@ -394,7 +319,12 @@ std::optional<ConditionParam> ParseParam(const std::string &a_text,
   case ParamType::kObjectRef:
     param.form = LookupReferenceByToken(trimmed);
     break;
-  case ParamType::kActor:
+  case ParamType::kActor: {
+    // Actor parameters refer to placed actors, not NPC base records.
+    auto *ref = LookupReferenceByToken(trimmed);
+    param.form = ref ? ref->As<RE::Actor>() : nullptr;
+    break;
+  }
   case ParamType::kActorBase:
   case ParamType::kNPC:
     param.form = LookupTypedFormByToken<RE::TESNPC>(trimmed);
@@ -677,6 +607,13 @@ EmitCondition(const ConditionCnf &a_cnf) {
 } // namespace
 
 namespace sfs::conditions {
+RE::TESForm *ResolveConditionFormArgument(const std::string &a_text,
+                                         const RE::SCRIPT_PARAM_TYPE a_type) {
+  if (IsValueParamType(a_type)) { return nullptr; }
+  const auto param = ParseParam(a_text, a_type);
+  return param ? param->form : nullptr;
+}
+
 std::optional<LoweredMaterialization>
 LowerAndEmitCondition(const Definition &a_definition,
                       const std::vector<Definition> &a_conditions) {

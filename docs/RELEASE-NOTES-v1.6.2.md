@@ -1,0 +1,22 @@
+# Skyrim Fitting System v1.6.2
+
+## Changes
+
+- Fixed GetInCell argument input returning to blank when CELL suggestions were missing. CELL collection now includes separately stored interiors and registered exterior/persistent cells.
+- Form arguments accept EditorID, hexadecimal FormID (with or without 0x), and Plugin.esp|LocalFormID. The shared repair covers Location, Race, Faction, Keyword, Quest, Global and other supported form-parameter categories.
+- Kept typed form input when suggestions are empty/loading or the field loses focus. Fixed stale ObjectRef selections restoring the previous value. Valid entries are checked against the expected form type on save; unresolved entries stay editable with a localized error.
+- Distinguished placed Actor references from NPC ActorBase records. Preserved fixed-enum selection behavior and ActorValue name handling.
+- Save valid form arguments using plugin/local identifiers when available, preserving the Player alias and compatibility with existing saved EditorIDs.
+- Removed confirmed unreachable SFS-owned input handlers, alternate skinning helpers, unused condition/workbench helpers and the obsolete slot-catalog UI/state. Current slot editing, hidden-slot protection, shields and active feature paths remain.
+- Made the already-enabled Virtual Token and Devious Devices production implementations unconditional; removed their unused disabled-build stubs.
+- Added production form-resolver tests and real-ImGui dropdown tests. All 14 regression executables and additional source/options/package checks passed; the SE/AE DLL builds and retains all 13 public exports.
+
+## Compatibility and installation
+
+Existing SE/AE runtime support and prerequisites are unchanged; Skyrim 1.7.x and VR support are not added. The three optional compatibility patches are unchanged and are not bundled into the main runtime ZIP. Keep your existing SFS settings, presets and user kits when updating. The obsolete catalogShowAllSlots key is ignored and omitted on a later settings save.
+
+## Known limitations
+
+The original reporter's in-game outcome and every supported game/mod combination have not been verified. Automated tests are not an all-features in-game certification.
+
+A separate audit found the existing string/variable-name argument (kChar) path routed through numeric handling. Its native string ownership/ABI contract still needs verification; this release does not claim to fix that path. The CELL/form-argument fixes above are separate from it.

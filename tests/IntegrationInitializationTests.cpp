@@ -135,7 +135,7 @@ bool InstallUpdateModelWeightTaskHook() {
 }
 namespace abi {
 bool HasCallableInterfacePrefix(skee::IPluginInterface* provider, std::size_t) { return provider != nullptr; }
-enum class AttachmentRegistrationStatus { Registered, AlreadyRegistered, UnsupportedVersion, UnsupportedLayout, Unavailable };
+enum class AttachmentRegistrationStatus { Registered, AlreadyRegistered, UnsupportedLayout, Unavailable };
 struct Result { AttachmentRegistrationStatus status; unsigned version{0}; int layout{0}; };
 const char* AttachmentInterfaceLayoutName(int) { return "fixture"; }
 Result RegisterAttachmentObserver(skee::IPluginInterface* provider, int*, std::atomic_bool& registered) {

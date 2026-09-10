@@ -202,14 +202,10 @@ public:
   void SyncRowsFromActor(RE::Actor *a_actor);
   void SyncRowsFromPlayer();
   void ClearAutomaticEquipmentVisibilityBindings();
-  void
-  ClearAutomaticEquipmentVisibilityBindingsForActor(RE::FormID a_actorFormID);
   // Deletes registered appearances whose occupied slots are currently
   // protected. Actual-equipment rows remain intact; conditional rows retain
   // their condition card as an empty action target.
   bool RemoveProtectedAppearanceRegistrations();
-  void RebuildAutomaticEquipmentVisibilityBindingsForActor(
-      RE::FormID a_actorFormID, bool a_clearExistingBindings = true);
   [[nodiscard]] bool
   IsPreviewingSelection(std::string_view a_selectionKey) const;
   [[nodiscard]] bool CanAcceptOverride(int a_targetRowIndex,

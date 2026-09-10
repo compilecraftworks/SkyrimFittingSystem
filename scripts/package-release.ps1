@@ -118,6 +118,10 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
+    'RELEASE-NOTES-v1.6.2.md', 'RELEASE-NOTES-v1.6.2-ko.md',
+    'GITHUB-RELEASE-v1.6.2.md',
+    'nexus-changelog-v1.6.2-en.txt', 'nexus-changelog-v1.6.2-ko.txt',
+    'V1.6.2-DEAD-CODE-CLEANUP.md', 'V1.6.2-CONDITION-FORM-INPUT-FIX.md',
     'Build-Deploy-Release.md', 'DynamicFootprints-Integration-API.md',
     'EXTERNAL-MOD-STRIP-LINK-MODES-KO.md',
     'OpenAnimationReplacer-Conditions.md', 'SkyrimFittingSystem-Menu-API.md',

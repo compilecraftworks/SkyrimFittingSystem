@@ -99,11 +99,7 @@ public:
                               bool &a_previewRequested);
   [[nodiscard]] bool ConsumeKitListBack();
   [[nodiscard]] bool ConsumeKitListNextPane();
-  void QueueWorkbenchRowsSyncForActor(RE::FormID a_actorFormID);
   void SyncWorkbenchRowsForActor(RE::FormID a_actorFormID);
-  void SetFittingOverridesHiddenForActorSlots(RE::Actor *a_actor,
-                                              std::uint64_t a_slotMask,
-                                              bool a_hidden);
   void ResetTransientWorkbenchUiState(bool a_queueArmorRefresh = true);
   // Every pre-v1.4 ROWS record (v2-v9) predates the final global policy and
   // starts on mod-configured slot linking. In particular, v1.2 uses v7/v8 and
@@ -163,7 +159,6 @@ private:
   enum class DragSourceKind : std::uint32_t {
     Catalog = 1,
     Row = 3,
-    SlotCatalog = 4,
     ConditionalRow = 5,
     ConditionalVisibilityRule = 6
   };
@@ -250,7 +245,6 @@ private:
   [[nodiscard]] bool QueueKitListCommand(KitListCommand a_command);
   void DrawWindow();
   void DrawCatalogWindow();
-  void DrawCatalogHostControls(bool a_inPopout);
   void DrawCatalogHostBody(bool a_drawBodyChild);
   void DrawCatalogPaneBody();
   void QueueCatalogRefresh(
@@ -269,8 +263,6 @@ private:
   void OpenStripLinkDialog();
   void DrawStripLinkDialog();
   void EnsureStripLinkSilhouetteTexture();
-  void DrawWorkbenchEmptyState(const char *a_tableId, const char *a_targetId,
-                               const char *a_message);
   void DrawWorkbenchSortableHeader(const char *a_label, const char *a_id,
                                    WorkbenchSortState &a_state,
                                    WorkbenchSortColumn a_column);
@@ -287,7 +279,6 @@ private:
   bool TryCommitSlotCreationRow(std::size_t a_index);
   [[nodiscard]] bool DrawOutfitTab();
   [[nodiscard]] bool DrawKitTab();
-  [[nodiscard]] bool DrawSlotTab();
   [[nodiscard]] bool DrawConditionTab();
   [[nodiscard]] bool DrawConditionCatalogTable();
   void DrawOptionsTab();
@@ -307,7 +298,6 @@ private:
   void DrawCreateKitDialog();
   void DrawDeleteKitDialog();
   void DrawRenameKitDialog();
-  bool ApplyWorkbenchEmptyDrop(const DraggedEquipmentPayload &a_dragPayload);
   void ClearCatalogSelection();
   [[nodiscard]] std::string BuildFavoriteKey(ui::catalog::BrowserTab a_tab,
                                              std::string_view a_id) const;
@@ -376,8 +366,6 @@ private:
   [[nodiscard]] const std::vector<int> &BuildVisibleWorkbenchRowIndices();
   [[nodiscard]] std::vector<int> BuildWorkbenchTargetRowIndices(
       const std::optional<std::string> &a_conditionId);
-  [[nodiscard]] bool
-  MatchesWorkbenchFilter(const workbench::VariantWorkbenchRow &a_row);
   void ApplyInitialWorkbenchFilterSelection();
   void RefreshWorkbenchActorCandidates();
   void
@@ -495,8 +483,6 @@ private:
   bool addCrosshairNpcToActorList_{false};
   bool catalogBodyFamilyFilterEnabled_{true};
   bool hideRealEquipmentWithFitting_{false};
-  std::mutex pendingWorkbenchActorSyncMutex_;
-  std::unordered_set<RE::FormID> pendingWorkbenchActorSyncs_;
   mutable std::recursive_mutex actorVisibilityMutex_;
   std::unordered_map<RE::FormID, bool> hideRealEquipmentByActor_;
   std::unordered_map<RE::FormID, bool> hideFittingOverridesByActor_;

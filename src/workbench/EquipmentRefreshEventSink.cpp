@@ -140,9 +140,6 @@ void RunActorRefresh(const RE::FormID a_actorFormID) {
   }
 
   const bool hadTrackedFittingState = sfs::native::HasFittingSlotState(actor);
-  if (reconcileStatePending) {
-    sfs::native::ReconcileFittingSlotState(actor);
-  }
   if (reconcileStatePending && hadTrackedFittingState) {
     sfs::native::dave::ClearHiddenRealEquipment(actor);
   }

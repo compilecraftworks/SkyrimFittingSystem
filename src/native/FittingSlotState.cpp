@@ -144,17 +144,6 @@ bool SetHeadgearToggleFittingSlotsManualVisible(
   return changed;
 }
 
-void ReconcileFittingSlotState([[maybe_unused]] RE::Actor *a_actor) {}
-
-void ClearFittingSlotState(RE::Actor *a_actor) {
-  const auto actorFormID = GetActorFormID(a_actor);
-  if (actorFormID == 0) {
-    return;
-  }
-  std::lock_guard lock(g_stateMutex);
-  g_actorStates.erase(actorFormID);
-}
-
 void ClearAllFittingSlotStates() {
   std::lock_guard lock(g_stateMutex);
   g_actorStates.clear();

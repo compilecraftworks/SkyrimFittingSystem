@@ -53,7 +53,6 @@ enum class ArmorRefreshReason : std::uint8_t {
 void InstallArmorSkinningHooks();
 void RefreshArmorFor(RE::Actor *a_actor, ArmorRefreshReason a_reason =
                                              ArmorRefreshReason::kDisplayState);
-void RefreshPlayerArmor();
 void QueueArmorRefreshFor(RE::Actor *a_actor,
                           ArmorRefreshReason a_reason =
                               ArmorRefreshReason::kDisplayState);
@@ -113,8 +112,6 @@ GetActiveFittingArmorSlotMaskForSlot(RE::Actor *a_actor,
 // that SFS is currently hiding for this actor.
 [[nodiscard]] bool IsArmorShownForActor(RE::Actor *a_actor,
                                          const RE::TESObjectARMO *a_armor);
-[[nodiscard]] bool IsShownArmorKeywordForActor(
-    RE::Actor *a_actor, const RE::BGSKeyword *a_keyword);
 using ShownArmorPredicate = bool (*)(const RE::TESObjectARMO *, void *);
 [[nodiscard]] bool AnyShownArmorForActor(RE::Actor *a_actor,
                                           ShownArmorPredicate a_predicate,
@@ -130,8 +127,6 @@ GetDisplayWornMask(RE::InventoryChanges *a_inventory,
                    RE::TESObjectREFR *a_target, std::uint32_t a_baseWornMask);
 void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
                                   RE::ActorWeightModel *a_actorWeightModel);
-void ApplyDisplaySkinning(RE::Actor *a_actor,
-                          RE::ActorWeightModel *a_actorWeightModel);
 // IED's custom-skin hook expects its concrete visitor layout. The native hook
 // records that ABI boundary here so the filtering path can use the original
 // engine visitor and request an actor-level IED refresh afterward.

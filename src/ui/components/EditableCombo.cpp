@@ -261,6 +261,9 @@ bool DrawEditableDropdownIndexed(
   const auto inputItemId = ImGui::GetItemID();
   if (submitted && a_allowCustomInput) {
     changed = true;
+    // Typing is no longer selection of the previous item. Otherwise callers
+    // can overwrite the new text with that item's stale value every frame.
+    if (a_selectedIndex) { *a_selectedIndex = -1; }
   }
   const bool inputTextActive = ImGui::IsItemActive();
   if (ImGui::IsItemActivated()) {
@@ -635,7 +638,8 @@ bool DrawEditableStringDropdown(
 bool DrawSearchableStringDropdown(const char *a_label, const char *a_hint,
                                   std::string &a_value,
                                   std::span<const std::string> a_options,
-                                  const float a_width) {
+                                  const float a_width,
+                                  const bool a_allowCustomInput) {
   std::vector<EditableDropdownOptionView> optionViews;
   optionViews.reserve(a_options.size());
 
@@ -643,22 +647,22 @@ bool DrawSearchableStringDropdown(const char *a_label, const char *a_hint,
   for (std::size_t index = 0; index < a_options.size(); ++index) {
     const auto &option = a_options[index];
     optionViews.push_back({.label = option, .isSection = false});
-    if (selectedIndex < 0 &&
+    if (!a_allowCustomInput && selectedIndex < 0 &&
         sfs::strings::EqualsInsensitive(option, a_value)) {
       selectedIndex = static_cast<int>(index);
     }
   }
 
-  char buffer[128];
-  std::snprintf(buffer, sizeof(buffer), "%s", a_value.c_str());
+  std::vector<char> buffer((std::max)(std::size_t{1024}, a_value.size() + 1));
+  std::snprintf(buffer.data(), buffer.size(), "%s", a_value.c_str());
   const bool changed = detail::DrawEditableDropdownIndexed(
-      a_label, a_hint, buffer, sizeof(buffer), optionViews, a_width,
-      &selectedIndex, false, selectedIndex, nullptr, a_options.data());
+      a_label, a_hint, buffer.data(), buffer.size(), optionViews, a_width,
+      &selectedIndex, a_allowCustomInput, selectedIndex, nullptr, a_options.data());
 
   if (selectedIndex >= 0 && selectedIndex < static_cast<int>(a_options.size())) {
     a_value = a_options[static_cast<std::size_t>(selectedIndex)];
   } else {
-    a_value = buffer;
+    a_value = buffer.data();
   }
   return changed;
 }

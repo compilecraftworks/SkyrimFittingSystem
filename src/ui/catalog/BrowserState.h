@@ -13,8 +13,7 @@ enum class BrowserTab {
   Conditions,
   Kits,
   KitGenerator,
-  Options,
-  Slots
+  Options
 };
 
 enum class RefreshMode : std::uint8_t { Full, KitsOnly };
@@ -29,7 +28,6 @@ struct BrowserState {
   int kitCollectionIndex{0};
   std::vector<bool> selectedSlotFilters;
   bool previewSelected{true};
-  bool showAllSlots{false};
   bool favoritesOnly{false};
   bool inventoryOnly{false};
   bool hideUnnamedGear{true};

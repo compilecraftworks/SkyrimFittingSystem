@@ -1,6 +1,9 @@
 #include "Menu.h"
 
 #include "ConditionMaterializer.h"
+#include "ArmorUtils.h"
+#include "conditions/Lowering.h"
+#include "ui/ConditionParamOptionCache.h"
 #include "conditions/Creation.h"
 #include "conditions/Defaults.h"
 #include "conditions/Status.h"
@@ -346,9 +349,29 @@ bool Menu::SaveConditionEditor(ConditionEditorState &a_editor) {
         return false;
       }
 
-      const auto editorKind = GetEditorKindForParamType(
-          ResolveEditorParamType(clause.functionName, paramIndex,
-                                 functionInfo->parameterTypes[paramIndex]));
+      const auto paramType = ResolveEditorParamType(
+          clause.functionName, paramIndex, functionInfo->parameterTypes[paramIndex]);
+      const auto editorKind = GetEditorKindForParamType(paramType);
+      if (!clause.arguments[paramIndex].empty() &&
+          ui::conditions::ConditionParamOptionCache::SupportsFormTokens(paramType)) {
+        auto *form = sfs::conditions::ResolveConditionFormArgument(
+            clause.arguments[paramIndex], paramType);
+        if (!form) {
+          a_editor.error = sfs::strings::SafeVFormat(
+              std::string(localization->Get("conditions.validation.parameter_form")),
+              std::make_format_args(parameterLabel, clauseNumber,
+                                    clause.arguments[paramIndex]));
+          return false;
+        }
+        // Store an explicit plugin/local ID when possible so a later load-order
+        // change cannot retarget a successfully entered runtime FormID.
+        if (!sfs::strings::EqualsInsensitive(clause.arguments[paramIndex], "Player")) {
+          if (const auto identifier = sfs::armor::GetFormIdentifier(form);
+              !identifier.empty()) {
+            clause.arguments[paramIndex] = identifier;
+          }
+        }
+      }
       if (editorKind == ConditionValueEditorKind::Unsupported) {
         a_editor.error = sfs::strings::SafeVFormat(
             std::string(localization->Get(

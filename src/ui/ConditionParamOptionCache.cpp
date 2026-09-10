@@ -3,12 +3,12 @@
 #include "ArmorUtils.h"
 #include "IncrementalLoader.h"
 #include "conditions/ParamEnumOptions.h"
+#include "conditions/FormTokens.h"
 #include "ui/Localization.h"
 
 #include <RE/Skyrim.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstdint>
 #include <iterator>
 #include <memory>
@@ -35,16 +35,6 @@ struct CacheEntry {
   bool unsupported{false};
 };
 
-bool IsTokenCompatible(std::string_view a_text) {
-  if (a_text.empty()) {
-    return false;
-  }
-
-  return std::ranges::all_of(a_text, [](const unsigned char a_char) {
-    return std::isalnum(a_char) != 0 || a_char == '_';
-  });
-}
-
 void SortUniqueStrings(std::vector<std::string> &a_values) {
   std::ranges::sort(a_values);
   a_values.erase(std::unique(a_values.begin(), a_values.end()), a_values.end());
@@ -66,11 +56,9 @@ std::string GetEditorIdToken(const RE::TESForm *a_form) {
     return {};
   }
 
-  auto editorID = sfs::armor::GetEditorID(a_form);
-  if (!IsTokenCompatible(editorID)) {
-    return {};
-  }
-  return editorID;
+  // Arguments are stored as strings, not parsed as identifier-only expressions.
+  // Do not discard mod-provided EditorIDs merely for punctuation/non-ASCII.
+  return sfs::armor::GetEditorID(a_form);
 }
 
 template <class T> std::vector<RE::TESForm *> CollectForms() {
@@ -127,6 +115,14 @@ void AppendFormToken(CacheEntryLoadState &a_state, RE::TESForm *a_form) {
   if (const auto token = GetEditorIdToken(a_form); !token.empty()) {
     a_state.stagedOptions.push_back(token);
   }
+  // A missing EditorID must not make a valid form impossible to select.
+  // Keep both load-order-independent and console FormID spellings searchable.
+  if (a_form->IsDeleted() || a_form->IsIgnored()) { return; }
+  if (const auto identifier = sfs::armor::GetFormIdentifier(a_form);
+      !identifier.empty()) {
+    a_state.stagedOptions.push_back(identifier);
+  }
+  a_state.stagedOptions.push_back(sfs::armor::FormatFormID(formID));
 }
 
 void AppendCellRefTokens(CacheEntryLoadState &a_state,
@@ -208,7 +204,6 @@ std::vector<RE::TESForm *> CollectFormsForType(const ParamType a_type) {
     return CollectForms<RE::BGSEncounterZone>();
   case ParamType::kIdleForm:
     return CollectForms<RE::TESIdleForm>();
-  case ParamType::kActor:
   case ParamType::kActorBase:
   case ParamType::kNPC:
     return CollectForms<RE::TESNPC>();
@@ -233,7 +228,7 @@ std::vector<RE::TESForm *> CollectFormsForType(const ParamType a_type) {
   case ParamType::kVoiceType:
     return CollectForms<RE::BGSVoiceType>();
   case ParamType::kCell:
-    return CollectForms<RE::TESObjectCELL>();
+    return sfs::conditions::CollectCellForms();
   case ParamType::kLocation:
     return CollectForms<RE::BGSLocation>();
   case ParamType::kWeather:
@@ -694,10 +689,15 @@ public:
           loadState->forms.size());
       loadState->loader.Start({
           {GetStatusLabel(a_type), loadState->forms.size(),
-           [statePtr](const std::size_t a_index) {
-             if (const auto token = GetEditorIdToken(statePtr->forms[a_index]);
-                 !token.empty()) {
-               statePtr->stagedOptions.push_back(token);
+           [statePtr, a_type](const std::size_t a_index) {
+             if (a_type == ParamType::kActorValue) {
+               // Actor values are names/indices, not form-pointer arguments.
+               if (const auto token = GetEditorIdToken(statePtr->forms[a_index]);
+                   !token.empty()) {
+                 statePtr->stagedOptions.push_back(token);
+               }
+             } else {
+               AppendFormToken(*statePtr, statePtr->forms[a_index]);
              }
            }},
           {"Finalizing options...", 1,
@@ -754,6 +754,11 @@ ConditionParamOptionCache &ConditionParamOptionCache::Get() {
 
 bool ConditionParamOptionCache::Supports(const ParamType a_type) {
   return SupportsCachedOptions(a_type);
+}
+
+bool ConditionParamOptionCache::SupportsFormTokens(const ParamType a_type) {
+  return SupportsCachedOptions(a_type) && a_type != ParamType::kActorValue &&
+         BuildImmediateOptions(a_type).empty();
 }
 
 void ConditionParamOptionCache::Continue(

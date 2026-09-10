@@ -3821,10 +3821,6 @@ bool GeneratedKit::IsSelectedCandidateNsfw() const {
                              [](const auto &item) { return item.nsfw; });
 }
 
-void GeneratedKit::FreezeSafetyPrefixFromSelectedCandidate() {
-  safetyPrefixOverride = IsSelectedCandidateNsfw();
-}
-
 void GeneratedKit::ToggleSafetyPrefix() {
   safetyPrefixOverride = !IsSelectedCandidateNsfw();
 }

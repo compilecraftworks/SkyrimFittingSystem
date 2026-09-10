@@ -1,7 +1,5 @@
 #include "features/virtual_tokens/VirtualWornTokens.h"
 
-#if defined(SFS_VIRTUAL_TOKENS)
-
 #include "ArmorUtils.h"
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
@@ -4704,35 +4702,3 @@ void HandleVirtualWornTokenEquipEvent(RE::Actor *a_actor,
   }
 }
 } // namespace sfs::virtual_tokens
-
-#else
-
-namespace sfs::virtual_tokens {
-void InitializeVirtualWornTokens() {}
-bool RegisterVirtualWornTokenPapyrus(RE::BSScript::IVirtualMachine *) {
-  return true;
-}
-void UpdateVirtualWornTokenCache() {}
-void ObserveActorContextWardrobeBoundary(RE::Actor *) {}
-void RecordActorContextWardrobeSnapshot(RE::Actor *) {}
-void ResetVirtualWornTokenRuntimeState() {}
-void SerializeVirtualWornTokenState(SKSE::SerializationInterface *) {}
-void DeserializeVirtualWornTokenState(SKSE::SerializationInterface *) {}
-void InvalidateVirtualWornTokenAutomationForAppearance(
-    RE::FormID, RE::FormID, std::uint32_t, bool) {}
-bool IsVirtualWornTokenAutomationBypassed(
-    RE::FormID, RE::FormID, std::uint32_t) {
-  return false;
-}
-bool IsVirtualWornTokenAppearanceSuppressed(
-    RE::FormID, RE::FormID, std::uint32_t) {
-  return false;
-}
-bool IsVirtualWornTokenEventAddedArmor(RE::FormID, RE::FormID) {
-  return false;
-}
-bool IsVirtualWornTokenRecoveryBurstActive(RE::FormID) { return false; }
-void HandleVirtualWornTokenEquipEvent(RE::Actor *, RE::TESObjectARMO *, bool) {}
-} // namespace sfs::virtual_tokens
-
-#endif

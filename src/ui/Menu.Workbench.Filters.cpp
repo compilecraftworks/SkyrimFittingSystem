@@ -200,9 +200,6 @@ bool Menu::IsWorkbenchFilterSelectionValid() const {
                              });
 }
 
-bool Menu::MatchesWorkbenchFilter(const workbench::VariantWorkbenchRow &a_row) {
-  return a_row.ownerActorFormID == workbenchFilter_.actorFormID;
-}
 void Menu::BumpConditionStoreRevision() { ++conditionStore_.revision; }
 
 bool Menu::HideRealEquipmentWithFittingForActor(RE::Actor *a_actor) const {
@@ -507,15 +504,6 @@ void Menu::SyncWorkbenchRowsForCurrentFilter() {
   }
 }
 
-void Menu::QueueWorkbenchRowsSyncForActor(const RE::FormID a_actorFormID) {
-  if (a_actorFormID == 0) {
-    return;
-  }
-
-  std::lock_guard lock(pendingWorkbenchActorSyncMutex_);
-  pendingWorkbenchActorSyncs_.insert(a_actorFormID);
-}
-
 void Menu::SyncWorkbenchRowsForActor(const RE::FormID a_actorFormID) {
   auto workbenchStateLock = workbench_.AcquireStateLock();
   if (!gameDataLoaded_ || a_actorFormID == 0)
@@ -523,44 +511,6 @@ void Menu::SyncWorkbenchRowsForActor(const RE::FormID a_actorFormID) {
   if (auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID)) {
     workbench_.SyncRowsFromActor(actor);
   }
-}
-void Menu::SetFittingOverridesHiddenForActorSlots(
-    RE::Actor *a_actor, const std::uint64_t a_slotMask, const bool a_hidden) {
-  auto workbenchStateLock = workbench_.AcquireStateLock();
-  if (!gameDataLoaded_ || !a_actor || a_slotMask == 0) {
-    return;
-  }
-
-  std::vector<std::pair<int, int>> targets;
-  const auto &rows = workbench_.GetRows();
-  for (int rowIndex = 0; rowIndex < static_cast<int>(rows.size()); ++rowIndex) {
-    const auto &row = rows[static_cast<std::size_t>(rowIndex)];
-    if (row.ownerActorFormID != a_actor->GetFormID()) {
-      continue;
-    }
-
-    for (int itemIndex = 0; itemIndex < static_cast<int>(row.overrides.size());
-         ++itemIndex) {
-      const auto &overrideItem =
-          row.overrides[static_cast<std::size_t>(itemIndex)];
-      if ((row.GetOverrideVisualSlotMask(overrideItem) & a_slotMask) != 0) {
-        targets.emplace_back(rowIndex, itemIndex);
-      }
-    }
-  }
-
-  bool changed = false;
-  for (const auto &[rowIndex, itemIndex] : targets) {
-    changed |= workbench_.SetOverrideHidden(rowIndex, itemIndex, a_hidden);
-  }
-
-  if (!changed) {
-    return;
-  }
-
-  SyncWorkbenchRowsForActor(a_actor->GetFormID());
-  workbench_.RefreshNativeArmorOverridesForActor(
-      a_actor->GetFormID(), conditionStore_.revision);
 }
 
 } // namespace sfs

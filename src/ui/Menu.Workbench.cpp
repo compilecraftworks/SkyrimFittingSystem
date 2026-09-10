@@ -3,34 +3,7 @@
 #include "ui/Localization.h"
 namespace sfs {
 
-bool Menu::ApplyWorkbenchEmptyDrop(
-    const DraggedEquipmentPayload &a_dragPayload) {
-  const auto initialEquippedState = BuildWorkbenchInitialEquippedState();
-  if (a_dragPayload.sourceKind ==
-      static_cast<std::uint32_t>(DragSourceKind::Catalog)) {
-    return ApplyCatalogSelectionAsFittingOverrides(
-        std::vector<RE::FormID>{a_dragPayload.formID}, false);
-  }
-  if (a_dragPayload.sourceKind ==
-      static_cast<std::uint32_t>(DragSourceKind::SlotCatalog)) {
-    return workbench_.AddSlotRow(a_dragPayload.slotMask,
-                                 ResolveNewWorkbenchRowConditionId(),
-                                 ResolveNewWorkbenchRowOwnerActorFormID(),
-                                 &initialEquippedState);
-  }
-  return false;
-}
-
 void Menu::DrawVariantWorkbenchPane() {
-  std::unordered_set<RE::FormID> pendingActorSyncs;
-  {
-    std::lock_guard lock(pendingWorkbenchActorSyncMutex_);
-    pendingActorSyncs.swap(pendingWorkbenchActorSyncs_);
-  }
-  for (const auto actorFormID : pendingActorSyncs) {
-    SyncWorkbenchRowsForActor(actorFormID);
-  }
-
   EnsureWorkbenchRowsSyncedForPreviewActor();
   EnsureWorkbenchDerivedState();
   if (!IsWorkbenchFilterSelectionValid()) {

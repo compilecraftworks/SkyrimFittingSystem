@@ -7,7 +7,12 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
-v1.6.1 corrects a v1.6.0 custom-skin hook path that could skip registered
+v1.6.2 repairs CELL and shared form-argument input, separates Actor references
+from ActorBase records, and removes confirmed unreachable SFS-owned code.
+See the [English](docs/RELEASE-NOTES-v1.6.2.md) / [Korean](docs/RELEASE-NOTES-v1.6.2-ko.md)
+release notes for the 14-test verification scope and the remaining string-argument limitation.
+
+v1.6.1 corrected a v1.6.0 custom-skin hook path that could skip registered
 wig/clothing attachment when a pre-existing hook's visitor ownership was
 unknown. See [release notes](docs/RELEASE-NOTES-v1.6.1.md) and the
 [production-code regression audit](docs/V1.6.1-DISPLAY-REGRESSION-AUDIT.md)

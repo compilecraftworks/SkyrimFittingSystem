@@ -1,6 +1,6 @@
 # Build, Deploy, And Release
 
-This document describes the v1.6.1 build and release workflow for:
+This document describes the v1.6.2 build and release workflow for:
 
 - local builds with `scripts/build.sh`
 - local deploy runs with `scripts/build-deploy.sh`
@@ -53,8 +53,8 @@ Modes:
 
 Outputs:
 
-- SE/AE DLL: `build/v1.6.1/windows/x64/<mode>/SFSCore.dll`
-- local-only SE/AE PDB when present: `build/v1.6.1/windows/x64/<mode>/SFSCore.pdb`
+- SE/AE DLL: `build/v1.6.2/windows/x64/<mode>/SFSCore.dll`
+- local-only SE/AE PDB when present: `build/v1.6.2/windows/x64/<mode>/SFSCore.pdb`
 
 Notes:
 
@@ -72,7 +72,8 @@ Before deployment or packaging, run:
 The suite builds and runs RuntimeLayout, Kit Generator, BodyFamily, Condition
 CNF, Condition Drop, Fitting Dye, Kit navigation, core behavior, RaceMenu
 interface, RaceMenu morph-tracking, production custom-skin and integration
-initialization tests (twelve executables), followed by
+initialization tests, condition form-token and real-ImGui dropdown tests
+(fourteen executables), followed by
 source-boundary checks.
 The morph-tracking target generates a test-only include from production
 function definitions and runs them with fake engine attachments. It covers
@@ -147,10 +148,15 @@ After a separately verified build, packaging can reuse it with
 
 Outputs:
 
-- `Release/Skyrim Fitting System v1.6.1 SE-AE.zip`
-- `Sources/Skyrim Fitting System v1.6.1 Source.zip`
+- `Release/Skyrim Fitting System v1.6.2 SE-AE.zip`
+- `Sources/Skyrim Fitting System v1.6.2 Source.zip`
 - matching copies under `dist/`
-- `Release/SHA256SUMS-v1.6.1.txt`
+- `Release/SHA256SUMS-v1.6.2.txt`
+
+Run `scripts/verify-v1.6.2-release.ps1` after packaging. It checks the runtime
+changes against v1.6.1 and compares corresponding source/build definitions and
+release documents with the workspace. Stage only reviewed release files: local
+backups, private experiments and unrelated untracked files must not enter Git.
 
 The runtime archive has a flat MO2-installable root. It contains the main DLL,
 VirtualTokens ESL, native PEX/PSC, UI resources, license, and notices;

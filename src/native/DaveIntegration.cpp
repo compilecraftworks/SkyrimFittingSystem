@@ -295,13 +295,11 @@ void SyncHiddenRealEquipment(
   logger::debug(
       "SFS DAVE native: SyncHiddenRealEquipment actor={:08X} applied variant='{}' identifiers={} forceReapply={}",
       actorID, variantName, identifiers.size(), forceReapply);
-#if defined(SFS_VIRTUAL_TOKENS)
   if (forceReapply) {
     logger::info(
         "DAVE hidden real equipment reapplied actor={:08X} identifiers={}",
         actorID, identifiers.size());
   }
-#endif
 
   std::lock_guard lock(g_stateMutex);
   g_hiddenVariantByActor[actorID] = variantName;

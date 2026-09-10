@@ -1,7 +1,5 @@
 #include "features/devious_devices/DeviousDevicesIntegration.h"
 
-#if defined(SFS_VIRTUAL_TOKENS)
-
 #include "ArmorUtils.h"
 #include "ConditionMaterializer.h"
 #include "VariantWorkbench.h"
@@ -920,42 +918,3 @@ std::uint32_t CalculateDeviousDevicesHiderSuppressedFittingSlotMask(
   return suppressedSlotMask;
 }
 } // namespace sfs::devious_devices
-
-#else
-
-namespace sfs::devious_devices {
-void InitializeDeviousDevicesHider() {}
-void ResetDeviousDevicesHider() {}
-bool IsDeviousDevicesRenderedDevice(const RE::TESObjectARMO *) { return false; }
-bool IsDeviousDevicesEquipmentTransactionArmor(const RE::TESObjectARMO *) {
-  return false;
-}
-void ObserveDeviousDevicesRenderedDeviceEquipEvent(RE::Actor *,
-                                                   RE::TESObjectARMO *, bool) {}
-void ReconcileDeviousDevicesRenderedDeviceVisibility(RE::Actor *) {}
-bool IsDeviousDevicesRenderedDeviceOrdinaryVisible(RE::FormID, RE::FormID) {
-  return false;
-}
-void SetDeviousDevicesRenderedDeviceUserVisible(RE::FormID, RE::FormID, bool) {}
-void ClearDeviousDevicesRenderedDeviceOrdinaryVisibility(RE::FormID) {}
-void ReleaseDeviousDevicesHiderSuppressionForSourceMask(RE::FormID,
-                                                        std::uint64_t) {}
-void ReleaseDeviousDevicesHiderSuppressionForAppearanceMask(RE::FormID,
-                                                            std::uint64_t) {}
-bool RefreshDeviousDevicesHiderSettings() { return false; }
-bool UpdateDeviousDevicesHiderSettings(const std::vector<std::int32_t> &,
-                                       std::int32_t) {
-  return false;
-}
-std::uint32_t
-GetDeviousDevicesHiderSuppressedFittingSlotMask(RE::Actor *) {
-  return 0;
-}
-std::uint32_t CalculateDeviousDevicesHiderSuppressedFittingSlotMask(
-    RE::Actor *, const std::vector<sfs::workbench::VariantWorkbenchRow> *,
-    bool, std::uint32_t) {
-  return 0;
-}
-} // namespace sfs::devious_devices
-
-#endif

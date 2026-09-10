@@ -10,6 +10,10 @@
 #include <vector>
 
 namespace sfs::conditions {
+// Uses the exact lowering parser, including the expected form type. Called
+// once on save rather than doing expensive EditorID fallbacks every UI frame.
+[[nodiscard]] RE::TESForm *ResolveConditionFormArgument(
+    const std::string &a_text, RE::SCRIPT_PARAM_TYPE a_type);
 using DisplayOrClause = std::vector<std::string>;
 using DisplayCnf = std::vector<DisplayOrClause>;
 

@@ -69,9 +69,8 @@ void Menu::DrawConditionEditorDialog() {
 
     const auto draftValidationError =
         ValidateConditionDraft(editor.draft, ConditionDefinitions());
-    if (draftValidationError.empty()) {
-      editor.error.clear();
-    }
+    // Keep save-time resolution errors visible until the error dialog is
+    // acknowledged. Cheap draft validation does not resolve form tokens.
     const auto &style = ImGui::GetStyle();
     const auto buttonRowHeight = ImGui::GetFrameHeight();
     const auto footerHeight = style.ItemSpacing.y + buttonRowHeight;

@@ -24,8 +24,6 @@ std::vector<std::string>
 GetArmorAddonSlotLabels(const RE::TESObjectARMO *a_armor);
 std::string GetPluginName(const RE::TESForm *a_form);
 std::string GetFormIdentifier(const RE::TESForm *a_form);
-std::string GetReplacementIdentifier(const RE::TESObjectARMO *a_armor,
-                                     const RE::TESObjectARMA *a_armorAddon);
 
 template <class T = RE::TESForm>
 [[nodiscard]] auto LookupByIdentifier(const std::string &a_identifier) -> T * {

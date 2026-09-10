@@ -11,6 +11,8 @@ $targets = @(
     "BodyFamilyLogicTests",
     "ConditionCnfLogicTests",
     "ConditionDropLogicTests",
+    "ConditionFormTokenTests",
+    "ConditionDropdownTests",
     "FittingDyeRulesTests",
     "KitListNavigationTests",
     "CoreBehaviorRegressionTests",
@@ -38,6 +40,33 @@ try {
             throw "$target failed with exit code $LASTEXITCODE"
         }
     }
+
+    $conditionLowering = Get-Content -LiteralPath (
+        Join-Path $repository "src/conditions/Lowering.cpp") -Raw
+    if ($conditionLowering -notmatch 'case ParamType::kActor:\s*\{[^}]*As<RE::Actor>' -or
+        $conditionLowering -notmatch 'case ParamType::kActorBase:\s*case ParamType::kNPC:\s*param.form = LookupTypedFormByToken<RE::TESNPC>') {
+        throw "Condition Actor references and ActorBase records must stay distinct"
+    }
+    $conditionSave = Get-Content -LiteralPath (
+        Join-Path $repository "src/ui/Menu.Conditions.State.cpp") -Raw
+    if (-not $conditionSave.Contains('ResolveConditionFormArgument') -or
+        -not $conditionSave.Contains('conditions.validation.parameter_form')) {
+        throw "Free-form condition input requires typed save-time validation"
+    }
+    $conditionOptions = Get-Content -LiteralPath (
+        Join-Path $repository "src/ui/ConditionParamOptionCache.cpp") -Raw
+    if (-not $conditionOptions.Contains('return sfs::conditions::CollectCellForms()') -or
+        -not $conditionOptions.Contains('a_type != ParamType::kActorValue')) {
+        throw "CELL sources and ActorValue/form-token separation must be preserved"
+    }
+    foreach ($conditionLocale in @('en', 'kor', 'zh_cn')) {
+        $conditionLocaleJson = Get-Content -LiteralPath (
+            Join-Path $repository "data/Interface/SkyrimFittingSystem/locales/$conditionLocale.json") -Raw | ConvertFrom-Json
+        if (-not $conditionLocaleJson.strings.'conditions.validation.parameter_form') {
+            throw "Missing condition form-input error translation: $conditionLocale"
+        }
+    }
+    Write-Host "Condition form-input, actor-type, and localized validation checks passed"
 
     $catalogFilterSource = Get-Content -LiteralPath (
         Join-Path $repository "src\ui\Menu.Catalog.Filters.cpp") -Raw
@@ -160,11 +189,19 @@ try {
         "src\features\virtual_tokens\VirtualWornTokens.cpp")
     $deviousDevicesSource = Join-Path $repository (
         "src\features\devious_devices\DeviousDevicesIntegration.cpp")
-    if (-not $xmakeSource.Contains(
-            'add_defines("SFS_VIRTUAL_TOKENS=1")') -or
-        -not (Test-Path -LiteralPath $virtualTokenSource -PathType Leaf) -or
+    if (-not (Test-Path -LiteralPath $virtualTokenSource -PathType Leaf) -or
         -not (Test-Path -LiteralPath $deviousDevicesSource -PathType Leaf)) {
         throw "Virtual Tokens and Devious Devices must remain official production features"
+    }
+    foreach ($featureSource in @($virtualTokenSource, $deviousDevicesSource)) {
+        $featureText = Get-Content -LiteralPath $featureSource -Raw
+        if ($featureText.Contains('SFS_VIRTUAL_TOKENS') -or
+            $featureText -match 'void\s+(InitializeVirtualWornTokens|InitializeDeviousDevicesHider)\([^)]*\)\s*\{\s*\}') {
+            throw "Strip integration must be unconditional production code, never an optional empty stub"
+        }
+    }
+    if ($xmakeSource.Contains('SFS_VIRTUAL_TOKENS')) {
+        throw "Obsolete strip-integration build switches must not return"
     }
     if ($xmakeSource.Contains("SFS_VIRTUAL_TOKEN_POC") -or
         $xmakeSource.Contains("poc/VirtualWornTokenPoC") -or

@@ -58,9 +58,6 @@ std::string Menu::BuildFavoriteKey(const ui::catalog::BrowserTab a_tab,
   case ui::catalog::BrowserTab::Kits:
     prefix = "kit:";
     break;
-  case ui::catalog::BrowserTab::Slots:
-    prefix = "slot:";
-    break;
   case ui::catalog::BrowserTab::Conditions:
     prefix = "condition:";
     break;
@@ -327,13 +324,8 @@ void Menu::PreviewOutfitEntry(const OutfitEntry &a_entry) {
       a_entry.id, BuildOutfitFittingFormIDs(a_entry));
 }
 
-void Menu::DrawCatalogHostControls(const bool) {}
-
 void Menu::DrawCatalogPaneBody() {
   auto &browser = CatalogBrowserState();
-  if (browser.activeTab == ui::catalog::BrowserTab::Slots) {
-    browser.activeTab = ui::catalog::BrowserTab::Gear;
-  }
   bool catalogRowClicked = false;
   if (browser.activeTab != ui::catalog::BrowserTab::Conditions &&
       browser.activeTab != ui::catalog::BrowserTab::Options &&
@@ -382,9 +374,6 @@ void Menu::DrawCatalogPaneBody() {
 
 void Menu::DrawCatalogHostBody(const bool a_drawBodyChild) {
   auto &browser = CatalogBrowserState();
-  if (browser.activeTab == ui::catalog::BrowserTab::Slots) {
-    browser.activeTab = ui::catalog::BrowserTab::Gear;
-  }
 
   {
     UpdateCatalogRefresh();

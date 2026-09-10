@@ -62,7 +62,6 @@ struct GeneratedKit {
   std::optional<bool> safetyPrefixOverride;
 
   [[nodiscard]] bool IsSelectedCandidateNsfw() const;
-  void FreezeSafetyPrefixFromSelectedCandidate();
   void ToggleSafetyPrefix();
 };
 

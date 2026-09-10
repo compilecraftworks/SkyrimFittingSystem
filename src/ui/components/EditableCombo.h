@@ -49,7 +49,7 @@ bool DrawEditableStringDropdown(
 bool DrawSearchableStringDropdown(const char *a_label, const char *a_hint,
                                   std::string &a_value,
                                   std::span<const std::string> a_options,
-                                  float a_width);
+                                  float a_width, bool a_allowCustomInput = false);
 
 template <class TValue>
 bool DrawSearchableDropdown(

@@ -2,33 +2,7 @@
 
 #include <algorithm>
 
-namespace {
-constexpr sfs::conditions::Color kDefaultConditionColor{0.55f, 0.55f, 0.55f,
-                                                         1.0f};
-}
-
 namespace sfs::conditions {
-Clause BuildDefaultPlayerClause() {
-  Clause clause;
-  clause.functionName = "GetIsReference";
-  clause.arguments[0] = "Player";
-  clause.comparator = Comparator::Equal;
-  clause.comparand = "1";
-  clause.connectiveToNext = Connective::And;
-  return clause;
-}
-
-Definition BuildDefaultPlayerCondition() {
-  Definition definition;
-  definition.id = std::string(kDefaultConditionId);
-  definition.name = "Player";
-  definition.description = "Applies to Player";
-  definition.EnsureCatalog().color = kDefaultConditionColor;
-  definition.clauses.push_back(BuildDefaultPlayerClause());
-  return definition;
-}
-
-
 bool IsBuiltInCondition(const std::string_view id) { return id.starts_with("builtin-"); }
 bool IsActorOwnershipCondition(const Definition &definition) {
   return definition.clauses.size() == 1 &&

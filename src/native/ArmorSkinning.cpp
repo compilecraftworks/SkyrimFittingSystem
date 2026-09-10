@@ -2415,45 +2415,6 @@ bool ApplyArmorAddon(const RE::TESObjectARMO *a_armor, RE::TESRace *a_race,
   return func(a_armor, a_race, a_model, a_isFemale);
 }
 
-struct SkinningContext {
-  RE::TESRace *race{nullptr};
-  bool isFemale{false};
-};
-
-[[nodiscard]] std::optional<SkinningContext>
-BuildSkinningContext(RE::Actor *a_actor) {
-  if (!a_actor) {
-    return std::nullopt;
-  }
-
-  auto *actorBase = a_actor->GetActorBase();
-  if (!actorBase) {
-    return std::nullopt;
-  }
-
-  auto *race = actorBase->GetRace();
-  if (!race) {
-    race = a_actor->GetRace();
-  }
-  if (!race) {
-    return std::nullopt;
-  }
-
-  return SkinningContext{.race = race, .isFemale = actorBase->IsFemale()};
-}
-
-void ApplyArmorOnce(const RE::TESObjectARMO *a_armor,
-                    const SkinningContext &a_context,
-                    RE::ActorWeightModel *a_actorWeightModel,
-                    std::unordered_set<const RE::TESObjectARMO *> &a_applied) {
-  if (!a_armor || !a_actorWeightModel || !sfs::armor::HasArmorAddons(a_armor) ||
-      !a_applied.insert(a_armor).second) {
-    return;
-  }
-
-  re::ApplyArmorAddon(a_armor, a_context.race, a_actorWeightModel,
-                      a_context.isFemale);
-}
 } // namespace re
 } // namespace
 
@@ -3242,34 +3203,6 @@ void ApplyAdditionalDisplayArmors(RE::Actor *a_actor,
   sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
 
-void ApplyDisplaySkinning(RE::Actor *a_actor,
-                          RE::ActorWeightModel *a_actorWeightModel) {
-  if (!a_actor || !a_actorWeightModel) {
-    return;
-  }
-
-  const auto displaySet = BuildDisplaySet(a_actor);
-  if (!displaySet.active) {
-    return;
-  }
-
-  const auto context = re::BuildSkinningContext(a_actor);
-  if (!context.has_value()) {
-    return;
-  }
-
-  std::unordered_set<const RE::TESObjectARMO *> appliedArmors;
-  for (const auto *armor : CollectEquippedArmors(a_actor)) {
-    if (!ShouldHideRealArmor(a_actor, displaySet, armor)) {
-      re::ApplyArmorOnce(armor, *context, a_actorWeightModel, appliedArmors);
-    }
-  }
-
-  for (const auto *armor : displaySet.armors) {
-    re::ApplyArmorOnce(armor, *context, a_actorWeightModel, appliedArmors);
-  }
-}
-
 void VisitWornItemsWithHiddenRealEquipmentFilter(
     RE::InventoryChanges *a_inventory,
     RE::InventoryChanges::IItemChangeVisitor *a_visitor,
@@ -3354,20 +3287,6 @@ bool IsArmorShownForActor(RE::Actor *a_actor,
              snapshot.visibleAdditionalArmors.end() ||
          std::ranges::find(snapshot.visibleActualArmors, a_armor) !=
              snapshot.visibleActualArmors.end();
-}
-
-bool IsShownArmorKeywordForActor(RE::Actor *a_actor,
-                                 const RE::BGSKeyword *a_keyword) {
-  if (!a_actor || !a_keyword) {
-    return false;
-  }
-
-  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
-  const auto hasKeyword = [a_keyword](const auto *a_armor) {
-    return a_armor && a_armor->HasKeyword(a_keyword);
-  };
-  return std::ranges::any_of(snapshot.visibleActualArmors, hasKeyword) ||
-         std::ranges::any_of(snapshot.visibleAdditionalArmors, hasKeyword);
 }
 
 bool AnyShownArmorForActor(RE::Actor *a_actor,
@@ -3518,10 +3437,6 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
   default:
     return;
   }
-}
-
-void RefreshPlayerArmor() {
-  RefreshArmorFor(RE::PlayerCharacter::GetSingleton());
 }
 
 void QueueArmorRefreshFor(RE::Actor *a_actor,

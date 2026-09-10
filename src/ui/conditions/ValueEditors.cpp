@@ -4,6 +4,7 @@
 #include "ConditionMaterializer.h"
 #include "StringUtils.h"
 #include "conditions/ParamEnumOptions.h"
+#include "conditions/FormTokens.h"
 #include "conditions/Status.h"
 #include "ui/ConditionParamOptionCache.h"
 #include "ui/Localization.h"
@@ -14,9 +15,7 @@
 #include <imgui.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cfloat>
-#include <charconv>
 #include <sstream>
 #include <unordered_set>
 
@@ -159,29 +158,8 @@ RE::TESObjectREFR *LookupObjectReferenceByToken(const std::string &a_token) {
     return RE::PlayerCharacter::GetSingleton();
   }
 
-  if (auto *ref = sfs::armor::LookupByIdentifier<RE::TESObjectREFR>(trimmed)) {
-    return ref;
-  }
-
-  if (auto *form = RE::TESForm::LookupByEditorID(trimmed)) {
-    if (auto *ref = form->As<RE::TESObjectREFR>()) {
-      return ref;
-    }
-  }
-
-  if (std::ranges::all_of(trimmed, [](const unsigned char a_char) {
-        return std::isxdigit(a_char) != 0;
-      })) {
-    RE::FormID formID = 0;
-    const auto *begin = trimmed.data();
-    const auto *end = begin + trimmed.size();
-    if (const auto [ptr, ec] = std::from_chars(begin, end, formID, 16);
-        ec == std::errc{} && ptr == end) {
-      return RE::TESForm::LookupByID<RE::TESObjectREFR>(formID);
-    }
-  }
-
-  return nullptr;
+  // This runs while typing; do not scan all game forms on each frame.
+  return sfs::conditions::LookupFormToken<RE::TESObjectREFR>(trimmed, false);
 }
 
 std::string BuildObjectReferenceLabel(RE::TESObjectREFR *a_ref) {
@@ -324,8 +302,14 @@ BuildObjectReferenceEditorItems(const std::string &a_currentValue) {
 }
 
 bool DrawObjectReferenceParamEditor(const char *a_id, std::string &a_value,
-                                    const float a_width) {
+                                    const float a_width,
+                                    const bool a_actorOnly = false) {
   auto editorItems = BuildObjectReferenceEditorItems(a_value);
+  if (a_actorOnly) {
+    std::erase_if(editorItems, [](const ObjectRefEditorItem &a_item) {
+      return RE::TESForm::LookupByID<RE::Actor>(a_item.formID) == nullptr;
+    });
+  }
   std::vector<ObjectRefDropdownItem> dropdownItems;
   dropdownItems.reserve(editorItems.size());
 
@@ -370,15 +354,10 @@ bool DrawObjectReferenceParamEditor(const char *a_id, std::string &a_value,
   }
 
   const auto customToken = ExtractObjectReferenceTokenFromLabel(buffer);
-  if (auto *customRef = LookupObjectReferenceByToken(customToken)) {
-    a_value = BuildObjectReferenceToken(customRef);
-    if (a_value.empty()) {
-      a_value = customToken;
-    }
-    return true;
-  }
-
-  return false;
+  // Keep incomplete/unresolved text editable. Validate on save, not by
+  // silently restoring the previous reference while the user is typing.
+  a_value = customToken;
+  return true;
 }
 } // namespace
 
@@ -414,8 +393,10 @@ bool DrawNumericClauseValueEditor(const char *a_id, std::string &a_value,
 bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
                               const RE::SCRIPT_PARAM_TYPE a_type,
                               const float a_width) {
-  if (a_type == RE::SCRIPT_PARAM_TYPE::kObjectRef) {
-    return DrawObjectReferenceParamEditor(a_id, a_value, a_width);
+  if (a_type == RE::SCRIPT_PARAM_TYPE::kObjectRef ||
+      a_type == RE::SCRIPT_PARAM_TYPE::kActor) {
+    return DrawObjectReferenceParamEditor(
+        a_id, a_value, a_width, a_type == RE::SCRIPT_PARAM_TYPE::kActor);
   }
 
   const auto editorKind = GetEditorKindForParamTypeImpl(a_type);
@@ -434,10 +415,18 @@ bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
             a_id,
             sfs::ui::Localization::GetSingleton()->GetCStr(
                 "conditions.select_value"),
-            a_value, std::span<const std::string>(*options), a_width);
+            a_value, std::span<const std::string>(*options), a_width,
+            optionCache.SupportsFormTokens(a_type));
       }
     } else if (state ==
                sfs::ui::conditions::ConditionParamOptionCache::State::Loading) {
+      if (optionCache.SupportsFormTokens(a_type)) {
+        // Suggestions are optional: known IDs remain editable while loading.
+        return sfs::ui::components::DrawSearchableStringDropdown(
+            a_id, sfs::ui::Localization::GetSingleton()->GetCStr(
+                      "conditions.select_value"),
+            a_value, {}, a_width, true);
+      }
       const auto progress =
           std::clamp(optionCache.GetProgress(a_type), 0.0f, 1.0f);
       const auto status = optionCache.GetStatus(a_type);

@@ -1442,52 +1442,6 @@ void VariantWorkbench::ClearAutomaticEquipmentVisibilityBindings() {
   }
 }
 
-void VariantWorkbench::ClearAutomaticEquipmentVisibilityBindingsForActor(
-    const RE::FormID a_actorFormID) {
-  if (a_actorFormID == 0) {
-    return;
-  }
-  ClearAutomaticEquipmentStateEvents(a_actorFormID);
-  bool changed = false;
-  const auto clearRows = [&](auto &a_rows) {
-    for (auto &row : a_rows) {
-      if (row.ownerActorFormID != a_actorFormID) {
-        continue;
-      }
-      for (auto &item : row.overrides) {
-        changed = changed || item.automaticEquipmentBindingMode != 0 ||
-                  item.automaticEquipmentAnchorSlotMask != 0 ||
-                  item.automaticEquipmentAnchorFormID != 0 ||
-                  item.automaticEquipmentSuppressed ||
-                  item.automaticEquipmentUserVisible;
-        ClearAutomaticEquipmentBinding(item);
-      }
-    }
-  };
-  clearRows(rows_);
-  clearRows(previewNativeRows_);
-  if (changed) {
-    MarkChanged();
-  }
-}
-
-void VariantWorkbench::RebuildAutomaticEquipmentVisibilityBindingsForActor(
-    const RE::FormID a_actorFormID, const bool a_clearExistingBindings) {
-  if (a_actorFormID == 0) {
-    return;
-  }
-  if (a_clearExistingBindings) {
-    ClearAutomaticEquipmentVisibilityBindingsForActor(a_actorFormID);
-  } else {
-    // Disabling the feature preserves each item's last resolved link while
-    // removing all transient event snapshots and active suppression.
-    ClearAutomaticEquipmentStateEvents(a_actorFormID);
-  }
-  if (auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID)) {
-    SyncRowsFromActor(actor);
-  }
-}
-
 bool VariantWorkbench::HasRegisteredAppearancesForActor(
     const RE::FormID a_actorFormID) const {
   auto stateLock = AcquireStateLock();

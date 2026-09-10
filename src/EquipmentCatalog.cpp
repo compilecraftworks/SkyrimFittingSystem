@@ -320,12 +320,6 @@ bool EquipmentCatalog::ContinueRefreshFromGame(
   return true;
 }
 
-void EquipmentCatalog::RefreshFromGame() {
-  StartRefreshFromGame();
-  while (ContinueRefreshFromGame(1000.0)) {
-  }
-}
-
 bool EquipmentCatalog::IsRefreshing() const {
   return static_cast<bool>(refreshState_);
 }

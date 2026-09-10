@@ -131,7 +131,6 @@ public:
 
   void StartRefreshFromGame(RefreshMode a_mode = RefreshMode::Full);
   bool ContinueRefreshFromGame(double a_maxMillisecondsPerTick = 12.0);
-  void RefreshFromGame();
   [[nodiscard]] bool IsRefreshing() const;
   [[nodiscard]] float GetRefreshProgress() const;
   [[nodiscard]] std::string_view GetRefreshStatus() const;

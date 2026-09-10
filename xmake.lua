@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.1"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.2"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -55,7 +55,6 @@ target("SkyrimFittingSystem")
     add_defines("SFS_VERSION_MINOR=" .. minor)
     add_defines("SFS_VERSION_PATCH=" .. patch)
     add_defines('SFS_VERSION_STRING="' .. build_version_string .. '"')
-    add_defines("SFS_VIRTUAL_TOKENS=1")
 
     add_files("src/**.cpp")
     add_files(
@@ -123,6 +122,24 @@ target("ConditionDropLogicTests")
     set_targetdir("build/v" .. build_version .. "/tests")
     add_files("tests/ConditionDropLogicTests.cpp")
     add_includedirs("src")
+
+target("ConditionFormTokenTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/ConditionFormTokenTests.cpp", "src/conditions/FormTokens.cpp")
+    add_includedirs("tests/condition_stubs", "src")
+
+target("ConditionDropdownTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/ConditionDropdownTests.cpp", "src/ui/components/EditableCombo.cpp",
+        "lib/imgui/imgui.cpp", "lib/imgui/imgui_draw.cpp",
+        "lib/imgui/imgui_tables.cpp", "lib/imgui/imgui_widgets.cpp")
+    add_includedirs("tests/condition_ui_stubs", "src", "lib/imgui")
 
 target("FittingDyeRulesTests")
     set_default(false)
@@ -228,7 +245,6 @@ target("SkyrimFittingSystemPersonal")
     add_defines("SFS_VERSION_MINOR=" .. minor)
     add_defines("SFS_VERSION_PATCH=" .. patch)
     add_defines('SFS_VERSION_STRING="' .. build_version_string .. '-personal"')
-    add_defines("SFS_VIRTUAL_TOKENS=1")
     add_defines("SFS_PERSONAL_KIT_COMPLETION=1")
 
     add_files("src/**.cpp")

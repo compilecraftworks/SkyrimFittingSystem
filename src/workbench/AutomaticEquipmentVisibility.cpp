@@ -641,14 +641,6 @@ void ClearAutomaticEquipmentStateEvents() {
   g_equipmentStateEventsByActor.clear();
 }
 
-void ClearAutomaticEquipmentStateEvents(const RE::FormID a_actorFormID) {
-  if (a_actorFormID == 0) {
-    return;
-  }
-  std::lock_guard lock(g_equipmentStateEventMutex);
-  g_equipmentStateEventsByActor.erase(a_actorFormID);
-}
-
 std::uint64_t GetAutomaticEquipmentControlSlotMask(
     const RE::TESObjectARMO *a_armor) {
   if (!a_armor) {

@@ -346,8 +346,6 @@ void Menu::LoadUserSettings() {
     }
     browser.previewSelected =
         json.value("catalogPreviewSelected", browser.previewSelected);
-    browser.showAllSlots =
-        json.value("catalogShowAllSlots", browser.showAllSlots);
     browser.favoritesOnly =
         json.value("catalogFavoritesOnly", browser.favoritesOnly);
     browser.inventoryOnly =
@@ -413,7 +411,6 @@ void Menu::SaveUserSettings() const {
       {"toggleModifier", toggleModifier_},
       {"theme", themeName_},
       {"catalogPreviewSelected", CatalogBrowserState().previewSelected},
-      {"catalogShowAllSlots", CatalogBrowserState().showAllSlots},
       {"catalogFavoritesOnly", CatalogBrowserState().favoritesOnly},
       {"catalogInventoryOnly", CatalogBrowserState().inventoryOnly},
       {"catalogHideUnnamedGear", CatalogBrowserState().hideUnnamedGear},

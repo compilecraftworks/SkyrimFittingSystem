@@ -9,7 +9,6 @@
 #include "imgui_internal.h"
 #include "kit_generator/UI.h"
 #include "native/ArmorSkinning.h"
-#include "native/FittingSlotState.h"
 #include "native/GridInventoryIntegration.h"
 #include "ui/components/PinnableTooltip.h"
 #include "workbench/EquipmentRefreshEventSink.h"
@@ -58,15 +57,10 @@ bool IsCurrentFrameEditableTextInputActive() {
          (textState->Flags & ImGuiInputTextFlags_ReadOnly) == 0;
 }
 
-void AllowTextInput([[maybe_unused]] RE::ControlMap *a_controlMap,
-                    [[maybe_unused]] bool a_allow) {
-#ifdef EXCLUSIVE_SKYRIM_VR
-  return;
-#else
+void AllowTextInput(RE::ControlMap *a_controlMap, bool a_allow) {
   using Func = decltype(&AllowTextInput);
   static REL::Relocation<Func> func{RELOCATION_ID(67252, 68552)};
   func(a_controlMap, a_allow);
-#endif
 }
 } // namespace
 
@@ -199,7 +193,6 @@ void Menu::OnMenuShow() {
   ApplyInitialWorkbenchFilterSelection();
   workbenchActorSyncState_ = {};
   if (auto *actor = ResolveWorkbenchPreviewActor(); actor != nullptr) {
-    native::ReconcileFittingSlotState(actor);
     workbench_.SyncRowsFromActor(actor);
     workbench::EquipmentRefreshEventSink::GetSingleton()->QueueActorRefresh(
         actor->GetFormID());

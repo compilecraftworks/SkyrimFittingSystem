@@ -533,8 +533,7 @@ void Menu::SortKitRows(std::vector<const KitEntry *> &a_rows,
 
 void Menu::DrawCatalogFilters() {
   auto &browser = CatalogBrowserState();
-  if (browser.activeTab == ui::catalog::BrowserTab::Slots ||
-      browser.activeTab == ui::catalog::BrowserTab::Conditions ||
+  if (browser.activeTab == ui::catalog::BrowserTab::Conditions ||
       browser.activeTab == ui::catalog::BrowserTab::Options ||
       browser.activeTab == ui::catalog::BrowserTab::KitGenerator) {
     return;

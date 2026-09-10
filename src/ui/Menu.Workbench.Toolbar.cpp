@@ -12,7 +12,6 @@
 #include "workbench/AutomaticEquipmentVisibility.h"
 
 #include <algorithm>
-#include <cstring>
 #include <functional>
 #include <iterator>
 #include <utility>
@@ -476,78 +475,4 @@ void Menu::DrawWorkbenchToolbar() {
   ImGui::Spacing();
 }
 
-void Menu::DrawWorkbenchEmptyState(const char *a_tableId,
-                                   const char *a_targetId,
-                                   const char *a_message) {
-  ImGui::TextWrapped("%s", a_message);
-
-  if (!ImGui::BeginTable(a_tableId, 2,
-                         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
-                             ImGuiTableFlags_Resizable,
-                         ImVec2(0.0f, 180.0f))) {
-    return;
-  }
-
-  const auto equippedLabel =
-      ui::Localization::GetSingleton()->Get("workbench.equipped");
-  const auto overridesLabel =
-      ui::Localization::GetSingleton()->Get("workbench.overrides");
-  const auto dropEquipmentMessage =
-      ui::Localization::GetSingleton()->Get("workbench.empty.drop_equipment");
-  const auto dropOverridesMessage =
-      ui::Localization::GetSingleton()->Get("workbench.empty.drop_overrides");
-  ImGui::TableSetupColumn(equippedLabel.data(),
-                          ImGuiTableColumnFlags_WidthStretch, 0.80f);
-  ImGui::TableSetupColumn(overridesLabel.data(),
-                          ImGuiTableColumnFlags_WidthStretch, 1.05f);
-  ImGui::TableHeadersRow();
-  ImGui::TableNextRow(ImGuiTableRowFlags_None, 116.0f);
-  ImRect dropRect{};
-  bool hasDropRect = false;
-
-  ImGui::TableSetColumnIndex(0);
-  if (const auto *table = ImGui::GetCurrentTable(); table != nullptr) {
-    const ImRect leftCellRect = ImGui::TableGetCellBgRect(table, 0);
-    dropRect = leftCellRect;
-    hasDropRect = true;
-    ImGui::SetCursorScreenPos(
-        ImVec2(leftCellRect.Min.x + ImGui::GetStyle().CellPadding.x,
-               leftCellRect.Min.y + ImGui::GetStyle().CellPadding.y));
-    ImGui::PushTextWrapPos(leftCellRect.Max.x -
-                           ImGui::GetStyle().CellPadding.x);
-    ImGui::TextDisabled("%s", dropEquipmentMessage.data());
-    ImGui::PopTextWrapPos();
-  }
-
-  ImGui::TableSetColumnIndex(1);
-  if (const auto *table = ImGui::GetCurrentTable(); table != nullptr) {
-    const ImRect rightCellRect = ImGui::TableGetCellBgRect(table, 1);
-    if (hasDropRect) {
-      dropRect.Max = rightCellRect.Max;
-    } else {
-      dropRect = rightCellRect;
-      hasDropRect = true;
-    }
-  }
-  ImGui::TextDisabled("%s", dropOverridesMessage.data());
-
-  if (hasDropRect &&
-      ImGui::BeginDragDropTargetCustom(dropRect, ImGui::GetID(a_targetId))) {
-    const auto *payload =
-        ImGui::AcceptDragDropPayload(ui::workbench::kVariantItemPayloadType);
-    if (payload && payload->Data != nullptr &&
-        payload->DataSize == sizeof(DraggedEquipmentPayload)) {
-      DraggedEquipmentPayload dragPayload{};
-      std::memcpy(&dragPayload, payload->Data, sizeof(dragPayload));
-
-      if (ApplyWorkbenchEmptyDrop(dragPayload)) {
-        workbench_.RefreshNativeArmorOverridesForActor(
-            ResolveNewWorkbenchRowOwnerActorFormID(), conditionStore_.revision);
-      }
-    }
-    ImGui::EndDragDropTarget();
-  }
-
-  ImGui::EndTable();
-}
 } // namespace sfs

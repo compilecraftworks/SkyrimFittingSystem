@@ -115,7 +115,6 @@ ReconcileAutomaticEquipmentStateEvents(
     RE::FormID a_actorFormID,
     std::span<const RE::FormID> a_observedWornArmorFormIDs);
 void ClearAutomaticEquipmentStateEvents();
-void ClearAutomaticEquipmentStateEvents(RE::FormID a_actorFormID);
 
 // Builds the actual-equipment occupancy used by automatic appearance links.
 // ARMO and every ARMA slot are combined so vanilla Forearms (34) and Calves
