@@ -20,7 +20,7 @@ function Read-Manifest([string]$Path) {
     return $manifest
 }
 
-$runtimePath = Join-Path $repo 'Release/Skyrim Fitting System v1.6.2 SE.zip'
+$runtimePath = Join-Path $repo 'Release/Skyrim Fitting System v1.6.2 SE-AE.zip'
 $sourcePath = Join-Path $repo 'Sources/Skyrim Fitting System v1.6.2 Source.zip'
 $runtime = Read-Manifest $runtimePath
 $source = Read-Manifest $sourcePath

@@ -215,7 +215,7 @@ $distDirectory = Join-Path $repoRoot 'dist'
 foreach ($directory in @($releaseDirectory, $sourcesDirectory, $distDirectory)) {
     [System.IO.Directory]::CreateDirectory($directory) | Out-Null
 }
-$runtimeZip = Join-Path $releaseDirectory "Skyrim Fitting System v$version SE.zip"
+$runtimeZip = Join-Path $releaseDirectory "Skyrim Fitting System v$version SE-AE.zip"
 $sourceZip = Join-Path $sourcesDirectory "Skyrim Fitting System v$version Source.zip"
 foreach ($archive in @($runtimeZip, $sourceZip)) {
     if (Test-Path -LiteralPath $archive) { Remove-Item -LiteralPath $archive -Force }
