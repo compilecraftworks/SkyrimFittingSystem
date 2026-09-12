@@ -1,4 +1,5 @@
 #include "native/ArmorSkinning.h"
+#include "api/RenderedOutfitProvider.h"
 
 #include "ArmorUtils.h"
 #include "ConditionMaterializer.h"
@@ -29,6 +30,7 @@
 #include <cctype>
 #include <chrono>
 #include <mutex>
+#include <span>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -60,6 +62,7 @@ struct DisplaySet {
   bool trackRegisteredAppearanceMorphNodes{false};
   bool applyInitialNativeMorphs{true};
   std::vector<const RE::TESObjectARMO *> armors;
+  std::vector<std::uint32_t> armorSlotMasks;
   std::unordered_set<RE::FormID> hiddenArmorFormIDs;
   std::unordered_set<RE::FormID> forceVisibleArmorFormIDs;
   std::uint32_t slotMask{0};
@@ -73,6 +76,9 @@ struct DisplaySet {
     return std::ranges::find(armors, a_armor) != armors.end();
   }
 };
+
+void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,
+    const std::unordered_set<const RE::TESObjectARMO*>& equipped);
 
 struct DavFallbackRefreshSignature {
   bool active{false};
@@ -200,12 +206,7 @@ public:
   void SetObject(const RE::BSTSmartPointer<RE::BSScript::Object> &) override {}
 };
 
-void QueueIedEvaluate(RE::Actor *a_actor) {
-  if (!a_actor) {
-    return;
-  }
-
-  const auto actorFormID = a_actor->GetFormID();
+void QueueIedEvaluateID(const RE::FormID actorFormID) {
   auto *taskInterface = SKSE::GetTaskInterface();
   if (actorFormID == 0 || !taskInterface) {
     return;
@@ -256,6 +257,10 @@ void QueueIedEvaluate(RE::Actor *a_actor) {
           "SFS IED compatibility: IED.Evaluate could not be dispatched; hidden real equipment remains safe, but IED may refresh on its next normal update");
     }
   });
+}
+
+void QueueIedEvaluate(RE::Actor* actor) {
+  if (actor) { QueueIedEvaluateID(actor->GetFormID()); }
 }
 
 // A paused SFS menu stops the normal actor-animation tick. A replacement kit
@@ -1584,6 +1589,9 @@ BuildDisplaySet(RE::Actor *a_actor,
   }
   auto workbenchStateLock = menu->GetWorkbench().AcquireStateLock();
   if (!ShouldManageActorDisplay(a_actor, *menu)) {
+    if (a_applyTemporarySuppression) {
+      sfs::api::rendered::ForgetPreparedValue(a_actor->GetFormID());
+    }
     return displaySet;
   }
 
@@ -1791,6 +1799,7 @@ BuildDisplaySet(RE::Actor *a_actor,
             occupiedDisplaySlots |= slotMask;
             displaySet.slotMask |= slotMask;
             displaySet.armors.push_back(armor);
+            displaySet.armorSlotMasks.push_back(slotMask);
             displayedRowOverride = true;
             displayedRowSlotMask |= slotMask;
           }
@@ -1953,6 +1962,7 @@ BuildDisplaySet(RE::Actor *a_actor,
     if (!displaySet.genitalArmorEquipped && resolvedGenitalArmor &&
         !displaySet.Contains(resolvedGenitalArmor)) {
       displaySet.armors.push_back(resolvedGenitalArmor);
+      displaySet.armorSlotMasks.push_back(GetSkinningSlotMask(resolvedGenitalArmor, true));
       displaySet.slotMask |= GetSkinningSlotMask(resolvedGenitalArmor, true);
     }
   }
@@ -1963,6 +1973,9 @@ BuildDisplaySet(RE::Actor *a_actor,
     displaySet.hiddenSlotMask |= forceVisibleRealSlotMask;
   }
 
+  if (a_applyTemporarySuppression && g_buildDisplaySetDepth == 1) {
+    PrepareOutfitValue(a_actor, displaySet, equippedArmors);
+  }
   return displaySet;
 }
 
@@ -2420,6 +2433,9 @@ bool ApplyArmorAddon(const RE::TESObjectARMO *a_armor, RE::TESRace *a_race,
 } // namespace
 
 namespace sfs::native {
+void QueueIedEvaluation(const std::uint32_t actorFormID) {
+  QueueIedEvaluateID(actorFormID);
+}
 void SetIedVisitWornItemsChainTarget(const std::uintptr_t a_chainTarget) {
   g_iedVisitWornItemsChainTarget.store(a_chainTarget);
 }
@@ -2918,6 +2934,26 @@ FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(RE::Actor *a_actor) {
   return BuildFinalRenderedOutfitSnapshot(a_actor, BuildDisplaySet(a_actor));
 }
 
+[[nodiscard]] static bool SnapshotHasBodyKeyword(
+    const std::span<const RE::TESObjectARMO* const> actualArmors,
+    const std::span<const RE::TESObjectARMO* const> additionalArmors,
+    const RE::BGSKeyword* a_keyword, const bool asksClothingBody) {
+  if (!a_keyword) { return false; }
+  if (std::ranges::any_of(actualArmors, [a_keyword](const auto* armor) {
+        return armor && armor->HasKeyword(a_keyword);
+      })) { return true; }
+  const auto bodyMask = static_cast<std::uint32_t>(sfs::armor::GetArmorSlotMask(32));
+  return std::ranges::any_of(additionalArmors, [&](const auto* armor) {
+    if (!armor) { return false; }
+    if (armor->HasKeyword(a_keyword)) { return true; }
+    // Infer a missing body keyword only for Body-slot appearances. Ordinary
+    // accessories must not become torso clothing merely because they render.
+    if ((sfs::armor::GetArmorDisplaySlotMask(armor) & bodyMask) == 0) { return false; }
+    return asksClothingBody ? armor->IsClothing()
+                           : (armor->IsLightArmor() || armor->IsHeavyArmor());
+  });
+}
+
 const RE::TESObjectARMO *GetDisplayedFittingArmorForSlot(
     RE::Actor *a_actor, const std::uint32_t a_slotMask) {
   if (!a_actor || a_slotMask == 0) {
@@ -2958,39 +2994,8 @@ GetDisplayedBodyKeywordState(RE::Actor *a_actor,
     return std::nullopt;
   }
   const auto snapshot = BuildFinalRenderedOutfitSnapshot(a_actor, displaySet);
-
-  if (std::ranges::any_of(snapshot.visibleActualArmors,
-                          [a_keyword](const auto *a_armor) {
-        return a_armor && a_armor->HasKeyword(a_keyword);
-      })) {
-    return true;
-  }
-
-  const auto bodyMask = static_cast<std::uint32_t>(
-      sfs::armor::GetArmorSlotMask(32));
-  return std::ranges::any_of(
-      snapshot.visibleAdditionalArmors,
-      [&](const RE::TESObjectARMO *a_armor) {
-        if (!a_armor) {
-          return false;
-        }
-        if (a_armor->HasKeyword(a_keyword)) {
-          return true;
-        }
-
-        // Some appearance-only ARMO records correctly occupy Body but omit
-        // the usual vanilla body keyword. Infer only this exact Body case
-        // from the record's armor type; do not treat arbitrary accessories or
-        // other mod slots as clothing merely because they are visible.
-        const auto appearanceMask = static_cast<std::uint32_t>(
-            sfs::armor::GetArmorDisplaySlotMask(a_armor));
-        if ((appearanceMask & bodyMask) == 0) {
-          return false;
-        }
-        return asksClothingBody ? a_armor->IsClothing()
-                                : (a_armor->IsLightArmor() ||
-                                   a_armor->IsHeavyArmor());
-      });
+  return SnapshotHasBodyKeyword(snapshot.visibleActualArmors,
+      snapshot.visibleAdditionalArmors, a_keyword, asksClothingBody);
 }
 
 bool IsSFSOwnedRuntimeKeyword(const RE::TESObjectARMO *a_armor,
@@ -3220,6 +3225,9 @@ void VisitWornItemsWithHiddenRealEquipmentFilter(
 
   auto *target = a_target ? a_target : a_inventory->owner;
   auto *actor = target ? target->As<RE::Actor>() : nullptr;
+  // Defer publication to a game task. This records an observed skinning pass,
+  // not a GPU fence or a guarantee that parallel scene attachments have ended.
+  if (actor) { sfs::api::rendered::NotifySkinning(actor->GetFormID()); }
   const auto displaySet = BuildDisplaySet(actor);
   const auto filterRequired =
       displaySet.active &&
@@ -3378,6 +3386,7 @@ void RefreshArmorFor(RE::Actor *a_actor, const ArmorRefreshReason a_reason) {
        .emptyEquipment3DRefresh = emptyEquipment3DRefresh,
        .davFallback3DRefresh = davFallback3DRefresh,
        .nativeProcessAvailable = process != nullptr});
+  sfs::api::rendered::NotifyRefresh(a_actor->GetFormID(), plan.HasBackendWork());
   const auto queueFollowups = [&]() {
     if (plan.queuePoseSync) {
       QueuePausedReplacementPreviewPoseSync(a_actor);
@@ -3486,3 +3495,63 @@ void QueuePlayerArmorRefresh() {
   QueueArmorRefreshFor(RE::PlayerCharacter::GetSingleton());
 }
 } // namespace sfs::native
+
+namespace sfs::api::rendered {
+bool HasDisplayConfiguration(const std::uint32_t actorFormID) {
+  auto* actor = RE::TESForm::LookupByID<RE::Actor>(actorFormID);
+  auto* menu = sfs::Menu::GetSingleton();
+  if (!actor || !menu || !menu->IsGameDataLoaded()) { return false; }
+  auto lock = menu->GetWorkbench().AcquireStateLock();
+  return ShouldManageActorDisplay(actor, *menu);
+}
+} // namespace sfs::api::rendered
+
+namespace {
+void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,
+    const std::unordered_set<const RE::TESObjectARMO*>& equipped) {
+  namespace abi = sfs::rendered_outfit_api;
+  // Only the top-level BuildDisplaySet enters here; no external callbacks run
+  // from the producer. One POD scratch buffer per thread, not per actor, avoids
+  // reallocating/copying the public item list on unchanged display queries.
+  thread_local sfs::api::rendered::Value value;
+  value.items.clear();
+  value.bodyFlags = 0;
+  if (!display.active) {
+    value.status = abi::Status::NotManaged;
+    sfs::api::rendered::PrepareValue(actor->GetFormID(), value);
+    return;
+  }
+  const auto actualArmors = CollectVisibleRealArmors(actor, display, equipped);
+  value.status = abi::Status::Ready;
+  value.items.reserve(actualArmors.size() + display.armors.size());
+  const auto append = [&](const auto* armor, const std::uint32_t mask,
+                          const std::uint32_t source) {
+    if (!armor) { return; }
+    const auto id = armor->GetFormID();
+    const bool dynamic = (id >> 24) == 0xFF;
+    value.items.push_back({id, dynamic ? 0u : id,
+        static_cast<std::uint32_t>(armor->GetSlotMask().underlying()), mask,
+        source, dynamic ? abi::OriginalUnknown : 0u});
+  };
+  for (const auto* armor : actualArmors) {
+    append(armor, GetSkinningSlotMask(armor, display.genitalCompatibilityAvailable), abi::Actual);
+  }
+  for (std::size_t i = 0; i < display.armors.size(); ++i) {
+    append(display.armors[i], display.armorSlotMasks[i], abi::Registered);
+  }
+  if (sfs::native::SnapshotHasBodyKeyword(actualArmors, display.armors,
+        RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ArmorCuirass"), false)) {
+    value.bodyFlags |= abi::ArmorCuirass;
+  }
+  if (sfs::native::SnapshotHasBodyKeyword(actualArmors, display.armors,
+        RE::TESForm::LookupByEditorID<RE::BGSKeyword>("ClothingBody"), true)) {
+    value.bodyFlags |= abi::ClothingBody;
+  }
+  sfs::api::rendered::PrepareValue(actor->GetFormID(), value);
+  if (value.items.capacity() > 256) {
+    // Large custom outfits are fully published, but don't permanently retain
+    // an unusually large scratch allocation on a long-lived engine thread.
+    std::vector<abi::Item>{}.swap(value.items);
+  }
+}
+} // namespace

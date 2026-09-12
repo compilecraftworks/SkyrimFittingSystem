@@ -1,4 +1,5 @@
 #include "EquipmentCatalog.h"
+#include "api/RenderedOutfitProvider.h"
 #include "Hooks.h"
 #include "InputManager.h"
 #include "Plugin.h"
@@ -12,6 +13,7 @@
 #include "native/GridInventoryIntegration.h"
 #include "native/GenitalCompatibility.h"
 #include "native/HelmetToggle2Integration.h"
+#include "native/IedConditionIntegration.h"
 #include "native/OpenAnimationReplacerIntegration.h"
 #include "native/RaceMenuBodyMorph.h"
 #include "native/SOSStorageSync.h"
@@ -35,6 +37,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::native::oar::RegisterConditions();
     break;
   case SKSE::MessagingInterface::kDataLoaded:
+    sfs::api::rendered::RegisterEvents();
     sfs::native::genital_compatibility::InitializeEnvironment();
     sfs::kit_generator::Generator::Get().SnapshotLoadedArmorForms();
     sfs::virtual_tokens::InitializeVirtualWornTokens();
@@ -60,6 +63,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     }
     break;
   case SKSE::MessagingInterface::kPostPostLoad:
+    sfs::native::ied::InstallConditionBridge();
     sfs::native::oar::RegisterConditions();
     sfs::native::smoothcam::RequestInterface();
     sfs::hooks::Install();
@@ -70,6 +74,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
   case SKSE::MessagingInterface::kPreLoadGame:
     sfs::serialization::PrepareForLoadTransition();
     break;
+  case SKSE::MessagingInterface::kNewGame:
   case SKSE::MessagingInterface::kPostLoadGame:
     sfs::native::InvalidateQueuedArmorRefreshes();
     sfs::native::dave::ForgetHiddenRealEquipmentState();

@@ -249,7 +249,7 @@ void Menu::LoadUserSettings() {
         menuCharacterSide <=
                 static_cast<std::uint8_t>(ui::MenuCharacterSide::Right)
             ? static_cast<ui::MenuCharacterSide>(menuCharacterSide)
-            : ui::MenuCharacterSide::Right;
+            : ui::MenuCharacterSide::Left;
     addCrosshairNpcToActorList_ =
         json.value("addCrosshairNpcToActorList", addCrosshairNpcToActorList_);
     catalogBodyFamilyFilterEnabled_ = json.value(

@@ -2,6 +2,7 @@
 
 #include "InputManager.h"
 #include "Keycode.h"
+#include "input/MenuCancel.h"
 #include "api/SkyrimFittingSystemAPI.h"
 #include "native/FittingDye.h"
 #include "runtime/RuntimeLayouts.h"
@@ -105,14 +106,27 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
     auto *event = *link;
     bool blockEvent = false;
 
-    if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton &&
+    if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kThumbstick &&
+        event->GetDevice() == RE::INPUT_DEVICE::kGamepad && menuEnabled &&
+        !menu->WantsTextInput() && !toggleCaptureActive &&
+        sfs::ui::MenuCharacterPresentation::GetSingleton()->IsActive() &&
+        sfs::InputManager::GetSingleton()->IsGamepadRotationChordDown()) {
+      // InputManager already copied the RS axis. Do not also move a menu
+      // cursor or vanilla camera with a deflection reserved for LT+RS rotation.
+      const auto* stick = event->AsThumbstickEvent();
+      blockEvent = stick && stick->IsRight();
+    } else if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton &&
         event->GetDevice() == RE::INPUT_DEVICE::kKeyboard) {
       const auto *buttonEvent = event->AsButtonEvent();
       if (buttonEvent != nullptr) {
         const auto scanCode = buttonEvent->GetIDCode();
         const bool isRelease = buttonEvent->IsUp();
 
-        if (shortcutSuppressionActive) {
+        if (menuEnabled && sfs::input::IsMenuCancel(*buttonEvent)) {
+          blockEvent = true;
+          if (isRelease) { g_swallowedUntilReleaseButtons.erase(scanCode); }
+          else if (buttonEvent->IsPressed()) { g_swallowedUntilReleaseButtons.insert(scanCode); }
+        } else if (shortcutSuppressionActive) {
           if (g_swallowedUntilReleaseButtons.contains(scanCode)) {
             blockEvent = true;
             if (isRelease) {
@@ -165,7 +179,8 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
           const bool alreadySwallowed =
               g_swallowedGamepadUntilReleaseButtons.contains(gamepadKey);
 
-          if (toggleCaptureActive || boundModifierEvent || boundToggleEvent ||
+          if ((menuEnabled && sfs::input::IsMenuCancel(*buttonEvent)) ||
+              toggleCaptureActive || boundModifierEvent || boundToggleEvent ||
               alreadySwallowed) {
             blockEvent = true;
             if (isRelease) {

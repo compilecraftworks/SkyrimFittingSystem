@@ -4,6 +4,7 @@
 #include "api/SkyrimFittingSystemAPI.h"
 #include "imgui.h"
 #include "input/KitListNavigation.h"
+#include "input/MenuCancel.h"
 #include "ui/InputSinkBridge.h"
 
 #include <SKSE/InputMap.h>
@@ -192,6 +193,7 @@ auto InputManager::GetSingleton() -> InputManager * {
 }
 
 void InputManager::OnFocusChange(bool a_focus) {
+  ResetGamepadRotation();
   SetShortcutSuppressionActive(false);
   toggleKeyDown_ = false;
   modifierSidesDown_ = 0;
@@ -212,6 +214,7 @@ void InputManager::OnFocusChange(bool a_focus) {
 }
 
 void InputManager::Flush() {
+  ResetGamepadRotation();
   SetShortcutSuppressionActive(false);
   {
     std::scoped_lock lock(inputLock_);
@@ -253,6 +256,21 @@ void InputManager::AddEventToQueue(RE::InputEvent **a_events) {
 
   std::scoped_lock lock(inputLock_);
   for (auto event = *a_events; event; event = event->next) {
+    // Copy analog values before the event list is filtered/reused by Skyrim.
+    if (event->GetDevice() == RE::INPUT_DEVICE::kGamepad) {
+      if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kThumbstick) {
+        const auto* stick = event->AsThumbstickEvent();
+        if (stick && stick->IsRight()) { gamepadRotation_.SetRightX(stick->xValue); }
+      } else if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kButton) {
+        const auto* button = event->AsButtonEvent();
+        if (button && keycode::NormalizeGamepadKeyCode(button->GetIDCode()) ==
+                SKSE::InputMap::kGamepadButtonOffset_LT) {
+          gamepadRotation_.SetTrigger(button->value);
+        }
+      } else if (event->GetEventType() == RE::INPUT_EVENT_TYPE::kDeviceConnect) {
+        ResetGamepadRotation();
+      }
+    }
     inputQueue_.push_back(event);
   }
 }
@@ -283,6 +301,16 @@ void InputManager::ProcessInputEvents() {
       const auto scanCode = buttonEvent->GetIDCode();
       const bool keyIsDown = buttonEvent->IsPressed();
       const bool keyWentDown = buttonEvent->IsDown();
+
+      if (inputSinkState.enabled && input::IsMenuCancel(*buttonEvent)) {
+        if (keyWentDown) {
+          ui::CancelInputSink();
+          io.ClearInputKeys();
+        }
+        // The raw event is consumed by Hooks before Skyrim can emit a second
+        // Cancel user event. One press closes exactly one transient/main UI.
+        continue;
+      }
 
       if (const auto modifierBit = GetModifierBit(scanCode); modifierBit != 0) {
         const bool modifierWasDown = (modifierSidesDown_ & modifierBit) != 0;

@@ -2,6 +2,19 @@ param([Parameter(Mandatory=$true)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $groups = @{
+    'IedEvaluationQueue.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        'void ClearQueuedIedEvaluations()',
+        '[[nodiscard]] bool IsActorRefreshable(',
+        'class IedEvaluateCallback final',
+        'void QueueIedEvaluateID(', 'void QueueIedEvaluate(RE::Actor* actor)'))
+    'RenderedOutfitVisibility.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        ('[[nodiscard]] bool' + "`n" + 'IsRealArmorVisibleInDisplaySet('),
+        '[[nodiscard]] std::vector<const RE::TESObjectARMO *> CollectVisibleRealArmors('))
+    'RenderedOutfitBodyKeyword.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        '[[nodiscard]] static bool SnapshotHasBodyKeyword('))
+    'RenderedOutfitProducer.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        ('void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,' + "`n" +
+         '    const std::unordered_set<const RE::TESObjectARMO*>& equipped) {')))
     'IntegrationOar.production.inc' = @('src/native/OpenAnimationReplacerIntegration.cpp', @(
         'bool RegisterConditionsImpl()', 'void RegisterConditions()'))
     'IntegrationDaveQuery.production.inc' = @('src/native/DaveIntegration.cpp', @(

@@ -15,6 +15,7 @@ struct InputSinkState {
 void HandleToggleKeyCapture(std::uint32_t a_scanCode,
                             std::uint32_t a_modifierScanCode);
 void ToggleInputSinkVisibility();
+void CancelInputSink();
 [[nodiscard]] bool QueueKitListMove(int a_delta);
 [[nodiscard]] bool QueueKitListApply();
 [[nodiscard]] bool QueueKitListPreview();

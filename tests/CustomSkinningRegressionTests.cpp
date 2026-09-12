@@ -28,6 +28,7 @@ template<class... T> void info(T&&...) {}
 template<class... T> void warn(T&&...) {}
 template<class... T> void error(T&&...) {}
 }
+namespace sfs::api::rendered { void NotifySkinning(std::uint32_t) {} }
 namespace RE {
 namespace BSContainer { enum class ForEachResult { kStop, kContinue }; }
 struct TESBoundObject {};
@@ -36,7 +37,10 @@ struct InventoryEntryData { TESObjectARMO* armor{}; };
 struct TESObjectREFR {
   template<class T> T* As() { return static_cast<T*>(this); }
 };
-struct Actor : TESObjectREFR { bool active{true}; bool hideActual{true}; };
+struct Actor : TESObjectREFR {
+  bool active{true}; bool hideActual{true};
+  std::uint32_t GetFormID() const { return 0x14; }
+};
 struct ActorWeightModel {};
 struct InventoryChanges {
   struct IItemChangeVisitor {

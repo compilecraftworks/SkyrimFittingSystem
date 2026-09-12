@@ -1,6 +1,7 @@
 #include "ui/MenuCharacterPresentation.h"
 
 #include "imgui.h"
+#include "InputManager.h"
 #include "native/SmoothCamIntegration.h"
 #include "ui/Menu.h"
 #include "ui/MenuCameraProjection.h"
@@ -28,8 +29,6 @@ constexpr float kMenuWorldFov = 70.0f;
 constexpr float kPlayerPitch = 0.1f;
 constexpr float kLeftFacingCorrection = 0.35f;
 constexpr float kRightFacingCorrection = -0.35f;
-constexpr float kMouseRotationRadiansPerPixel = 0.003f;
-constexpr float kMaxMouseRotationRadiansPerFrame = 0.060f;
 
 std::atomic_bool g_cameraUpdateQueued{false};
 std::atomic<menu_interaction::CameraZoomUpdate> g_pendingCameraZoomUpdate{
@@ -495,6 +494,7 @@ void MenuCharacterPresentation::Apply(const MenuCharacterSide a_side,
 }
 
 void MenuCharacterPresentation::Restore() {
+  InputManager::GetSingleton()->ResetGamepadRotation();
   g_presentationProjectionActive.store(false, std::memory_order_release);
   if (state_ == nullptr) {
     return;
@@ -594,6 +594,10 @@ void MenuCharacterPresentation::Restore() {
   logger::debug("Restored SFS menu character presentation");
 }
 
+bool MenuCharacterPresentation::IsActive() const {
+  return g_presentationProjectionActive.load(std::memory_order_acquire);
+}
+
 void MenuCharacterPresentation::UpdateRotationInteraction() {
   if (state_ == nullptr || ImGui::GetCurrentContext() == nullptr) {
     return;
@@ -660,17 +664,17 @@ void MenuCharacterPresentation::UpdateRotationInteraction() {
     }
   }
   ApplyMenuWorldFov(camera);
-  if (!state_->rotating || io.MouseDelta.x == 0.0f) {
-    return;
-  }
-
   // Large cursor deltas used to teleport the actor by tens or hundreds of
   // degrees in one frame. Preserve proportional control and keep each visible
-  // rotation step bounded.
-  const auto delta =
-      std::clamp(-io.MouseDelta.x * kMouseRotationRadiansPerPixel,
-                 -kMaxMouseRotationRadiansPerFrame,
-                 kMaxMouseRotationRadiansPerFrame);
+  // rotation step bounded. Both inputs share the SAME pause/SMP-safe path.
+  // Mouse dragging takes priority if both devices are used together.
+  const bool gamepadAllowed = !rotationBlockedByPopup && !io.AppFocusLost &&
+      !io.WantTextInput && !Menu::GetSingleton()->IsCapturingToggleKey() &&
+      ImGui::GetDragDropPayload() == nullptr;
+  const auto delta = state_->rotating
+      ? input::character_rotation::MouseRadians(io.MouseDelta.x)
+      : gamepadAllowed ? InputManager::GetSingleton()->GetGamepadRotationDelta(io.DeltaTime) : 0.0f;
+  if (delta == 0.0f) { return; }
   const auto gamePaused = [] {
     auto *ui = RE::UI::GetSingleton();
     return ui != nullptr && ui->GameIsPaused();

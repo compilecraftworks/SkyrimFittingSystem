@@ -52,6 +52,8 @@ enum class ArmorRefreshReason : std::uint8_t {
 };
 
 void InstallArmorSkinningHooks();
+// Uses the existing deduplicated IED.Evaluate task; does not rebuild SFS 3D.
+void QueueIedEvaluation(std::uint32_t actorFormID);
 void RefreshArmorFor(RE::Actor *a_actor, ArmorRefreshReason a_reason =
                                              ArmorRefreshReason::kDisplayState);
 void QueueArmorRefreshFor(RE::Actor *a_actor,

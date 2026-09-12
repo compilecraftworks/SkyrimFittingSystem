@@ -1,6 +1,7 @@
 ﻿#include "Menu.h"
 
 #include "ArmorUtils.h"
+#include "ui/components/TitleBarHint.h"
 #include "PlayerInventory.h"
 #include "kit_generator/UI.h"
 #include "ui/MenuInteractionRules.h"
@@ -702,7 +703,12 @@ void Menu::DrawWindow() {
   ImGuiWindowFlags mainWindowFlags = ImGuiWindowFlags_NoCollapse;
   ImGui::PushStyleVar(ImGuiStyleVar_Alpha,
                       std::clamp(windowAlpha_ * uiOpacity_, 0.0f, 1.0f));
-  if (!ImGui::Begin(windowTitle.data(), &open, mainWindowFlags)) {
+  ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, ImVec2(0.0f, 0.5f));
+  const bool contentVisible = ImGui::Begin(windowTitle.data(), &open, mainWindowFlags);
+  ImGui::PopStyleVar();
+  ui::components::DrawTitleBarHint(windowTitle, localization->Get("window.rotation_hint"),
+                                  localization->Get("window.rotation_hint_compact"));
+  if (!contentVisible) {
     ImGui::End();
     DrawCatalogWindow();
     DrawCreateKitDialog();

@@ -18,6 +18,7 @@ void HandleToggleKeyCapture(const std::uint32_t a_scanCode,
 }
 
 void ToggleInputSinkVisibility() { Menu::GetSingleton()->Toggle(); }
+void CancelInputSink() { Menu::GetSingleton()->HandleCancel(); }
 
 bool QueueKitListMove(const int a_delta) {
   return Menu::GetSingleton()->QueueKitListMove(a_delta);

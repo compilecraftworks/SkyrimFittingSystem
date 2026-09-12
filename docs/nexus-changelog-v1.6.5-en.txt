@@ -1,0 +1,10 @@
+Skyrim Fitting System v1.6.5 SE-AE
+- Added the read-only Rendered Outfit API v1: final-visible actual/registered armor, effective slots, body-coverage flags, and actor-local lifecycle notifications.
+- Built in IED 1.7.4 BipedSlot integration for verified pre/post-629 distributions. Covered equipment/node conditions read SFS final-display state; no separate SFS patch or IED file replacement.
+- IED absent: no bridge hooks, observer or IED evaluation tasks. Other IED condition families and unsupported binaries retain original IED behavior.
+- Preserved Helgen custom-skin visitor safety and added unload/delete/load-cancellation regression coverage. Reevaluation is actor-local, deduplicated, and does not loop on scene-only changes.
+- Added LT + horizontal RS rotation and a localized right-aligned hint beside the title-bar close button.
+- Cancel follows keyboard/gamepad remapping: dismiss the active popup/editor first, otherwise close SFS.
+- First-run character position defaults to Left; Pause Game remains unchecked. Existing saved settings are retained.
+- All 20 regression targets passed. Game/RaceMenu support, BodyMorph ownership, DAVE/DAV/native dispatch and optional patch versions are unchanged.
+- Live Helgen/controller testing and measured frame-time comparisons remain outstanding; no CTD-free or FPS guarantee.

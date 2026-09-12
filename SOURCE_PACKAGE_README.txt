@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.6.3 - Nexus Source Package
+Skyrim Fitting System v1.6.5 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -11,7 +11,14 @@ release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
 
-v1.6.3 preserves the v1.4.1 actor-local empty-equipment display bootstrap and
+v1.6.5 adds the read-only rendered-outfit API, verified IED 1.7.4 BipedSlot
+condition bridge, gamepad LT + RS rotation, mapped Cancel handling, and
+localized title-bar hints. See docs/RELEASE-NOTES-v1.6.5.md and its Korean
+counterpart for scope and outstanding in-game verification. The public header
+is extras/SkyrimFittingSystemRenderedOutfitAPI.h; its ABI and consumer contract
+are described in docs/DEVELOPMENT-v1.6.5-RENDERED-OUTFIT-API.md.
+
+SFS preserves the v1.4.1 actor-local empty-equipment display bootstrap and
 the complete in-game Kit Generator built into SFSCore. The generator can scan
 outfit plugins, edit candidate combinations, preview them read-only in the
 character and workbench, and write finished kits directly to the SFS user-kit

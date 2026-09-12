@@ -153,6 +153,7 @@ void Menu::OnMenuShow() {
   if (!initialized_ || enabled_) {
     return;
   }
+  InputManager::GetSingleton()->ResetGamepadRotation();
 
   // Remove only rows for which both condition and action were cleared. Old
   // save data may contain these, while every half-complete row remains intact.

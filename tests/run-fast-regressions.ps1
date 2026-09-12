@@ -6,6 +6,9 @@ $ErrorActionPreference = "Stop"
 $repository = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $repository "VERSION") -Raw).Trim()
 $targets = @(
+    "IedConditionIntegrationTests",
+    "MenuInteractionInputTests",
+    "RenderedOutfitAPITests",
     "RuntimeLayoutTests",
     "KitGeneratorLogicTests",
     "BodyFamilyLogicTests",
@@ -44,6 +47,29 @@ try {
         }
     }
 
+    $menuHeader = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.h") -Raw
+    $menuSettingsDefaults = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Settings.cpp") -Raw
+    if (-not $menuHeader.Contains('bool pauseGameWhenOpen_{false}') -or
+        -not $menuHeader.Contains('menuCharacterSide_{ui::MenuCharacterSide::Left}') -or
+        -not $menuSettingsDefaults.Contains('json.value("pauseGameWhileOpen", pauseGameWhenOpen_)') -or
+        -not $menuSettingsDefaults.Contains('"menuCharacterSide", static_cast<std::uint8_t>(menuCharacterSide_)')) {
+        throw "First-run defaults must be left/unpaused, while existing saved choices remain authoritative"
+    }
+    $sfsInput = Get-Content -LiteralPath (Join-Path $repository "src/InputManager.cpp") -Raw
+    $sfsInputHooks = Get-Content -LiteralPath (Join-Path $repository "src/Hooks.cpp") -Raw
+    if (-not $sfsInput.Contains('input::IsMenuCancel(*buttonEvent)') -or
+        -not $sfsInputHooks.Contains('sfs::input::IsMenuCancel(*buttonEvent)') -or
+        $sfsInputHooks.IndexOf('AddEventToQueue(a_events)') -gt $sfsInputHooks.IndexOf('FilterBlockedInputEvents(a_events);') -or
+        -not $sfsInput.Contains('gamepadRotation_.SetRightX(stick->xValue)') -or
+        -not $sfsInput.Contains('RE::INPUT_EVENT_TYPE::kDeviceConnect')) {
+        throw "Menu Cancel must share one mapping/filter and analog rotation must copy input before filtering"
+    }
+    foreach ($sfsLocale in @('en', 'kor', 'zh_cn')) {
+        $sfsStrings = (Get-Content -LiteralPath (Join-Path $repository "data/Interface/SkyrimFittingSystem/locales/$sfsLocale.json") -Raw | ConvertFrom-Json).strings
+        if (-not $sfsStrings.'window.rotation_hint' -or -not $sfsStrings.'window.rotation_hint_compact') {
+            throw "Rotation title hint is missing for $sfsLocale"
+        }
+    }
     $conditionLowering = Get-Content -LiteralPath (
         Join-Path $repository "src/conditions/Lowering.cpp") -Raw
     if ($conditionLowering -notmatch 'case ParamType::kActor:\s*\{[^}]*As<RE::Actor>' -or
@@ -346,6 +372,17 @@ try {
     if (-not $armorHookSource.Contains("ResolveBranchChainOwner") -or
         -not $armorHookSource.Contains("SetPassthroughVisitWornItemsChainTarget")) {
         throw "Custom-skin compatibility must preserve unknown concrete visitors and SFS attachments"
+    }
+    $iedConditionSource = Get-Content -LiteralPath (
+        Join-Path $repository "src/native/IedConditionIntegration.cpp") -Raw
+    $iedQueueInvalidation = [regex]::Match($armorSkinningSource,
+        '(?s)void InvalidateQueuedArmorRefreshes\(\)\s*\{.*?\n\}').Value
+    if (-not $iedConditionSource.Contains('SetDecisionObserver(&QueueIedEvaluation)') -or
+        $armorSkinningSource -notmatch 'void QueueIedEvaluation\(const std::uint32_t actorFormID\)\s*\{\s*QueueIedEvaluateID\(actorFormID\);' -or
+        -not $iedQueueInvalidation.Contains('ClearQueuedIedEvaluations()') -or
+        $iedConditionSource.Contains('VisitWornItems') -or
+        $iedConditionSource.Contains('RefreshArmorFor(')) {
+        throw "IED display conditions must reuse the load-canceled actor queue, never reenter SFS/custom-skin refresh"
     }
 
     $footwearApiSource = Get-Content -LiteralPath (

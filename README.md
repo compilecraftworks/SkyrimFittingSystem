@@ -7,6 +7,13 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.6.5 adds a read-only rendered-outfit API, built-in IED 1.7.4 BipedSlot
+condition integration, LT + RS rotation, remapped Cancel handling, and a
+localized title-bar rotation hint. First-run character placement defaults to
+Left; saved user choices are retained. See the
+[English](docs/RELEASE-NOTES-v1.6.5.md) / [Korean](docs/RELEASE-NOTES-v1.6.5-ko.md)
+notes for the exact IED scope and remaining in-game verification limits.
+
 v1.6.4 reduces repeated stripping-link, body-keyword, and dye render-pass work,
 fixes manual appearance visibility after stripping without redress, and displays
 EditorIDs first for form-based condition Argument 1.

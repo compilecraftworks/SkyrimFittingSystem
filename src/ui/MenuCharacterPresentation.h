@@ -25,6 +25,7 @@ public:
   void Apply(MenuCharacterSide a_side, RE::Actor *a_actor);
   void Restore();
   void UpdateRotationInteraction();
+  [[nodiscard]] bool IsActive() const;
 
 private:
   MenuCharacterPresentation() = default;

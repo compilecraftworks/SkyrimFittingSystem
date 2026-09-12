@@ -1,4 +1,5 @@
 #include "api/SkyrimFittingSystemAPI.h"
+#include "api/RenderedOutfitProvider.h"
 
 #include "ArmorUtils.h"
 #include "native/ArmorSkinning.h"
@@ -172,6 +173,7 @@ void SetMenuInitialized(const bool a_initialized) {
 }
 
 void SetGameDataLoaded(const bool a_loaded) {
+  rendered::SetGameReady(a_loaded);
   g_gameDataLoaded.store(a_loaded, std::memory_order_release);
   if (!a_loaded) {
     g_pendingRequest.store(MenuRequest::None, std::memory_order_release);
@@ -187,6 +189,7 @@ void SetMenuLifecycleActive(const bool a_active) {
 }
 
 void ProcessMenuRequests() {
+  rendered::QueuePump();
   // The official Grid Inventory Costume callback only copies a transition.
   // Apply it here, alongside SFS's established game/UI-safe request handling.
   native::grid_inventory::ProcessPendingCostumeState();

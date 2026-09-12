@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include "input/CharacterRotation.h"
 #include <chrono>
 #include <mutex>
 #include <unordered_set>
@@ -20,8 +21,14 @@ public:
   [[nodiscard]] bool IsShortcutSuppressionActive() const;
   [[nodiscard]] bool IsBoundModifierDown() const;
   [[nodiscard]] std::uint32_t GetActiveModifierScanCode() const;
+  void ResetGamepadRotation() { gamepadRotation_.Reset(); }
+  [[nodiscard]] bool IsGamepadRotationChordDown() const { return gamepadRotation_.Held(); }
+  [[nodiscard]] float GetGamepadRotationDelta(float seconds) const {
+    return gamepadRotation_.Radians(seconds);
+  }
 
 private:
+  input::character_rotation::GamepadState gamepadRotation_;
   std::mutex inputLock_;
   std::vector<RE::InputEvent *> inputQueue_;
   std::atomic_bool shortcutSuppressionActive_{false};

@@ -63,6 +63,8 @@ public:
   void Close();
   void NotifyWindowShutdown();
   void Toggle();
+  // One-level Cancel: dismiss an active editor/popup, otherwise close SFS.
+  void HandleCancel();
   void SetGameDataLoaded(bool a_loaded);
   [[nodiscard]] bool IsEnabled() const { return enabled_; }
   [[nodiscard]] bool IsInitialized() const { return initialized_; }
@@ -240,7 +242,6 @@ private:
   void ApplySmoothScroll();
   void OnMenuShow();
   void OnMenuHide();
-  void HandleCancel();
   [[nodiscard]] bool HandleMenuUserEvent(std::string_view a_eventName);
   [[nodiscard]] bool QueueKitListCommand(KitListCommand a_command);
   void DrawWindow();
@@ -499,7 +500,7 @@ private:
   float windowAlpha_{0.0f};
   // User-configurable opacity, kept separate from the open/close fade alpha.
   float uiOpacity_{1.0f};
-  ui::MenuCharacterSide menuCharacterSide_{ui::MenuCharacterSide::Right};
+  ui::MenuCharacterSide menuCharacterSide_{ui::MenuCharacterSide::Left};
   float pendingSmoothWheelDelta_{0.0f};
   ImGuiID smoothScrollWindowId_{0};
   float smoothScrollTargetY_{0.0f};
