@@ -1,6 +1,7 @@
 // Real ImGui and the production dropdown: no game window/GPU required.
 #include "ui/components/EditableCombo.h"
 #include "ui/conditions/TextValueEditor.h"
+#include "ui/conditions/FormValueEditor.h"
 #include <imgui_internal.h>
 #include <cstdlib>
 #include <iostream>
@@ -22,6 +23,9 @@ int main() {
   bool custom = true;
   bool referenceMode = false;
   bool textMode = false;
+  bool formDisplayMode = false;
+  const std::string savedToken = "Skyrim.esm|00012341";
+  std::string editorLabel = "WhiterunInterior";
   const std::vector<sfs::ui::components::EditableDropdownItem<std::string>> referenceOptions{
       {.label = "Existing NPC [00000014]", .value = "Player"}};
   int referenceSelection = 0;
@@ -32,7 +36,11 @@ int main() {
     ImGui::SetNextWindowSize({750, 550});
     ImGui::Begin("Fixture", nullptr, ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoMove);
     ImGui::SetCursorScreenPos({20, 20});
-    if (textMode) {
+    if (formDisplayMode) {
+      changed = sfs::ui::condition_editor::DrawFormArgumentDropdown(
+          "##arg", "Form", value, options, 400,
+          value == savedToken ? editorLabel : std::string{});
+    } else if (textMode) {
       changed = sfs::ui::condition_editor::DrawTextClauseValueEditor("##text", value, 400);
     } else if (referenceMode) {
       char buffer[1024];
@@ -93,6 +101,40 @@ int main() {
          "reference typing clears stale selection instead of restoring Player");
   click(45, 460); frame();
   Expect(value == "0x00012345", "reference custom input survives blur");
+  referenceMode = false; formDisplayMode = true; custom = true;
+  value = savedToken; options.clear(); frame(); frame();
+  Expect(value == savedToken && !changed, "idle EditorID display does not mutate saved FormID");
+  click(45, 28);
+  auto *inputState = ImGui::GetInputTextState(ImGui::GetActiveID());
+  Expect(inputState && std::string(inputState->TextA.Data) == editorLabel,
+         "form input visibly contains EditorID when focused");
+  Expect(value == savedToken, "focus alone preserves saved token");
+  io.AddKeyEvent(ImGuiKey_Enter, true); frame();
+  io.AddKeyEvent(ImGuiKey_Enter, false); frame();
+  click(45, 460); frame();
+  Expect(value == savedToken, "Enter/blur without an edit preserves stable identity");
+  options = {"WhiterunInterior", "DifferentCell"}; frame();
+  Expect(value == savedToken, "new suggestions must not normalize the display alias into storage");
+  click(45, 28); type("0x00012344"); click(45, 460); frame();
+  Expect(value == "0x00012344", "FormID input still replaces an EditorID display");
+  click(45, 28); type("Different"); frame();
+  const auto aliasPopup = GImGui->OpenPopupStack.back().Window->Pos;
+  click(aliasPopup.x + 30, aliasPopup.y + ImGui::GetStyle().WindowPadding.y + 5);
+  click(45, 460); frame();
+  Expect(value == "DifferentCell", "first suggestion click changes the actual argument");
+  value = savedToken; editorLabel = "LongCell_" + std::string(1800, 'x');
+  options.clear(); frame(); click(45, 28);
+  inputState = ImGui::GetInputTextState(ImGui::GetActiveID());
+  Expect(inputState && std::string(inputState->TextA.Data) == editorLabel,
+         "long EditorID aliases are not truncated");
+  click(45, 460); frame();
+  Expect(value == savedToken, "long display alias does not overwrite saved identity");
+  editorLabel.clear(); frame(); click(45, 28);
+  inputState = ImGui::GetInputTextState(ImGui::GetActiveID());
+  Expect(inputState && std::string(inputState->TextA.Data) == savedToken,
+         "missing EditorID falls back to the original stored token");
+  click(45, 460); frame();
+  formDisplayMode = false;
   textMode = true; value.clear(); frame(); frame();
   click(45, 28); type("iState");
   Expect(value == "iState" && changed, "kChar name accepts alphabetic text");

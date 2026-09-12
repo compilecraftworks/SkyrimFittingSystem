@@ -18,6 +18,7 @@ $targets = @(
     "FittingDyeRulesTests",
     "KitListNavigationTests",
     "CoreBehaviorRegressionTests",
+    "ManualVisibilityRegressionTests",
     "CustomSkinningRegressionTests",
     "IntegrationInitializationTests",
     "RaceMenuInterfaceTests",
@@ -53,6 +54,15 @@ try {
         Join-Path $repository "src/ui/Menu.Conditions.State.cpp") -Raw
     $conditionValueEditors = Get-Content -LiteralPath (
         Join-Path $repository "src/ui/conditions/ValueEditors.cpp") -Raw
+    $conditionClauseTable = Get-Content -LiteralPath (
+        Join-Path $repository "src/ui/Menu.Conditions.ClauseTable.cpp") -Raw
+    $conditionFormTokens = Get-Content -LiteralPath (
+        Join-Path $repository "src/conditions/FormTokens.cpp") -Raw
+    if (-not $conditionClauseTable.Contains('ImGui::GetContentRegionAvail().x, paramIndex == 0)') -or
+        -not $conditionValueEditors.Contains('a_preferEditorID && optionCache.SupportsFormTokens(a_type)') -or
+        -not $conditionFormTokens.Contains('LookupFormToken(a_token, false)')) {
+        throw "EditorID display must be Arg1/form-only and must not scan all game records"
+    }
     if ($conditionValueEditors -notmatch 'case RE::SCRIPT_PARAM_TYPE::kChar:\s*case RE::SCRIPT_PARAM_TYPE::kVMScriptVar:\s*return ValueEditorKind::Text;' -or
         -not $conditionValueEditors.Contains('DrawTextClauseValueEditor(a_id, a_value, a_width)') -or
         $conditionLowering -match 'case ParamType::kChar:\s*case ParamType::kInt:' -or
@@ -211,6 +221,33 @@ try {
 
     $armorSkinningSource = Get-Content -LiteralPath (
         Join-Path $repository "src\native\ArmorSkinning.cpp") -Raw
+    $tokenPerformanceSource = Get-Content -LiteralPath (
+        Join-Path $repository "src/features/virtual_tokens/VirtualWornTokens.cpp") -Raw
+    $tokenRebuild = [regex]::Match($tokenPerformanceSource,
+        '(?s)void UpdateVirtualWornTokenCache\(\).*?(?=void InitializeVirtualWornTokens\()').Value
+    $bulkLookup = [regex]::Match($armorSkinningSource,
+        '(?s)GetActiveFittingAppearancesBySlot\(.*?(?=RE::TESObjectARMO \*\s*GetActiveFittingArmorForSlot)').Value
+    if (-not $tokenRebuild.Contains('GetActiveFittingAppearancesBySlot(actor, true)') -or
+        $tokenRebuild.Contains('GetActiveFittingAppearanceForSlot(') -or
+        ([regex]::Matches($bulkLookup, 'CollectActiveFittingArmors\(')).Count -ne 1 -or
+        -not $bulkLookup.Contains('BuildFirstAppearanceSlotLookup(entries)')) {
+        throw "Token rebuilds must evaluate each actor once, preserving all 32 first-match slot results"
+    }
+    $bodyKeywordQuery = [regex]::Match($armorSkinningSource,
+        '(?s)GetDisplayedBodyKeywordState\(.*?(?=bool IsSFSOwnedRuntimeKeyword)').Value
+    if ($bodyKeywordQuery -notmatch 'if \(!displaySet.active\)\s*\{\s*return std::nullopt;\s*\}\s*const auto snapshot = BuildFinalRenderedOutfitSnapshot' -or
+        $bodyKeywordQuery.Contains('GetFinalRenderedOutfitSnapshot(a_actor)')) {
+        throw "Unmanaged WornHasKeyword queries must retain vanilla results without collecting a final worn snapshot"
+    }
+    $dyePerformanceSource = Get-Content -LiteralPath (
+        Join-Path $repository "src/native/FittingDye.cpp") -Raw
+    if (-not $dyePerformanceSource.Contains('!inspectTargets && g_activeRenderPasses.empty()') -or
+        -not $dyePerformanceSource.Contains('rules::ShouldTrackRendererTintPass(') -or
+        $dyePerformanceSource -notmatch 'if \(g_worldTintPreview\)\s*\{\s*const auto now = std::chrono::steady_clock::now\(\)' -or
+        $dyePerformanceSource -notmatch 'if \(trackPass\)\s*\{\s*g_activeRenderPasses.push_back') {
+        throw "Dye fast paths must retain nested-pass masking and avoid idle timer/record work"
+    }
+    Write-Host "City hot-path source wiring checks passed (not an in-game frame-time benchmark)"
     $synchronizeIndex = $armorSkinningSource.IndexOf(
         "helmet_toggle::SynchronizeActor(a_actor, false)")
     $publishIndex = $armorSkinningSource.IndexOf(

@@ -5,6 +5,7 @@
 #include <RE/Skyrim.h>
 #include <SKSE/SKSE.h>
 
+#include <array>
 #include <cstdint>
 #include <optional>
 #include <string>
@@ -89,10 +90,11 @@ void ClearSOSUserArmorLists();
 [[nodiscard]] std::optional<bool>
 GetDisplayedBodyKeywordState(RE::Actor *a_actor,
                              const RE::BGSKeyword *a_keyword);
-[[nodiscard]] std::optional<ActiveFittingAppearance>
-GetActiveFittingAppearanceForSlot(
-    RE::Actor *a_actor, std::uint32_t a_slotMask,
-    bool a_ignoreVirtualTokenSuppression = false);
+// Same first-match semantics as 32 individual slot queries, evaluated from
+// one fresh actor snapshot. Index zero is biped slot 30; no state is retained.
+[[nodiscard]] std::array<std::optional<ActiveFittingAppearance>, 32>
+GetActiveFittingAppearancesBySlot(
+    RE::Actor *a_actor, bool a_ignoreVirtualTokenSuppression = false);
 [[nodiscard]] RE::TESObjectARMO *
 GetActiveFittingArmorForSlot(RE::Actor *a_actor, std::uint32_t a_slotMask,
                              bool a_ignoreVirtualTokenSuppression = false);

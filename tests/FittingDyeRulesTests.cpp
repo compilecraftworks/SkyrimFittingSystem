@@ -117,6 +117,14 @@ void TestDrawHookContextReplacementRules() {
 }
 
 void TestDormantRendererFastPath() {
+  using sfs::native::dye::rules::ShouldTrackRendererTintPass;
+  Require(!ShouldTrackRendererTintPass(false, false),
+          "An unrelated top-level pass needs no tint record");
+  Require(ShouldTrackRendererTintPass(true, false) &&
+              ShouldTrackRendererTintPass(true, true),
+          "Matched tint passes must always retain binding and restoration");
+  Require(ShouldTrackRendererTintPass(false, true),
+          "An unrelated nested pass must mask its parent's tint, even after targets clear");
   Require(!ShouldInspectRendererTintPass(false, false),
           "Dormant Dye hooks must not enter the renderer map/mutex path");
   Require(ShouldInspectRendererTintPass(true, false) &&

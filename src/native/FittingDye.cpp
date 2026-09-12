@@ -811,6 +811,10 @@ void BindTintForCurrentRenderPass(ActiveRenderPass &a_active) {
 }
 
 void RestoreRenderPassTint(ActiveRenderPass &a_active) {
+  if (a_active.shadowShaderResourceSlots.empty() &&
+      a_active.scopedShaderResources.empty()) {
+    return;
+  }
   if (auto *shadowState = RE::BSGraphics::RendererShadowState::GetSingleton()) {
     auto &runtime = shadowState->GetRuntimeData();
     for (const auto slot : a_active.shadowShaderResourceSlots) {
@@ -1015,15 +1019,16 @@ struct SourceGpuBinding {
 
 void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
                        RE::BSRenderPass *a_pass, std::uint32_t a_flags) {
-  if (!rules::ShouldInspectRendererTintPass(
+  const bool inspectTargets = rules::ShouldInspectRendererTintPass(
           g_worldTintTargetsActive.load(std::memory_order_acquire),
-          g_worldTintPreviewActive.load(std::memory_order_acquire))) {
+          g_worldTintPreviewActive.load(std::memory_order_acquire));
+  if (!inspectTargets && g_activeRenderPasses.empty()) {
     g_originalSetupGeometry[a_vtableIndex](a_shader, a_pass, a_flags);
     return;
   }
 
   ActiveRenderPass active{.pass = a_pass};
-  if (a_pass && a_pass->shaderProperty) {
+  if (inspectTargets && a_pass && a_pass->shaderProperty) {
     std::scoped_lock lock(g_worldTintMutex);
     const auto activateTarget = [&](const WorldTintTarget &worldTint) {
       if (!a_pass->geometry ||
@@ -1049,17 +1054,18 @@ void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
     };
     const auto geometryAddress =
         reinterpret_cast<std::uintptr_t>(a_pass->geometry);
-    const auto now = std::chrono::steady_clock::now();
-    if (g_worldTintPreview && now >= g_worldTintPreview->expiresAt) {
-      g_worldTintPreview.reset();
-      g_worldTintPreviewActive.store(false, std::memory_order_release);
-    }
-    if (g_worldTintPreview &&
-        g_worldTintPreview->target.geometryAddress == geometryAddress) {
-      constexpr auto kPreviewHalfPulse = std::chrono::milliseconds(130);
-      const auto elapsed = now - g_worldTintPreview->beganAt;
-      if ((elapsed / kPreviewHalfPulse) % 2 == 0) {
-        activateTarget(g_worldTintPreview->target);
+    // Durable colors have no timer. Read the clock only during a preview.
+    if (g_worldTintPreview) {
+      const auto now = std::chrono::steady_clock::now();
+      if (now >= g_worldTintPreview->expiresAt) {
+        g_worldTintPreview.reset();
+        g_worldTintPreviewActive.store(false, std::memory_order_release);
+      } else if (g_worldTintPreview->target.geometryAddress == geometryAddress) {
+        constexpr auto kPreviewHalfPulse = std::chrono::milliseconds(130);
+        const auto elapsed = now - g_worldTintPreview->beganAt;
+        if ((elapsed / kPreviewHalfPulse) % 2 == 0) {
+          activateTarget(g_worldTintPreview->target);
+        }
       }
     }
     if (!active.tintedView) {
@@ -1069,11 +1075,14 @@ void SetupGeometryHook(const std::size_t a_vtableIndex, RE::BSShader *a_shader,
       }
     }
   }
-  if (a_pass) {
+  const bool trackPass = a_pass && rules::ShouldTrackRendererTintPass(
+      active.context && active.originalView && active.tintedView,
+      !g_activeRenderPasses.empty());
+  if (trackPass) {
     g_activeRenderPasses.push_back(std::move(active));
   }
   g_originalSetupGeometry[a_vtableIndex](a_shader, a_pass, a_flags);
-  if (a_pass && !g_activeRenderPasses.empty()) {
+  if (trackPass && !g_activeRenderPasses.empty()) {
     const auto activePass = std::ranges::find_if(
         g_activeRenderPasses | std::views::reverse,
         [a_pass](const ActiveRenderPass &a_active) {

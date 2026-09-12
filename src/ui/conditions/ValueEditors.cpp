@@ -12,6 +12,7 @@
 #include "ui/Menu.h"
 #include "ui/components/EditableCombo.h"
 #include "ui/conditions/FunctionRegistry.h"
+#include "ui/conditions/FormValueEditor.h"
 #include "ui/conditions/TextValueEditor.h"
 
 #include <imgui.h>
@@ -168,9 +169,16 @@ RE::TESObjectREFR *LookupObjectReferenceByToken(const std::string &a_token) {
   return sfs::conditions::LookupFormToken<RE::TESObjectREFR>(trimmed, false);
 }
 
-std::string BuildObjectReferenceLabel(RE::TESObjectREFR *a_ref) {
+std::string BuildObjectReferenceLabel(RE::TESObjectREFR *a_ref,
+                                      const bool a_preferEditorID = false) {
   if (!a_ref) {
     return {};
+  }
+
+  if (a_preferEditorID) {
+    if (const auto editorID = sfs::armor::GetEditorID(a_ref); !editorID.empty()) {
+      return editorID + " [" + sfs::armor::FormatFormID(a_ref->GetFormID()) + "]";
+    }
   }
 
   if (const auto *player = RE::PlayerCharacter::GetSingleton();
@@ -247,7 +255,8 @@ RE::Actor *ResolveCrosshairActor() {
 void AppendObjectReferenceOption(std::vector<ObjectRefEditorItem> &a_items,
                                  std::unordered_set<RE::FormID> &a_seenFormIDs,
                                  RE::TESObjectREFR *a_ref,
-                                 const std::string_view a_valueOverride = {}) {
+                                 const std::string_view a_valueOverride = {},
+                                 const bool a_preferEditorID = false) {
   if (!a_ref) {
     return;
   }
@@ -263,23 +272,27 @@ void AppendObjectReferenceOption(std::vector<ObjectRefEditorItem> &a_items,
     value = sfs::armor::FormatFormID(formID);
   }
 
-  a_items.push_back({.item = {.label = BuildObjectReferenceLabel(a_ref),
+  a_items.push_back({.item = {.label = BuildObjectReferenceLabel(a_ref, a_preferEditorID),
                               .value = std::move(value)},
                      .formID = formID});
 }
 
 std::vector<ObjectRefEditorItem>
-BuildObjectReferenceEditorItems(const std::string &a_currentValue) {
+BuildObjectReferenceEditorItems(const std::string &a_currentValue,
+                               const bool a_preferEditorID) {
   std::vector<ObjectRefEditorItem> items;
   std::unordered_set<RE::FormID> seenFormIDs;
 
   if (auto *currentRef = LookupObjectReferenceByToken(a_currentValue)) {
-    AppendObjectReferenceOption(items, seenFormIDs, currentRef, a_currentValue);
+    AppendObjectReferenceOption(items, seenFormIDs, currentRef, a_currentValue,
+                                a_preferEditorID);
   }
 
-  AppendObjectReferenceOption(items, seenFormIDs, ResolveCrosshairActor());
+  AppendObjectReferenceOption(items, seenFormIDs, ResolveCrosshairActor(), {},
+                              a_preferEditorID);
   AppendObjectReferenceOption(items, seenFormIDs,
-                              RE::PlayerCharacter::GetSingleton());
+                              RE::PlayerCharacter::GetSingleton(), {},
+                              a_preferEditorID);
 
   auto *menu = sfs::Menu::GetSingleton();
   if (!menu) {
@@ -300,7 +313,8 @@ BuildObjectReferenceEditorItems(const std::string &a_currentValue) {
 
     for (const auto actorFormID : materialized->refreshTargets.actorFormIDs) {
       AppendObjectReferenceOption(
-          items, seenFormIDs, RE::TESForm::LookupByID<RE::Actor>(actorFormID));
+          items, seenFormIDs, RE::TESForm::LookupByID<RE::Actor>(actorFormID), {},
+          a_preferEditorID);
     }
   }
 
@@ -309,8 +323,9 @@ BuildObjectReferenceEditorItems(const std::string &a_currentValue) {
 
 bool DrawObjectReferenceParamEditor(const char *a_id, std::string &a_value,
                                     const float a_width,
-                                    const bool a_actorOnly = false) {
-  auto editorItems = BuildObjectReferenceEditorItems(a_value);
+                                    const bool a_actorOnly = false,
+                                    const bool a_preferEditorID = false) {
+  auto editorItems = BuildObjectReferenceEditorItems(a_value, a_preferEditorID);
   if (a_actorOnly) {
     std::erase_if(editorItems, [](const ObjectRefEditorItem &a_item) {
       return RE::TESForm::LookupByID<RE::Actor>(a_item.formID) == nullptr;
@@ -336,16 +351,16 @@ bool DrawObjectReferenceParamEditor(const char *a_id, std::string &a_value,
   }
 
   if (selectedIndex < 0 && currentRef) {
-    displayValue = BuildObjectReferenceLabel(currentRef);
+    displayValue = BuildObjectReferenceLabel(currentRef, a_preferEditorID);
   }
 
-  char buffer[128];
-  std::snprintf(buffer, sizeof(buffer), "%s", displayValue.c_str());
+  std::vector<char> buffer((std::max)(std::size_t{1024}, displayValue.size() + 1));
+  std::snprintf(buffer.data(), buffer.size(), "%s", displayValue.c_str());
   std::optional<std::string> selectedValue;
   const bool changed = sfs::ui::components::DrawEditableStringDropdown(
       a_id,
       sfs::ui::Localization::GetSingleton()->GetCStr("conditions.select_value"),
-      buffer, sizeof(buffer),
+      buffer.data(), buffer.size(),
       std::span<const ObjectRefDropdownItem>(dropdownItems.data(),
                                              dropdownItems.size()),
       a_width, &selectedIndex, &selectedValue);
@@ -359,7 +374,7 @@ bool DrawObjectReferenceParamEditor(const char *a_id, std::string &a_value,
     return true;
   }
 
-  const auto customToken = ExtractObjectReferenceTokenFromLabel(buffer);
+  const auto customToken = ExtractObjectReferenceTokenFromLabel(buffer.data());
   // Keep incomplete/unresolved text editable. Validate on save, not by
   // silently restoring the previous reference while the user is typing.
   a_value = customToken;
@@ -398,11 +413,13 @@ bool DrawNumericClauseValueEditor(const char *a_id, std::string &a_value,
 
 bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
                               const RE::SCRIPT_PARAM_TYPE a_type,
-                              const float a_width) {
+                              const float a_width,
+                              const bool a_preferEditorID) {
   if (a_type == RE::SCRIPT_PARAM_TYPE::kObjectRef ||
       a_type == RE::SCRIPT_PARAM_TYPE::kActor) {
     return DrawObjectReferenceParamEditor(
-        a_id, a_value, a_width, a_type == RE::SCRIPT_PARAM_TYPE::kActor);
+        a_id, a_value, a_width, a_type == RE::SCRIPT_PARAM_TYPE::kActor,
+        a_preferEditorID);
   }
 
   const auto editorKind = GetEditorKindForParamTypeImpl(a_type);
@@ -420,6 +437,13 @@ bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
     if (state == sfs::ui::conditions::ConditionParamOptionCache::State::Ready) {
       const auto *options = optionCache.GetOptions(a_type);
       if (options) {
+        if (a_preferEditorID && optionCache.SupportsFormTokens(a_type)) {
+          return DrawFormArgumentDropdown(
+              a_id, sfs::ui::Localization::GetSingleton()->GetCStr(
+                        "conditions.select_value"),
+              a_value, std::span<const std::string>(*options), a_width,
+              sfs::conditions::GetFormTokenEditorID(a_value));
+        }
         return sfs::ui::components::DrawSearchableStringDropdown(
             a_id,
             sfs::ui::Localization::GetSingleton()->GetCStr(
@@ -431,6 +455,13 @@ bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
                sfs::ui::conditions::ConditionParamOptionCache::State::Loading) {
       if (optionCache.SupportsFormTokens(a_type)) {
         // Suggestions are optional: known IDs remain editable while loading.
+        if (a_preferEditorID) {
+          return DrawFormArgumentDropdown(
+              a_id, sfs::ui::Localization::GetSingleton()->GetCStr(
+                        "conditions.select_value"),
+              a_value, {}, a_width,
+              sfs::conditions::GetFormTokenEditorID(a_value));
+        }
         return sfs::ui::components::DrawSearchableStringDropdown(
             a_id, sfs::ui::Localization::GetSingleton()->GetCStr(
                       "conditions.select_value"),

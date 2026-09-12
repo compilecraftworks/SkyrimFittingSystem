@@ -16,6 +16,13 @@ namespace sfs::native::dye::rules {
   return a_targetContext != 0 && a_targetContext == a_drawContext;
 }
 
+// A non-tinted child pass must mask its parent's draw-time substitution.
+// Only an unrelated top-level pass can omit the scoped record entirely.
+[[nodiscard]] constexpr bool ShouldTrackRendererTintPass(
+    const bool a_hasTintBinding, const bool a_hasParentPass) noexcept {
+  return a_hasTintBinding || a_hasParentPass;
+}
+
 enum class DrawHookInstallAction {
   Install,
   Reuse,

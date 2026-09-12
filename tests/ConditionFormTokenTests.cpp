@@ -38,6 +38,18 @@ int main() {
   Expect(!LookupFormToken<RE::TESObjectCELL>("12345"), "deleted form rejected");
   data.pluginForms[{"Skyrim.esm", 0x12341}] = &interior;
   Expect(LookupFormToken<RE::TESObjectCELL>("Skyrim.esm|00012341") == &interior, "plugin CELL");
+  const std::string savedCell = "Skyrim.esm|00012341";
+  Expect(GetFormTokenEditorID(savedCell) == "WhiterunInterior" &&
+             savedCell == "Skyrim.esm|00012341",
+         "saved CELL displays its EditorID without changing the plugin-local token");
+  Expect(GetFormTokenEditorID("0x12341") == "WhiterunInterior",
+         "raw FormID also has an EditorID display alias");
+  Expect(GetFormTokenEditorID("0x12344").empty() &&
+             GetFormTokenEditorID("0x12345").empty() &&
+             GetFormTokenEditorID("Missing.esp|12").empty(),
+         "unnamed, deleted and unresolved forms retain the original UI token");
+  Expect(GetFormTokenEditorID("whiteruninterior").empty(),
+         "display alias lookup does not scan all records for an already textual ID");
   Expect(!LookupFormToken<RE::TESRace>("Skyrim.esm|00012341"), "wrong typed ID rejected");
   RE::TESRace race; RE::TESFaction faction; RE::BGSKeyword keyword; RE::BGSLocation location;
   RE::TESObjectREFR reference;

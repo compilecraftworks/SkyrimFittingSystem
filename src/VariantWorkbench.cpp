@@ -2050,6 +2050,7 @@ bool VariantWorkbench::ReplaceConditionalFittingTarget(
 
 bool VariantWorkbench::SetOverrideHidden(int a_rowIndex, int a_itemIndex,
                                           const bool a_hidden) {
+  auto stateLock = AcquireStateLock();
   if (a_rowIndex < 0 || a_rowIndex >= static_cast<int>(rows_.size())) {
     return false;
   }
@@ -2063,7 +2064,29 @@ bool VariantWorkbench::SetOverrideHidden(int a_rowIndex, int a_itemIndex,
 
   auto &overrideItem = overrides[static_cast<std::size_t>(a_itemIndex)];
   if (overrideItem.hidden == a_hidden) {
-    return false;
+    if (a_hidden || overrideItem.locked) {
+      return false;
+    }
+    // An external strip can hide a card without changing its saved eye flag.
+    // Showing that card is still a real user action (not a no-op), including
+    // when the provider ends without redressing. Release display automation
+    // only on this explicit action; never equip gear or infer an event end.
+    auto *actor = row.ownerActorFormID != 0
+                      ? RE::TESForm::LookupByID<RE::Actor>(row.ownerActorFormID)
+                      : RE::PlayerCharacter::GetSingleton();
+    const auto slotMask = static_cast<std::uint32_t>(
+        row.GetOverrideVisualSlotMask(overrideItem));
+    const bool tokenHidden = IsModSettingsStripLinkPolicyActive() &&
+        ((actor && (sfs::native::GetVirtualTokenSuppressedFittingSlotMask(actor) &
+                    slotMask) != 0) ||
+         sfs::virtual_tokens::IsVirtualWornTokenAppearanceSuppressed(
+             row.ownerActorFormID, overrideItem.formID, slotMask));
+    const bool ddHidden = actor &&
+        (sfs::devious_devices::GetDeviousDevicesHiderSuppressedFittingSlotMask(
+             actor) & slotMask) != 0;
+    if (!tokenHidden && !ddHidden) {
+      return false;
+    }
   }
   InvalidateAppearanceAutomation(
       row.ownerActorFormID, overrideItem.formID,

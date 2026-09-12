@@ -26,5 +26,6 @@ ResolveEditorParamType(std::string_view a_functionName,
 bool DrawNumericClauseValueEditor(const char *a_id, std::string &a_value,
                                   ValueEditorKind a_kind, float a_width);
 bool DrawConditionParamEditor(const char *a_id, std::string &a_value,
-                              RE::SCRIPT_PARAM_TYPE a_type, float a_width);
+                              RE::SCRIPT_PARAM_TYPE a_type, float a_width,
+                              bool a_preferEditorID = false);
 } // namespace sfs::ui::condition_editor

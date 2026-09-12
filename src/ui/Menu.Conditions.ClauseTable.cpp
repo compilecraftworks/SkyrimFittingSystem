@@ -320,7 +320,7 @@ bool Menu::DrawConditionEditorClauseTable(
             paramIndex == 0 ? "##arg1" : "##arg2", clause.arguments[paramIndex],
             ResolveEditorParamType(clause.functionName, paramIndex,
                                    functionInfo->parameterTypes[paramIndex]),
-            ImGui::GetContentRegionAvail().x);
+            ImGui::GetContentRegionAvail().x, paramIndex == 0);
       } else {
         ImGui::BeginDisabled();
         char buffer[16] = "";

@@ -4,6 +4,7 @@
 #include "ConditionMaterializer.h"
 #include "TngGenitalCoverRules.h"
 #include "conditions/Status.h"
+#include "native/ActiveAppearanceSlotLookup.h"
 #include "native/ArmorRefreshRules.h"
 #include "native/DaveIntegration.h"
 #include "native/ExternalEquipmentTransactions.h"
@@ -2858,8 +2859,6 @@ CollectActiveFittingArmors(
 FindActiveFittingArmorForSlot(RE::Actor *a_actor,
                               const std::uint32_t a_slotMask,
                               std::uint32_t *a_armorSlotMask = nullptr,
-                              std::string *a_rowKey = nullptr,
-                              std::string *a_itemKey = nullptr,
                               const bool a_ignoreVirtualTokenSuppression =
                                   false) {
   if (!a_actor || a_slotMask == 0) {
@@ -2874,12 +2873,6 @@ FindActiveFittingArmorForSlot(RE::Actor *a_actor,
 
     if (a_armorSlotMask != nullptr) {
       *a_armorSlotMask = entry.slotMask;
-    }
-    if (a_rowKey != nullptr) {
-      *a_rowKey = entry.rowKey;
-    }
-    if (a_itemKey != nullptr) {
-      *a_itemKey = entry.itemKey;
     }
     return entry.armor;
   }
@@ -2899,21 +2892,16 @@ std::uint32_t GetDisplayedFittingSlotMask(RE::Actor *a_actor) {
   return GetFinalRenderedOutfitSnapshot(a_actor).additionalSlotMask;
 }
 
-FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(
-    RE::Actor *a_actor) {
+[[nodiscard]] static FinalRenderedOutfitSnapshot BuildFinalRenderedOutfitSnapshot(
+    RE::Actor *a_actor, const DisplaySet &a_displaySet) {
   FinalRenderedOutfitSnapshot snapshot;
-  if (!a_actor) {
-    return snapshot;
-  }
-
-  const auto displaySet = BuildDisplaySet(a_actor);
-  snapshot.managedBySfs = displaySet.active;
-  snapshot.additionalSlotMask = displaySet.slotMask;
-  snapshot.visibleAdditionalArmors = displaySet.armors;
+  snapshot.managedBySfs = a_displaySet.active;
+  snapshot.additionalSlotMask = a_displaySet.slotMask;
+  snapshot.visibleAdditionalArmors = a_displaySet.armors;
 
   const auto equippedArmors = CollectEquippedArmors(a_actor);
   snapshot.visibleActualArmors =
-      CollectVisibleRealArmors(a_actor, displaySet, equippedArmors);
+      CollectVisibleRealArmors(a_actor, a_displaySet, equippedArmors);
   for (const auto *armor : snapshot.visibleActualArmors) {
     if (armor) {
       snapshot.visibleActualSlotMask |= static_cast<std::uint32_t>(
@@ -2921,6 +2909,13 @@ FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(
     }
   }
   return snapshot;
+}
+
+FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(RE::Actor *a_actor) {
+  if (!a_actor) {
+    return {};
+  }
+  return BuildFinalRenderedOutfitSnapshot(a_actor, BuildDisplaySet(a_actor));
 }
 
 const RE::TESObjectARMO *GetDisplayedFittingArmorForSlot(
@@ -2955,10 +2950,14 @@ GetDisplayedBodyKeywordState(RE::Actor *a_actor,
     return std::nullopt;
   }
 
-  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
-  if (!snapshot.managedBySfs) {
+  // Vanilla already evaluated this keyword. Do not walk an unmanaged NPC's
+  // worn inventory merely to return that same answer. Use the exact existing
+  // display decision, including conditional real-equipment hides and previews.
+  const auto displaySet = BuildDisplaySet(a_actor);
+  if (!displaySet.active) {
     return std::nullopt;
   }
+  const auto snapshot = BuildFinalRenderedOutfitSnapshot(a_actor, displaySet);
 
   if (std::ranges::any_of(snapshot.visibleActualArmors,
                           [a_keyword](const auto *a_armor) {
@@ -3004,23 +3003,28 @@ bool IsSFSOwnedRuntimeKeyword(const RE::TESObjectARMO *a_armor,
   return g_sfsOwnedRuntimeKeywords.contains(key);
 }
 
-std::optional<ActiveFittingAppearance> GetActiveFittingAppearanceForSlot(
-    RE::Actor *a_actor, const std::uint32_t a_slotMask,
-    const bool a_ignoreVirtualTokenSuppression) {
-  std::uint32_t armorSlotMask = 0;
-  std::string rowKey;
-  std::string itemKey;
-  const auto *armor = FindActiveFittingArmorForSlot(
-      a_actor, a_slotMask, &armorSlotMask, &rowKey, &itemKey,
-      a_ignoreVirtualTokenSuppression);
-  if (!armor || armorSlotMask == 0 || rowKey.empty() || itemKey.empty()) {
-    return std::nullopt;
+std::array<std::optional<ActiveFittingAppearance>, 32>
+GetActiveFittingAppearancesBySlot(
+    RE::Actor *a_actor, const bool a_ignoreVirtualTokenSuppression) {
+  std::array<std::optional<ActiveFittingAppearance>, 32> result;
+  const auto entries =
+      CollectActiveFittingArmors(a_actor, a_ignoreVirtualTokenSuppression);
+  const auto winners = rules::BuildFirstAppearanceSlotLookup(entries);
+  for (std::size_t bit = 0; bit < result.size(); ++bit) {
+    if (winners[bit] == entries.size()) {
+      continue;
+    }
+    const auto &entry = entries[winners[bit]];
+    if (!entry.armor || entry.rowKey.empty() || entry.itemKey.empty()) {
+      continue;
+    }
+    result[bit] = ActiveFittingAppearance{
+        .armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(entry.armor->GetFormID()),
+        .slotMask = entry.slotMask,
+        .rowKey = entry.rowKey,
+        .itemKey = entry.itemKey};
   }
-  return ActiveFittingAppearance{
-      .armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(armor->GetFormID()),
-      .slotMask = armorSlotMask,
-      .rowKey = std::move(rowKey),
-      .itemKey = std::move(itemKey)};
+  return result;
 }
 
 RE::TESObjectARMO *
@@ -3028,7 +3032,7 @@ GetActiveFittingArmorForSlot(RE::Actor *a_actor,
                              const std::uint32_t a_slotMask,
                              const bool a_ignoreVirtualTokenSuppression) {
   const auto *armor = FindActiveFittingArmorForSlot(
-      a_actor, a_slotMask, nullptr, nullptr, nullptr,
+      a_actor, a_slotMask, nullptr,
       a_ignoreVirtualTokenSuppression);
   return armor != nullptr
              ? RE::TESForm::LookupByID<RE::TESObjectARMO>(armor->GetFormID())
@@ -3041,7 +3045,7 @@ GetActiveFittingArmorSlotMaskForSlot(RE::Actor *a_actor,
                                      const bool a_ignoreVirtualTokenSuppression) {
   std::uint32_t armorSlotMask = 0;
   const auto *armor = FindActiveFittingArmorForSlot(
-      a_actor, a_slotMask, &armorSlotMask, nullptr, nullptr,
+      a_actor, a_slotMask, &armorSlotMask,
       a_ignoreVirtualTokenSuppression);
   (void)armor;
   return armorSlotMask;

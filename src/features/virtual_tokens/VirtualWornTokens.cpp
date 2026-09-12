@@ -1848,6 +1848,11 @@ void InvalidateAppearanceTickets(const RE::FormID a_actorID,
       g_manualAutomationOverrides.erase(std::string(a_identity));
     }
     for (auto &ticket : g_suppressionTickets) {
+      // Same-slot appearances belonging to another actor must retain both
+      // their ticket and their owning transaction during a manual eye action.
+      if (ticket.actorID != a_actorID) {
+        continue;
+      }
       std::erase_if(ticket.appearances,
                     [&](const AppearanceTicketRef &a_appearance) {
                       if (a_deleted) {
@@ -3956,10 +3961,13 @@ void UpdateVirtualWornTokenCache() {
       continue;
     }
     std::unordered_set<std::uint64_t> seenSources;
+    // Conditions and row ordering are actor-wide, not slot-dependent. Keep
+    // this snapshot local to the rebuild so all invalidation/event semantics
+    // remain intact without evaluating the same actor 32 times.
+    const auto activeBySlot =
+        sfs::native::GetActiveFittingAppearancesBySlot(actor, true);
     for (std::uint32_t slot = 30; slot <= 61; ++slot) {
-      const auto queryMask = SlotMask(slot);
-      const auto active = sfs::native::GetActiveFittingAppearanceForSlot(
-          actor, queryMask, true);
+      const auto &active = activeBySlot[slot - 30];
       const auto slotMask = active ? active->slotMask : 0;
       // Multi-slot appearances are atomic for protection. Do not trim only the
       // protected bits and accidentally publish the remainder as a token.

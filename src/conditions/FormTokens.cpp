@@ -90,4 +90,8 @@ RE::TESForm *LookupFormTokenIf(const std::string &a_token,
   }
   return nullptr;
 }
+std::string GetFormTokenEditorID(const std::string &a_token) {
+  const auto *form = LookupFormToken(a_token, false);
+  return form ? sfs::armor::GetEditorID(form) : std::string{};
+}
 } // namespace sfs::conditions

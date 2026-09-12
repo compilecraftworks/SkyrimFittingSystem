@@ -1,0 +1,12 @@
+v1.6.4
+
+- Reduced repeated stripping-link work by collecting each actor's active appearances once per refresh and reusing the result across all 32 biped slots. Existing refresh timing and slot/identity rules are preserved.
+- Skipped unnecessary body-keyword outfit collection for actors without an active SFS display override, and reduced unrelated dye render-pass bookkeeping while preserving nested-pass isolation.
+- Fixed individual/global appearance show controls after external stripping without redress, including SexLab redress OFF. Appearances remain hidden until a manual action or valid recovery; actual redress still uses the existing automatic recovery. SFS does not equip real gear for this fix.
+- Restricted manual/delete stripping-ticket invalidation to the selected actor, preserving other actors' same-slot states.
+- Form-based condition Argument 1 now displays EditorID first, with the original identifier as fallback. Actor/reference labels retain a secondary FormID. Viewing or accepting an unchanged label does not rewrite the stored reference; Argument 2 and non-form values are unchanged.
+- Added regression coverage for slot-result equivalence, dye pass isolation, repeated strip/show cycles, actor isolation, and EditorID input/selection. All 17 fast regression executables and production-source checks passed.
+
+No changes to game/RaceMenu support, save/settings formats, BodyMorph ownership, DAVE/DAV/native refresh dispatch, or the three optional compatibility patches. Keep existing settings and presets.
+
+The performance changes address redundant work identified during the city-stutter investigation. FPS gains and resolution in every reported environment have not been verified in-game. Automated tests do not replace live gameplay validation.

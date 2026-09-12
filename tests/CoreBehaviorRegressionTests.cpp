@@ -1,4 +1,5 @@
 #include "native/ArmorRefreshRules.h"
+#include "native/ActiveAppearanceSlotLookup.h"
 #include "native/BranchChainRules.h"
 #include "native/ExternalEquipmentTransactionRules.h"
 #include "native/FittingSlotStateRules.h"
@@ -29,6 +30,55 @@ void Expect(const bool a_condition, const char *a_message) {
   if (!a_condition) {
     std::cerr << "FAILED: " << a_message << '\n';
     ++g_failures;
+  }
+}
+
+void TestBulkAppearanceSlotLookup() {
+  struct Entry {
+    std::uint32_t slotMask;
+    bool validIdentity{true};
+  };
+  using sfs::native::rules::BuildFirstAppearanceSlotLookup;
+  const std::vector<Entry> empty;
+  const auto emptyLookup = BuildFirstAppearanceSlotLookup(empty);
+  for (const auto winner : emptyLookup) {
+    Expect(winner == empty.size(), "Empty actor has no slot winner");
+  }
+  for (std::size_t bit = 0; bit < 32; ++bit) {
+    const std::vector<Entry> single{{std::uint32_t{1} << bit}};
+    const auto lookup = BuildFirstAppearanceSlotLookup(single);
+    for (std::size_t query = 0; query < 32; ++query) {
+      Expect(lookup[query] == (query == bit ? 0u : single.size()),
+             "Single-slot armors must not populate other slots, including slot 61");
+    }
+  }
+  // Include multi-slot, overlapping, zero, bit 31, and invalid first entries.
+  const std::vector<Entry> edgeCases{
+      {0}, {0x80000001u, false}, {0x00000003u}, {0xFFFFFFFFu}};
+  const auto edgeLookup = BuildFirstAppearanceSlotLookup(edgeCases);
+  Expect(edgeLookup[0] == 1 && edgeLookup[31] == 1 &&
+             !edgeCases[edgeLookup[0]].validIdentity && edgeLookup[1] == 2,
+         "Bulk lookup retains first-match identity and complete multi-slot masks");
+  // Compare against the former independent per-slot first-match search.
+  std::uint32_t seed = 0x534653u;
+  for (std::size_t count = 0; count < 128; ++count) {
+    std::vector<Entry> entries;
+    for (std::size_t index = 0; index < count; ++index) {
+      seed = seed * 1664525u + 1013904223u;
+      entries.push_back({seed});
+    }
+    const auto lookup = BuildFirstAppearanceSlotLookup(entries);
+    for (std::size_t bit = 0; bit < 32; ++bit) {
+      auto expected = entries.size();
+      for (std::size_t index = 0; index < entries.size(); ++index) {
+        if ((entries[index].slotMask & (std::uint32_t{1} << bit)) != 0) {
+          expected = index;
+          break;
+        }
+      }
+      Expect(lookup[bit] == expected,
+             "Bulk snapshot must preserve all 32 independent slot winners");
+    }
   }
 }
 
@@ -746,6 +796,7 @@ int main() {
              !CanReadCostumePrefix(24, 24, 1, false),
          "Malformed Grid message bounds remain invalid independently of version");
   TestStripLinkPolicies();
+  TestBulkAppearanceSlotLookup();
   TestPapyrusPostLinkInspectionBoundary();
   TestVanillaAnchorResolution();
   TestActorLocalModSettingsState();
