@@ -159,6 +159,7 @@ namespace sfs::native {
 #include "RenderedOutfitProducer.production.inc"
 std::unordered_map<std::uint32_t, ro::Value> inputs;
 unsigned captures{0};
+bool useGameTaskQuery{false};
 bool ro::HasDisplayConfiguration(std::uint32_t actor) { ++captures; return inputs.contains(actor); }
 void Check(bool ok, const char* message) {
   if (!ok) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
@@ -166,7 +167,9 @@ void Check(bool ok, const char* message) {
 abi::Status Query(std::uint32_t actor, abi::Snapshot& out, abi::Item* items = nullptr,
                   std::uint32_t count = 0) {
   out.structSize = sizeof(out);
-  return SkyrimFittingSystem_QueryRenderedOutfit(actor, &out, items, count, sizeof(abi::Item));
+  const auto query = useGameTaskQuery ? SkyrimFittingSystem_QueryRenderedOutfitOnGameTask :
+                                      SkyrimFittingSystem_QueryRenderedOutfit;
+  return query(actor, &out, items, count, sizeof(abi::Item));
 }
 void Tick() {
   // Simulate already-computed display producer input, never evaluate from Query.
@@ -187,6 +190,27 @@ int main() {
         abi::Status::InvalidArgument, "null item buffer with nonzero capacity");
   Check(SkyrimFittingSystem_QueryRenderedOutfit(1, &out, nullptr, 0, sizeof(abi::Item) - 1) ==
         abi::Status::InvalidArgument, "wrong item stride");
+  // Both exports share validation; the task-aware entry must not become an
+  // unchecked cache copy just because it omits the legacy OS-thread proxy.
+  const auto preValidationLookups = RE::lookups;
+  for (const abi::Query query : {&SkyrimFittingSystem_QueryRenderedOutfit,
+                                 &SkyrimFittingSystem_QueryRenderedOutfitOnGameTask}) {
+    abi::Snapshot s{};
+    Check(query(1, nullptr, nullptr, 0, sizeof(abi::Item)) == abi::Status::InvalidArgument,
+          "both exports reject null output");
+    s.structSize = sizeof(s) - 1;
+    Check(query(1, &s, nullptr, 0, sizeof(abi::Item)) == abi::Status::InvalidArgument,
+          "both exports reject short header");
+    s.structSize = sizeof(s);
+    Check(query(1, &s, nullptr, 1, sizeof(abi::Item)) == abi::Status::InvalidArgument &&
+          query(1, &s, nullptr, 0, sizeof(abi::Item) - 1) == abi::Status::InvalidArgument,
+          "both exports enforce buffer/stride contract");
+    Check(query(0, &s, nullptr, 0, sizeof(abi::Item)) == abi::Status::InvalidActor,
+          "both exports reject zero actor before engine access");
+    Check(query(1, &s, nullptr, 0, sizeof(abi::Item)) == abi::Status::NotReady,
+          "both exports defer before game readiness");
+  }
+  Check(RE::lookups == preValidationLookups, "invalid/unready queries never touch engine actors");
   Tick(); ro::SetGameReady(true); ro::RegisterEvents();
   RE::actors[0x14] = {}; RE::actors[0x22] = {};
   inputs[0x14] = {abi::Status::Ready, abi::ClothingBody,
@@ -204,6 +228,15 @@ int main() {
         item[1].visibleSlots == (4u | (1u << 26)) && item[2].formID == 0x201,
         "all slots, duplicates merged, overlapping different armors retained");
   Check(out.bodyFlags == abi::ClothingBody && out.revision == revision, "one consistent snapshot");
+  SKSE::tasks.AddTask([&] {
+    abi::Snapshot s{}; s.structSize = sizeof(s);
+    abi::Item guarded[2]{}; guarded[0].formID = 0xABCD; guarded[1].formID = 0xDCBA;
+    Check(SkyrimFittingSystem_QueryRenderedOutfitOnGameTask(0x14, &s, guarded, 1,
+            sizeof(abi::Item)) == abi::Status::BufferTooSmall && s.requiredCount == 3 &&
+          guarded[0].formID == 0xABCD && guarded[1].formID == 0xDCBA,
+          "task export preserves all-or-nothing caller-buffer bounds");
+  });
+  SKSE::tasks.Run();
   const auto before = captures; Tick(); Tick();
   Check(captures == before, "no repeated inventory/condition capture when unchanged");
   const auto events = SKSE::messages.delivered.size();
@@ -238,6 +271,54 @@ int main() {
   abi::Status otherThread{};
   std::thread t([&] { abi::Snapshot s{}; otherThread = Query(0x14, s); }); t.join();
   Check(otherThread == abi::Status::WrongThread, "wrong thread rejected before engine access");
+  // New clients enforce SKSE AddTask context themselves. Successive serialized
+  // task batches can move OS threads, so the new export must not use the last
+  // provider pump's OS-thread ID as a proxy for that context.
+  useGameTaskQuery = true;
+  SKSE::tasks.AddTask([&] { abi::Snapshot s{}; otherThread = Query(0x14, s); });
+  std::thread migratedTask([] { SKSE::tasks.Run(); }); migratedTask.join();
+  Check(otherThread == abi::Status::NotManaged, "migrated SKSE task can query current snapshot");
+  for (unsigned transition = 0; transition < 128; ++transition) {
+    inputs[0x14] = {abi::Status::Ready, 0, {}};
+    const auto phase = transition % 4;
+    if (phase < 2) {
+      inputs[0x14].bodyFlags = abi::ArmorCuirass;
+      inputs[0x14].items = {{phase ? 0x200u : 0x100u,
+                            phase ? 0x200u : 0x100u, 4, 4,
+                            phase ? abi::Registered : abi::Actual, 0}};
+    } else if (phase == 3) {
+      // The reported nude state still had a non-body item in slot 52. A
+      // nonempty item array must not be mistaken for visible torso coverage.
+      inputs[0x14].items = {{0x400, 0x400, 1u << 22, 1u << 22, abi::Registered, 0}};
+    }
+    ro::NotifyRefresh(0x14, true); ro::NotifySkinning(0x14); Tick();
+    SKSE::tasks.AddTask([&] {
+      abi::Snapshot s{}; abi::Item buf[4]{};
+      Check(Query(0x14, s, buf, 4) == abi::Status::Ready &&
+            s.requiredCount == inputs.at(0x14).items.size() &&
+            s.bodyFlags == inputs.at(0x14).bodyFlags && s.visibleSlots ==
+                (phase < 2 ? 4u : phase == 3 ? 1u << 22 : 0u),
+            "every actual/displayed/hidden change reaches next migrated task");
+      if (s.requiredCount) Check(buf[0].formID == inputs.at(0x14).items[0].formID &&
+                                buf[0].source == inputs.at(0x14).items[0].source,
+                                "migrated task uses visible source identity");
+      const auto currentRevision = s.revision;
+      const auto queuedBeforeIdle = SKSE::tasks.queued;
+      const auto legacyLookups = RE::lookups;
+      for (int idle = 0; idle < 3; ++idle) {
+        ro::QueuePump();
+        Check(SkyrimFittingSystem_QueryRenderedOutfit(0x14, &s, buf, 4,
+                sizeof(abi::Item)) == abi::Status::WrongThread && RE::lookups == legacyLookups,
+              "legacy export still rejects migrated thread before actor lookup");
+      }
+      Check(SKSE::tasks.queued == queuedBeforeIdle &&
+            Query(0x14, s, buf, 4) == abi::Status::Ready && s.revision == currentRevision,
+            "task export reads idle published state without forcing a pump or stale fallback");
+    });
+    std::thread task([] { SKSE::tasks.Run(); }); task.join();
+  }
+  // The remainder of the existing lifecycle/root/unload/epoch/idle-performance
+  // tests now exercise the new export, not a less-validated snapshot shortcut.
   RE::actors[0x22].root = nullptr; Tick();
   Check(Query(0x22, out) == abi::Status::NotReady, "unloaded is not naked or unmanaged");
   RE::actors[0x22].root = reinterpret_cast<void*>(2); Tick();

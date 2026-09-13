@@ -7,6 +7,13 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.6.6 adds an explicit SKSE game-task query entry for rendered
+outfit API consumers, preserving the legacy export and v1 data layout. See the
+[API fix and cleanup audit](docs/V1.6.6-GAMETASK-API-AUDIT.md) for the caller
+contract, regression coverage, and limits, and the
+[English](docs/RELEASE-NOTES-v1.6.6.md) / [Korean](docs/RELEASE-NOTES-v1.6.6-ko.md)
+release notes. API consumers must prefer the new entry to use the fix.
+
 v1.6.5 adds a read-only rendered-outfit API, built-in IED 1.7.4 BipedSlot
 condition integration, LT + RS rotation, remapped Cancel handling, and a
 localized title-bar rotation hint. First-run character placement defaults to

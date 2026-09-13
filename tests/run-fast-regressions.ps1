@@ -291,6 +291,26 @@ try {
 
     $xmakeSource = Get-Content -LiteralPath (
         Join-Path $repository "xmake.lua") -Raw
+    $renderedProviderSource = Get-Content -LiteralPath (
+        Join-Path $repository "src/api/RenderedOutfitProvider.cpp") -Raw
+    $productionTargetStart = $xmakeSource.IndexOf('target("SkyrimFittingSystem")')
+    $testTargetsStart = $xmakeSource.IndexOf('target("IedConditionIntegrationTests")')
+    if ($productionTargetStart -lt 0 -or $testTargetsStart -le $productionTargetStart) {
+        throw "Cannot identify the production/test build boundary"
+    }
+    $productionTarget = $xmakeSource.Substring($productionTargetStart,
+        $testTargetsStart - $productionTargetStart)
+    foreach ($temporaryProbe in @('BCNGSFSTaskThreadProbe', 'task-thread-probe',
+        'consumer-probe', 'read-live.ps1', 'sfs-live-20260913', 'ReadProcessMemory',
+        'WriteProcessMemory', 'OpenProcess', 'SFS_RENDERED_OUTFIT_TEST')) {
+        # The conditional test boundary in the provider is intentional. The
+        # production target must never define it or link external audit probes.
+        if ($productionTarget.Contains($temporaryProbe) -or
+            ($temporaryProbe -ne 'SFS_RENDERED_OUTFIT_TEST' -and
+             $renderedProviderSource.Contains($temporaryProbe))) {
+            throw "Temporary analysis code entered a production API/build boundary: $temporaryProbe"
+        }
+    }
     if (-not $xmakeSource.Contains('set_config("skyrim_vr", false)')) {
         throw "The production build must remain SE/AE-only with the exact flat layout"
     }

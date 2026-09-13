@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.6.5 - Nexus Source Package
+Skyrim Fitting System v1.6.6 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,13 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.6.6 adds the explicit SKSE AddTask rendered-outfit query entry while
+preserving the original export and v1 POD layout. Consumers must enforce
+actual AddTask execution; arbitrary worker or rendering-thread queries are
+not supported. See docs/V1.6.6-GAMETASK-API-AUDIT.md for the handoff,
+regression coverage, and diagnostic-code audit. The public header below
+contains both export names and their shared caller-buffer contract.
 
 v1.6.5 adds the read-only rendered-outfit API, verified IED 1.7.4 BipedSlot
 condition bridge, gamepad LT + RS rotation, mapped Cancel handling, and

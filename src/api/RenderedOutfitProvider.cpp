@@ -254,9 +254,9 @@ void ForgetPreparedValue(const std::uint32_t id) {
   } else { prepared.erase(id); }
 }
 
-abi::Status Query(const std::uint32_t actorID, abi::Snapshot* output,
-                   abi::Item* items, const std::uint32_t capacity,
-                   const std::uint32_t itemSize) {
+abi::Status QueryImpl(const std::uint32_t actorID, abi::Snapshot* output,
+    abi::Item* items, const std::uint32_t capacity, const std::uint32_t itemSize,
+    const bool fromGameTask) {
   if (!output || output->structSize < sizeof(abi::Snapshot) ||
       itemSize != sizeof(abi::Item) || (!items && capacity != 0)) {
     return abi::Status::InvalidArgument;
@@ -264,10 +264,16 @@ abi::Status Query(const std::uint32_t actorID, abi::Snapshot* output,
   *output = {sizeof(abi::Snapshot), abi::kVersion, 0, 0, 0, actorID,
              abi::Status::NotReady, 0, 0, 0, 0};
   if (!actorID) { return output->status = abi::Status::InvalidActor; }
-  const auto thread = gameThread.load();
-  if (!thread) { return output->status; }
-  if (thread != ::GetCurrentThreadId()) {
-    return output->status = abi::Status::WrongThread;
+  if (!fromGameTask) {
+    // Preserve the original export's contract for existing consumers. An OS
+    // thread ID cannot identify the SKSE task phase: successive task batches
+    // may execute on different threads. Task-aware consumers use the explicit
+    // OnGameTask export, and must enforce that call-site precondition themselves.
+    const auto thread = gameThread.load();
+    if (!thread) { return output->status; }
+    if (thread != ::GetCurrentThreadId()) {
+      return output->status = abi::Status::WrongThread;
+    }
   }
   if (!gameReady.load()) {
     std::lock_guard lock(mutex); output->epoch = state.Epoch(); return output->status;
@@ -286,6 +292,19 @@ abi::Status Query(const std::uint32_t actorID, abi::Snapshot* output,
   }
   return state.Copy(actorID, *output, items, capacity);
 }
+
+abi::Status Query(const std::uint32_t actorID, abi::Snapshot* output,
+    abi::Item* items, const std::uint32_t capacity, const std::uint32_t itemSize,
+    const bool fromGameTask = false) noexcept {
+  try { return QueryImpl(actorID, output, items, capacity, itemSize, fromGameTask); }
+  catch (...) {
+    if (output && output->structSize >= sizeof(*output)) {
+      *output = {sizeof(*output), abi::kVersion, 0, 0, 0,
+                 actorID, abi::Status::NotReady, 0, 0, 0, 0};
+    }
+    return abi::Status::NotReady;
+  }
+}
 } // namespace sfs::api::rendered
 
 extern "C" __declspec(dllexport) std::uint32_t __cdecl
@@ -296,12 +315,15 @@ extern "C" __declspec(dllexport) sfs::rendered_outfit_api::Status __cdecl
 SkyrimFittingSystem_QueryRenderedOutfit(const std::uint32_t actorID,
     sfs::rendered_outfit_api::Snapshot* output, sfs::rendered_outfit_api::Item* items,
     const std::uint32_t capacity, const std::uint32_t itemSize) {
-  try { return sfs::api::rendered::Query(actorID, output, items, capacity, itemSize); }
-  catch (...) {
-    if (output && output->structSize >= sizeof(*output)) {
-      *output = {sizeof(*output), sfs::rendered_outfit_api::kVersion, 0, 0, 0,
-                 actorID, sfs::rendered_outfit_api::Status::NotReady, 0, 0, 0, 0};
-    }
-    return sfs::rendered_outfit_api::Status::NotReady;
-  }
+  return sfs::api::rendered::Query(actorID, output, items, capacity, itemSize);
+}
+
+// Same v1 data/ownership ABI, with an explicit SKSE AddTask execution contract.
+// Not a worker/render-thread API. Root, availability, dirty-state and generation
+// validation remain identical to the original export.
+extern "C" __declspec(dllexport) sfs::rendered_outfit_api::Status __cdecl
+SkyrimFittingSystem_QueryRenderedOutfitOnGameTask(const std::uint32_t actorID,
+    sfs::rendered_outfit_api::Snapshot* output, sfs::rendered_outfit_api::Item* items,
+    const std::uint32_t capacity, const std::uint32_t itemSize) {
+  return sfs::api::rendered::Query(actorID, output, items, capacity, itemSize, true);
 }

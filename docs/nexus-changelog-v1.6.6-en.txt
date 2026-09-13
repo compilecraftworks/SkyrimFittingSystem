@@ -1,0 +1,8 @@
+Skyrim Fitting System v1.6.6 SE-AE
+- Added a task-aware Rendered Outfit query to avoid erroneous WrongThread rejection after valid SKSE task execution moves between OS threads, including idle retries.
+- Preserved the legacy export, ABI v1 data layouts, and actor/root/readiness/lifecycle validation. Consumers must prefer the new export and call it only inside a real SKSE AddTask callback.
+- Added 128 actual-torso, registered-torso, managed-empty, and accessory-only transition checks, plus buffer-bound and idle-query regressions.
+- Audited diagnostic/analysis code and added production-entry guards. No temporary live diagnostic code needed removal; required logs, stripping recovery, and regression tests remain.
+- All 20 regression targets and both IED 1.7.4 binary checks passed. Only SFSCore.dll changes in the runtime package.
+- No BCNG formula/XML changes, game/RaceMenu support changes, or optional patch updates. Existing settings/presets are preserved.
+- No new all-runtime in-game certification or measured FPS guarantee.

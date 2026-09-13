@@ -11,6 +11,7 @@ namespace sfs::rendered_outfit_api {
 inline constexpr std::uint32_t kVersion = 1;
 inline constexpr char kVersionExport[] = "SkyrimFittingSystem_GetRenderedOutfitAPIVersion";
 inline constexpr char kQueryExport[] = "SkyrimFittingSystem_QueryRenderedOutfit";
+inline constexpr char kGameTaskQueryExport[] = "SkyrimFittingSystem_QueryRenderedOutfitOnGameTask";
 inline constexpr char kSender[] = "Skyrim Fitting System";
 inline constexpr std::uint32_t kChangedMessage = 0x53465352; // SFSR
 
@@ -75,13 +76,21 @@ struct Changed {
 };
 #pragma pack(pop)
 
-// Query is game-thread only. First lookup subscribes this actor and may return
+// Query requires the game-task execution context, not merely a cached OS thread
+// identity. First lookup subscribes this actor and may return
 // NotReady until an existing display result is published on a game task. Query
 // never reruns display/strip rules, equips items, or applies morphs. Subscribe
 // to change messages instead of polling all actors every frame. Subscriptions
 // are cleared on epoch reset; query again for actors the consumer still needs.
 // Output is caller owned. ABI v1 requires itemSize==sizeof(Item), capacity is in
 // entries. nullptr items is valid only with zero capacity. No C++ allocator ABI.
+// Prefer kGameTaskQueryExport (SFS 1.6.6+, same Query signature/layout).
+// Its caller MUST be executing inside SKSE::TaskInterface::AddTask, not Present,
+// an input callback, or an arbitrary worker. It does not compare OS thread IDs:
+// the SKSE task phase can migrate between threads. All actor/root/readiness and
+// revision checks still run. This precondition is caller-enforced, not detected
+// by the provider. The original export is retained for older clients; its last-
+// pump thread-ID guard can reject a valid migrated task with WrongThread.
 using GetVersion = std::uint32_t (__cdecl*)();
 using Query = Status (__cdecl*)(std::uint32_t, Snapshot*, Item*, std::uint32_t,
                                 std::uint32_t);
