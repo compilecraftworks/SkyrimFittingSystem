@@ -1,0 +1,10 @@
+Skyrim Fitting System v1.7.0 SE-AE
+
+- Fixed skipped appearance/worn-mask hooks when another plugin had installed an E9 inline jump at a supported call site. This addresses the initialization failure seen in the 1.5.97 / SFS 1.6.6 report.
+- Added SE/AE actor-selective handling for appearance attachment, worn masks and actual armor hiding. Passive actors keep the previous inline route; active SFS actors use the engine call and SFS display policy.
+- Preserved ordinary E8 provider routing and concrete-visitor protection. IED follow-ups reuse the existing coalesced/load-canceled queue and are absent when IED is not installed.
+- Added emitted-machine-code regression coverage for stack/register/flag preservation and repeated visibility changes.
+- All 28 regression executables passed in release and releasedbg; 2,600 SE/AE skinning-route cases passed. Built the SE/AE-only DLL as 1.7.0.0 with the same 16 exports.
+
+Important: the E9 fallback gives SFS display priority on active actors; it does not preserve arbitrary prior inline behavior on those actors. The reporter's exact mod combination has not been tested in game.
+Keep existing settings, kits, saves and optional patches. Supported Skyrim versions, dependencies and API ABI are unchanged. Wet Function patch v1.2.0 is not established as the source of the native E9 hooks.

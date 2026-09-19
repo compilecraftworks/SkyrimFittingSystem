@@ -116,6 +116,29 @@ ConcreteVisitor* g_originalVisitor{};
 RE::Actor* g_actor{};
 RE::ActorWeightModel* g_weight{};
 unsigned g_providerCalls{}, g_engineFiltered{}, g_additionalCalls{}, g_iedEvaluations{};
+unsigned g_engineMaskCalls{}, g_engineArmorCalls{}, g_displayMaskCalls{};
+void (*g_clobberVolatileState)(){};
+RE::TESObjectARMO* g_armor{};
+std::uint32_t EngineMask(RE::InventoryChanges* inventory) {
+  Expect(inventory->owner == g_actor, "worn mask retains inventory owner");
+  ++g_engineMaskCalls;
+  return 0x44;
+}
+std::uint32_t ForeignMask(RE::InventoryChanges* inventory) {
+  Expect(inventory->owner == g_actor, "foreign worn mask retains inventory owner");
+  ++g_providerCalls;
+  return 0x44;
+}
+void EngineArmor(RE::TESObjectARMO* armor, void* arg2, std::uintptr_t arg3, std::uintptr_t arg4) {
+  Expect(armor == g_armor && arg2 == g_originalVisitor && arg3 == 0x8888 && arg4 == 0x9999,
+         "vanilla armor call retains all four engine arguments");
+  ++g_engineArmorCalls;
+}
+void ForeignArmor(RE::TESObjectARMO* armor, void* arg2, std::uintptr_t arg3, std::uintptr_t arg4) {
+  EngineArmor(armor, arg2, arg3, arg4);
+  --g_engineArmorCalls;
+  ++g_providerCalls;
+}
 void EngineVisit(RE::InventoryChanges* inventory, RE::InventoryChanges::IItemChangeVisitor* visitor) {
   Expect(inventory->owner == g_actor, "actor-local inventory must be retained");
   if (visitor != g_originalVisitor) {
@@ -150,8 +173,13 @@ struct ID {
   std::uintptr_t address() const { return static_cast<std::uintptr_t>(value); }
 };
 template<class T> struct Relocation {
-  Relocation(int, int) {}
-  std::uintptr_t address() const { return reinterpret_cast<std::uintptr_t>(&EngineVisit); }
+  int id;
+  Relocation(int a, int) : id(a) {}
+  std::uintptr_t address() const {
+    if (id == 17392) return reinterpret_cast<std::uintptr_t>(&EngineArmor);
+    if (id == 15806) return reinterpret_cast<std::uintptr_t>(&EngineMask);
+    return reinterpret_cast<std::uintptr_t>(&EngineVisit);
+  }
 };
 }
 #define RELOCATION_ID(a, b) a, b
@@ -160,9 +188,28 @@ struct HookLayout {
   std::string_view name;
   std::uint64_t customSkinRelocationID;
   std::uintptr_t customSkinCallOffset;
+  std::uint64_t armorUpdateRelocationID{};
+  std::uintptr_t vanillaArmorOffset{};
+  std::uint64_t wornMaskRelocationID{};
+  std::uintptr_t wornMaskCallOffset{};
 };
 }
 namespace sfs::native {
+bool ShouldBlockVanillaArmor(RE::TESObjectARMO* armor, RE::TESObjectREFR* actor) {
+  Expect(armor == g_armor && actor == g_actor, "vanilla predicate retains armor and actor");
+  return g_actor->active && g_actor->hideActual;
+}
+std::uint32_t GetDisplayWornMask(RE::InventoryChanges* inventory, RE::TESObjectREFR* actor,
+                               std::uint32_t original) {
+  Expect(inventory->owner == g_actor && actor == g_actor && original == 0x44,
+         "display worn mask retains engine mask, inventory and actor");
+  ++g_displayMaskCalls;
+  return 0x80 | (g_actor->hideActual ? 0 : original);
+}
+void QueueIedEvaluation(std::uint32_t id) {
+  Expect(g_actor && id==g_actor->GetFormID(), "inline IED follow-up stays actor-local");
+  ++g_iedEvaluations;
+}
 void SetIedVisitWornItemsChainTarget(std::uintptr_t target) { g_iedVisitWornItemsChainTarget = target; }
 void SetPassthroughVisitWornItemsChainTarget(std::uintptr_t target) { g_passthroughVisitWornItemsChainTarget = target; }
 bool InstallOriginalWornVisitorFilter() {
@@ -171,6 +218,7 @@ bool InstallOriginalWornVisitorFilter() {
 }
 bool ShouldOverrideSkinning(RE::TESObjectREFR* actor) {
   Expect(actor == g_actor, "SE/AE stub must preserve its actor register");
+  if (g_clobberVolatileState) g_clobberVolatileState();
   return g_actor->active;
 }
 void ApplyAdditionalDisplayArmors(RE::Actor* actor, RE::ActorWeightModel* weight) {
@@ -186,6 +234,7 @@ struct CallSiteBranch {
   bool valid{true};
   bool expected{false};
   bool ChainsAsCall() const { return opcode == 0xE8; }
+  bool ChainsAsJump() const { return opcode == 0xE9; }
 };
 CallSiteBranch g_callSite;
 CallSiteBranch InspectCallSite(std::uintptr_t, std::uintptr_t, std::string_view) { return g_callSite; }
@@ -217,34 +266,99 @@ struct BranchTrampoline {
 } g_branch;
 BranchTrampoline& GetTrampoline() { return g_branch; }
 }
+bool g_inlineDetourIedLoaded{};
+void InstallDavInitWornChainHook(const sfs::runtime::HookLayout&) {
+  Expect(false, "valid E8/E9 must not enter DAV NOP fallback");
+}
 #include "CustomSkinningHooks.production.inc"
+
+enum class HookKind { Custom, Mask, Vanilla };
+struct InlineState {
+  std::array<std::uint64_t, 7> gp{};
+  std::array<std::uint64_t, 12> xmm{};
+  std::uintptr_t stack{}, flags{};
+};
+InlineState g_expectedInlineState{}, g_observedInlineState{};
+std::uint64_t g_stackCanary{};
+const std::array<std::uint64_t, 12> kXmmSeed{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
+struct TestCode : Xbyak::CodeGenerator {
+  // Preserve the captured state, including flags, while recording it.
+  void Capture(InlineState& state) {
+    push(rax);
+    mov(rax, reinterpret_cast<std::uintptr_t>(&state));
+    mov(ptr[rax + 8], rcx); mov(ptr[rax + 16], rdx);
+    mov(ptr[rax + 24], r8); mov(ptr[rax + 32], r9);
+    mov(ptr[rax + 40], r10); mov(ptr[rax + 48], r11);
+    for (int i=0; i<6; ++i) movdqu(ptr[rax + offsetof(InlineState, xmm) + i*16], Xbyak::Xmm(i));
+    push(r10);
+    mov(r10, ptr[rsp + 8]); mov(ptr[rax], r10);
+    lea(r10, ptr[rsp + 16]); mov(ptr[rax + offsetof(InlineState, stack)], r10);
+    pushfq(); pop(r10); mov(ptr[rax + offsetof(InlineState, flags)], r10);
+    pop(r10); pop(rax);
+  }
+};
 
 // Emulate the verified inline call site with real x64 registers and stack
 // alignment, then return through the production stub's continuation jump.
-struct Driver : Xbyak::CodeGenerator {
+struct Driver : TestCode {
   std::uintptr_t callSite{};
-  Driver(bool ae, RE::InventoryChanges* inventory, ConcreteVisitor* visitor) {
-    push(rbx); push(rdi); push(r15);
-    sub(rsp, 0x20);
+  Driver(bool ae, RE::InventoryChanges* inventory, ConcreteVisitor* visitor,
+         HookKind kind = HookKind::Custom) {
+    push(rbx); push(rdi); push(r15); push(rsi); push(r13);
+    sub(rsp, 0x30);
+    mov(qword[rsp + 0x20], 0x12345678);
     mov(rbx, reinterpret_cast<std::uintptr_t>(g_actor));
+    mov(rsi, reinterpret_cast<std::uintptr_t>(g_actor));
+    mov(r13, reinterpret_cast<std::uintptr_t>(g_actor));
     mov(rdi, ae ? 0xBAD : reinterpret_cast<std::uintptr_t>(g_weight));
     mov(r15, ae ? reinterpret_cast<std::uintptr_t>(g_weight) : 0xBAD);
-    mov(rcx, reinterpret_cast<std::uintptr_t>(inventory));
+    mov(rcx, kind == HookKind::Vanilla ? reinterpret_cast<std::uintptr_t>(g_armor)
+                                    : reinterpret_cast<std::uintptr_t>(inventory));
     mov(rdx, reinterpret_cast<std::uintptr_t>(visitor));
+    mov(r10, reinterpret_cast<std::uintptr_t>(kXmmSeed.data()));
+    for (int i=0; i<6; ++i) movdqu(Xbyak::Xmm(i), ptr[r10 + i*16]);
+    mov(r8, 0x8888); mov(r9, 0x9999); mov(r10, 0xAAAA); mov(r11, 0xBBBB);
+    cmp(r8, r9);
     // Indirect jump through the writable test dispatch slot, followed by an
     // unreachable 5-byte stand-in for the original CALL instruction.
     mov(rax, reinterpret_cast<std::uintptr_t>(&SKSE::g_branch.stub));
+    Capture(g_expectedInlineState);
     jmp(ptr[rax]);
     callSite = reinterpret_cast<std::uintptr_t>(getCurr());
     nop(5);
-    add(rsp, 0x20);
-    pop(r15); pop(rdi); pop(rbx);
+    mov(r10, reinterpret_cast<std::uintptr_t>(&g_stackCanary));
+    mov(r11, ptr[rsp + 0x20]); mov(ptr[r10], r11);
+    add(rsp, 0x30);
+    pop(r13); pop(rsi); pop(r15); pop(rdi); pop(rbx);
     ret();
     ready();
   }
 };
 
+// This is an inline JMP detour, NOT a callable function. It enters on the
+// engine frame and jumps back to site+5 instead of executing RET.
+struct InlineProvider : TestCode {
+  InlineProvider(std::uintptr_t resume, std::uintptr_t target) {
+    Capture(g_observedInlineState);
+    sub(rsp, 0x20);
+    call(ptr[rip + visit]);
+    add(rsp, 0x20);
+    jmp(ptr[rip + continuation]);
+    L(visit); dq(target);
+    L(continuation); dq(resume);
+    ready();
+  }
+  Xbyak::Label visit, continuation;
+};
+
 int main() {
+  Xbyak::CodeGenerator clobber;
+  for (int i=0; i<6; ++i) clobber.pxor(Xbyak::Xmm(i), Xbyak::Xmm(i));
+  clobber.xor_(clobber.rax, clobber.rax); clobber.xor_(clobber.rcx, clobber.rcx);
+  clobber.xor_(clobber.rdx, clobber.rdx); clobber.xor_(clobber.r8, clobber.r8);
+  clobber.xor_(clobber.r9, clobber.r9); clobber.xor_(clobber.r10, clobber.r10);
+  clobber.xor_(clobber.r11, clobber.r11); clobber.ret(); clobber.ready();
+  g_clobberVolatileState=clobber.getCode<void(*)()>();
   {
     ConcreteVisitor visitor, other;
     const auto vptr = *reinterpret_cast<std::uintptr_t*>(&visitor);
@@ -367,8 +481,69 @@ int main() {
         }
       }
     }
-    for (auto opcode : {std::uint8_t{0xE9}, std::uint8_t{0x90}}) {
-      g_callSite = {.opcode = opcode, .target = 0x1234, .valid = opcode == 0xE9};
+    for (auto kind : {HookKind::Custom, HookKind::Mask, HookKind::Vanilla}) {
+      for (bool jump : {false, true}) {
+        // Existing E8 custom-provider routes are covered above.
+        if (!jump && kind == HookKind::Custom) continue;
+        for (bool ied : {false, true}) {
+          RE::Actor actor;
+          RE::ActorWeightModel weight; ConcreteVisitor visitor; RE::TESObjectARMO armor;
+          RE::InventoryChanges inventory{&actor};
+          g_actor=&actor; g_weight=&weight; g_originalVisitor=&visitor; g_armor=&armor;
+          g_knownIed=false;
+          Driver driver(ae,&inventory,&visitor,kind);
+          const auto foreign = kind == HookKind::Custom ? reinterpret_cast<std::uintptr_t>(&ForeignVisit)
+              : kind == HookKind::Mask ? reinterpret_cast<std::uintptr_t>(&ForeignMask)
+                                      : reinterpret_cast<std::uintptr_t>(&ForeignArmor);
+          InlineProvider prior(driver.callSite+5, foreign);
+          g_callSite={.opcode=std::uint8_t(jump?0xE9:0xE8),
+              .target=jump?reinterpret_cast<std::uintptr_t>(prior.getCode()):foreign,.valid=true};
+          SKSE::g_branch.stub=nullptr;
+          sfs::runtime::HookLayout layout{ae?"AE":"SE",driver.callSite,0,driver.callSite,0,driver.callSite,0};
+          if (kind == HookKind::Custom) {
+            if(ae) InstallCustomSkinHookAE(layout); else InstallCustomSkinHookSE(layout);
+          } else if (kind == HookKind::Mask) {
+            if(ae) InstallShimWornFlagsHookAE(layout); else InstallShimWornFlagsHookSE(layout);
+          } else {
+            Expect(InstallDontVanillaSkinHook(layout), "install vanilla armor hook");
+          }
+          // The production installer resolves the module once; exercise both
+          // results without loading an actual game DLL into this test process.
+          g_inlineDetourIedLoaded=ied;
+          Expect(SKSE::g_branch.stub!=nullptr,"E9 must not disable SFS registration/hiding");
+          for (unsigned cycle=0; cycle<128; ++cycle) {
+            actor.active=(cycle&1)!=0; actor.hideActual=(cycle&2)!=0;
+            g_providerCalls=g_engineFiltered=g_additionalCalls=g_iedEvaluations=0;
+            g_engineMaskCalls=g_engineArmorCalls=g_displayMaskCalls=0;
+            g_observedInlineState={}; g_stackCanary=0;
+            const auto mask=driver.getCode<std::uint32_t(*)()>()();
+            Expect(g_stackCanary==0x12345678,"all hook routes preserve the engine stack frame");
+            if (jump && !actor.active) {
+              Expect(std::memcmp(&g_expectedInlineState,&g_observedInlineState,sizeof(InlineState))==0,
+                     "passive E9 preserves RSP, all volatile GP/XMM registers and flags, without CALL/RET");
+            }
+            if (kind == HookKind::Custom) {
+              Expect(g_additionalCalls==unsigned(actor.active),"E9 active actor attaches registered armor once");
+              Expect(g_engineFiltered==unsigned(actor.active&&actor.hideActual),"E9 active actor filters hidden real equipment only");
+              Expect(g_providerCalls==unsigned(!actor.active),"E9 passive actor retains prior inline provider");
+              Expect(g_iedEvaluations==unsigned(actor.active&&ied),"E9 IED follow-up only when installed and active");
+            } else if (kind == HookKind::Mask) {
+              Expect(mask==(actor.active ? (0x80u | (actor.hideActual?0u:0x44u)) : 0x44u),"worn mask retains real and registered slot policy");
+              Expect(g_displayMaskCalls==unsigned(actor.active),"no display mask leaks to passive actor");
+              Expect(g_engineMaskCalls==unsigned(jump&&actor.active),"active E9 uses original engine worn-mask call");
+              Expect(g_providerCalls==unsigned(!jump||!actor.active),"E8 worn provider and passive E9 retained");
+            } else {
+              const bool blocked=actor.active&&actor.hideActual;
+              Expect(g_engineArmorCalls==unsigned(jump&&actor.active&&!blocked),"active E9 applies only visible engine armor");
+              Expect(g_providerCalls==unsigned(!blocked&&(!jump||!actor.active)),"vanilla E8/passive E9 behavior retained");
+            }
+            ++cases;
+          }
+        }
+      }
+    }
+    for (auto opcode : {std::uint8_t{0x90}}) {
+      g_callSite = {.opcode = opcode, .target = 0x1234, .valid = false};
       SKSE::g_branch.stub = nullptr;
       sfs::runtime::HookLayout layout{ae ? "AE" : "SE", 0x10000, 0};
       if (ae) InstallCustomSkinHookAE(layout); else InstallCustomSkinHookSE(layout);

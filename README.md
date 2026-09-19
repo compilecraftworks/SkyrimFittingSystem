@@ -7,6 +7,15 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.0 restores SFS appearance attachment and armor hiding when another plugin
+has replaced a supported skinning CALL site with an E9 inline jump. Passive
+actors retain the original inline path; actors with active SFS skinning use
+the engine call and SFS display policy. This is an actor-selective fallback,
+not transparent chaining of arbitrary inline detours: SFS takes display
+priority on active actors. See the [English](docs/RELEASE-NOTES-v1.7.0.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.0-ko.md) notes and
+[hook verification](docs/V1.7.0-INLINE-DETOUR-FIX.md).
+
 v1.6.9 preserves conditional appearance cards during Grid Costume changes,
 makes rejected condition-action drops leave both endpoints intact, and prevents
 pre-load callbacks from releasing new equipment/condition queue ownership.

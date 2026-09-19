@@ -48,7 +48,10 @@ $groups = @{
         ('template <class T>' + "`n" + '[[nodiscard]] std::optional<T> TryReadMemory('),
         '[[nodiscard]] std::optional<ModuleChainMatch> ResolveBranchChainOwner('))
     'CustomSkinningHooks.production.inc' = @('src/native/ArmorSkinningHooks.cpp', @(
+        'class SkinningHookCode :', 'void VisitWornItemsForInlineDetour(',
         ('[[nodiscard]] bool' + "`n" + 'ConfigureIedCustomSkinCompatibility('),
+        'bool InstallDontVanillaSkinHook(',
+        'void InstallShimWornFlagsHookSE(', 'void InstallShimWornFlagsHookAE(',
         'void InstallCustomSkinHookSE(', 'void InstallCustomSkinHookAE('))
     'CustomSkinningVisitor.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         'void VisitWornItemsWithHiddenRealEquipmentFilter('))

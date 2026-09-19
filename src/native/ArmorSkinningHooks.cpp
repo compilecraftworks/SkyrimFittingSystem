@@ -23,6 +23,61 @@ SKSE::Trampoline g_localTrampoline{"SFS native armor skinning"};
 std::once_flag g_installOnce;
 std::once_flag g_finalizeBackendOnce;
 bool g_realEquipmentBackendConfigured{false}; // startup main-thread only
+bool g_inlineDetourIedLoaded{false}; // resolved once at hook installation
+
+// E9 points to an inline body with the ENGINE stack/register context, not a
+// C++ function. Unmanaged actors tail-jump to it byte-for-byte intact. Active
+// SFS skinning uses the verified engine CALL and SFS's existing display policy.
+// Do not CALL an inline body, rewrite another mod's code, or guess its resume.
+class SkinningHookCode : public Xbyak::CodeGenerator {
+public:
+  void GateInlineJump(std::uintptr_t a_target, const Xbyak::Reg64 &a_actor) {
+    if (!a_target) { return; } // ordinary E8 route stays unchanged
+    Xbyak::Label active, body, predicate, previous;
+    pushfq();
+    push(rax); push(rcx); push(rdx); push(r8); push(r9); push(r10); push(r11);
+    sub(rsp, 0x80); // shadow space + all six volatile XMM registers
+    for (int i = 0; i < 6; ++i) {
+      movdqu(ptr[rsp + 0x20 + i * 16], Xbyak::Xmm(i));
+    }
+    mov(rcx, a_actor);
+    call(ptr[rip + predicate]);
+    test(al, al);
+    jnz(active, T_NEAR);
+    const auto restore = [&] {
+      for (int i = 0; i < 6; ++i) {
+        movdqu(Xbyak::Xmm(i), ptr[rsp + 0x20 + i * 16]);
+      }
+      add(rsp, 0x80);
+      pop(r11); pop(r10); pop(r9); pop(r8); pop(rdx); pop(rcx); pop(rax);
+      popfq();
+    };
+    restore();
+    jmp(ptr[rip + previous]);
+    L(active);
+    restore();
+    jmp(body, T_NEAR);
+    L(predicate);
+    dq(reinterpret_cast<std::uintptr_t>(&sfs::native::ShouldOverrideSkinning));
+    L(previous); dq(a_target);
+    L(body);
+  }
+};
+
+void VisitWornItemsForInlineDetour(
+    RE::InventoryChanges *a_inventory,
+    RE::InventoryChanges::IItemChangeVisitor *a_visitor,
+    RE::TESObjectREFR *a_target, const std::uintptr_t a_engineVisit) {
+  sfs::native::VisitWornItemsWithHiddenRealEquipmentFilter(
+      a_inventory, a_visitor, a_target, a_engineVisit);
+  // Reuse the coalesced/load-canceled public IED queue, never reenter its
+  // concrete-visitor hook with an SFS wrapper. No IED installed => no IED work.
+  if (g_inlineDetourIedLoaded && a_target) {
+    if (auto *actor = a_target->As<RE::Actor>()) {
+      sfs::native::QueueIedEvaluation(actor->GetFormID());
+    }
+  }
+}
 
 struct CallSiteBranch {
   std::uint8_t opcode{0};
@@ -345,12 +400,14 @@ bool InstallDontVanillaSkinHook(const sfs::runtime::HookLayout &a_layout) {
         "SFS native armor skinning vanilla block hook will chain the existing patched target {:X}",
         callSite.target);
   }
-  struct Code : Xbyak::CodeGenerator {
+  struct Code : SkinningHookCode {
     Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_nextTarget,
-         bool a_chainAsJump) {
+         std::uintptr_t a_inlineJump) {
       Xbyak::Label out;
       Xbyak::Label fNextTarget;
       Xbyak::Label fShouldBlockVanillaArmor;
+
+      GateInlineJump(a_inlineJump, r13);
 
       // armor is in rcx, target actor/reference is in r13.
       push(rcx);
@@ -367,11 +424,7 @@ bool InstallDontVanillaSkinHook(const sfs::runtime::HookLayout &a_layout) {
       pop(rcx);
       test(al, al);
       jnz(out);
-      if (a_chainAsJump) {
-        jmp(ptr[rip + fNextTarget]);
-      } else {
-        call(ptr[rip + fNextTarget]);
-      }
+      call(ptr[rip + fNextTarget]);
 
       L(out);
       jmp(ptr[rip]);
@@ -386,7 +439,9 @@ bool InstallDontVanillaSkinHook(const sfs::runtime::HookLayout &a_layout) {
     }
   };
 
-  Code code{hookAddress + 0x5, callSite.target, callSite.ChainsAsJump()};
+  Code code{hookAddress + 0x5,
+            callSite.ChainsAsJump() ? applyArmorAddon.address() : callSite.target,
+            callSite.ChainsAsJump() ? callSite.target : 0};
   auto *stub = g_localTrampoline.allocate(code);
   branchTrampoline.write_branch<5>(hookAddress, stub);
   logger::info(
@@ -428,7 +483,7 @@ void InstallShimWornFlagsHookSE(const sfs::runtime::HookLayout &a_layout) {
                                                                    16044)};
   const auto callSite =
       InspectCallSite(hookAddress, getWornMask.address(), "SE worn mask");
-  if (!callSite.valid || !callSite.ChainsAsCall()) {
+  if (!callSite.valid) {
     logger::warn("Skipped SFS native armor skinning worn-mask hook for SE");
     return;
   }
@@ -437,13 +492,16 @@ void InstallShimWornFlagsHookSE(const sfs::runtime::HookLayout &a_layout) {
         "SFS native armor skinning worn-mask hook for SE will chain the existing patched target {:X}",
         callSite.target);
   }
-  struct Code : Xbyak::CodeGenerator {
-    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_getWornMask) {
+  struct Code : SkinningHookCode {
+    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_getWornMask,
+         std::uintptr_t a_inlineJump) {
       Xbyak::Label suppressVanilla;
       Xbyak::Label out;
       Xbyak::Label fShouldOverrideSkinning;
       Xbyak::Label fGetWornMask;
       Xbyak::Label fGetDisplayWornMask;
+
+      GateInlineJump(a_inlineJump, rsi);
 
       // target actor/reference is in rsi on SE.
       push(rcx);
@@ -486,7 +544,9 @@ void InstallShimWornFlagsHookSE(const sfs::runtime::HookLayout &a_layout) {
     }
   };
 
-  Code code{hookAddress + 0x5, callSite.target};
+  Code code{hookAddress + 0x5,
+            callSite.ChainsAsJump() ? getWornMask.address() : callSite.target,
+            callSite.ChainsAsJump() ? callSite.target : 0};
   auto *stub = g_localTrampoline.allocate(code);
   branchTrampoline.write_branch<5>(hookAddress, stub);
   logger::info("Installed SFS native armor skinning worn-mask hook for SE");
@@ -501,7 +561,7 @@ void InstallShimWornFlagsHookAE(const sfs::runtime::HookLayout &a_layout) {
                                                                    16044)};
   const auto callSite =
       InspectCallSite(hookAddress, getWornMask.address(), "AE worn mask");
-  if (!callSite.valid || !callSite.ChainsAsCall()) {
+  if (!callSite.valid) {
     logger::warn("Skipped SFS native armor skinning worn-mask hook for AE");
     return;
   }
@@ -511,13 +571,16 @@ void InstallShimWornFlagsHookAE(const sfs::runtime::HookLayout &a_layout) {
         callSite.target);
   }
 
-  struct Code : Xbyak::CodeGenerator {
-    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_getWornMask) {
+  struct Code : SkinningHookCode {
+    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_getWornMask,
+         std::uintptr_t a_inlineJump) {
       Xbyak::Label suppressVanilla;
       Xbyak::Label out;
       Xbyak::Label fShouldOverrideSkinning;
       Xbyak::Label fGetWornMask;
       Xbyak::Label fGetDisplayWornMask;
+
+      GateInlineJump(a_inlineJump, rbx);
 
       // target actor/reference is in rbx on AE.
       push(rcx);
@@ -560,7 +623,9 @@ void InstallShimWornFlagsHookAE(const sfs::runtime::HookLayout &a_layout) {
     }
   };
 
-  Code code{hookAddress + 0x5, callSite.target};
+  Code code{hookAddress + 0x5,
+            callSite.ChainsAsJump() ? getWornMask.address() : callSite.target,
+            callSite.ChainsAsJump() ? callSite.target : 0};
   auto *stub = g_localTrampoline.allocate(code);
   branchTrampoline.write_branch<5>(hookAddress, stub);
   logger::info("Installed SFS native armor skinning worn-mask hook for AE");
@@ -575,7 +640,7 @@ void InstallCustomSkinHookSE(const sfs::runtime::HookLayout &a_layout) {
                                                                      16096)};
   const auto callSite =
       InspectCallSite(hookAddress, visitWornItems.address(), "SE custom skin");
-  if (!callSite.valid || !callSite.ChainsAsCall()) {
+  if (!callSite.valid) {
     logger::warn("Skipped SFS native armor skinning custom skin hook for SE");
     return;
   }
@@ -584,17 +649,29 @@ void InstallCustomSkinHookSE(const sfs::runtime::HookLayout &a_layout) {
         "SFS native armor skinning custom skin hook for SE will chain the existing patched target {:X}",
         callSite.target);
   }
-  if (!ConfigureIedCustomSkinCompatibility(callSite, a_layout.name)) {
+  auto visitorCall = callSite;
+  if (callSite.ChainsAsJump()) {
+    visitorCall = {.opcode = 0xE8, .target = visitWornItems.address(),
+                   .valid = true, .expected = true};
+    g_inlineDetourIedLoaded =
+        ::GetModuleHandleW(L"ImmersiveEquipmentDisplays.dll") != nullptr;
+    logger::warn("SFS {} E9 inline skin detour: unmanaged actors retain the previous jump; active SFS actors use engine filtering and registered attachments",
+                 a_layout.name);
+  }
+  if (!ConfigureIedCustomSkinCompatibility(visitorCall, a_layout.name)) {
     return;
   }
 
-  struct Code : Xbyak::CodeGenerator {
-    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems) {
+  struct Code : SkinningHookCode {
+    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems,
+         std::uintptr_t a_inlineJump) {
       Xbyak::Label skipAdditional;
       Xbyak::Label fApplyAdditionalDisplayArmors;
       Xbyak::Label fVisitWornItems;
       Xbyak::Label fVisitWornItemsWithHiddenRealEquipmentFilter;
       Xbyak::Label fShouldOverrideSkinning;
+
+      GateInlineJump(a_inlineJump, rbx);
 
       mov(r8, rbx);
       mov(r9, ptr[rip + fVisitWornItems]);
@@ -635,15 +712,18 @@ void InstallCustomSkinHookSE(const sfs::runtime::HookLayout &a_layout) {
       dq(a_visitWornItems);
 
       L(fVisitWornItemsWithHiddenRealEquipmentFilter);
-      dq(reinterpret_cast<std::uintptr_t>(
-          sfs::native::VisitWornItemsWithHiddenRealEquipmentFilter));
+      dq(reinterpret_cast<std::uintptr_t>(a_inlineJump
+          ? &VisitWornItemsForInlineDetour
+          : &sfs::native::VisitWornItemsWithHiddenRealEquipmentFilter));
 
       L(fShouldOverrideSkinning);
       dq(reinterpret_cast<std::uintptr_t>(sfs::native::ShouldOverrideSkinning));
     }
   };
 
-  Code code{hookAddress + 0x5, callSite.target};
+  Code code{hookAddress + 0x5,
+            visitorCall.target,
+            callSite.ChainsAsJump() ? callSite.target : 0};
   auto *stub = g_localTrampoline.allocate(code);
   branchTrampoline.write_branch<5>(hookAddress, stub);
   logger::info("Installed SFS native armor skinning custom skin hook for SE");
@@ -658,7 +738,7 @@ void InstallCustomSkinHookAE(const sfs::runtime::HookLayout &a_layout) {
                                                                      16096)};
   const auto callSite =
       InspectCallSite(hookAddress, visitWornItems.address(), "AE custom skin");
-  if (!callSite.valid || !callSite.ChainsAsCall()) {
+  if (!callSite.valid) {
     logger::warn("Skipped SFS native armor skinning custom skin hook for AE");
     return;
   }
@@ -667,17 +747,29 @@ void InstallCustomSkinHookAE(const sfs::runtime::HookLayout &a_layout) {
         "SFS native armor skinning custom skin hook for AE will chain the existing patched target {:X}",
         callSite.target);
   }
-  if (!ConfigureIedCustomSkinCompatibility(callSite, a_layout.name)) {
+  auto visitorCall = callSite;
+  if (callSite.ChainsAsJump()) {
+    visitorCall = {.opcode = 0xE8, .target = visitWornItems.address(),
+                   .valid = true, .expected = true};
+    g_inlineDetourIedLoaded =
+        ::GetModuleHandleW(L"ImmersiveEquipmentDisplays.dll") != nullptr;
+    logger::warn("SFS {} E9 inline skin detour: unmanaged actors retain the previous jump; active SFS actors use engine filtering and registered attachments",
+                 a_layout.name);
+  }
+  if (!ConfigureIedCustomSkinCompatibility(visitorCall, a_layout.name)) {
     return;
   }
 
-  struct Code : Xbyak::CodeGenerator {
-    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems) {
+  struct Code : SkinningHookCode {
+    Code(std::uintptr_t a_resumeAddress, std::uintptr_t a_visitWornItems,
+         std::uintptr_t a_inlineJump) {
       Xbyak::Label skipAdditional;
       Xbyak::Label fApplyAdditionalDisplayArmors;
       Xbyak::Label fVisitWornItems;
       Xbyak::Label fVisitWornItemsWithHiddenRealEquipmentFilter;
       Xbyak::Label fShouldOverrideSkinning;
+
+      GateInlineJump(a_inlineJump, rbx);
 
       mov(r8, rbx);
       mov(r9, ptr[rip + fVisitWornItems]);
@@ -718,15 +810,18 @@ void InstallCustomSkinHookAE(const sfs::runtime::HookLayout &a_layout) {
       dq(a_visitWornItems);
 
       L(fVisitWornItemsWithHiddenRealEquipmentFilter);
-      dq(reinterpret_cast<std::uintptr_t>(
-          sfs::native::VisitWornItemsWithHiddenRealEquipmentFilter));
+      dq(reinterpret_cast<std::uintptr_t>(a_inlineJump
+          ? &VisitWornItemsForInlineDetour
+          : &sfs::native::VisitWornItemsWithHiddenRealEquipmentFilter));
 
       L(fShouldOverrideSkinning);
       dq(reinterpret_cast<std::uintptr_t>(sfs::native::ShouldOverrideSkinning));
     }
   };
 
-  Code code{hookAddress + 0x5, callSite.target};
+  Code code{hookAddress + 0x5,
+            visitorCall.target,
+            callSite.ChainsAsJump() ? callSite.target : 0};
   auto *stub = g_localTrampoline.allocate(code);
   branchTrampoline.write_branch<5>(hookAddress, stub);
   logger::info("Installed SFS native armor skinning custom skin hook for AE");
