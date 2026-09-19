@@ -120,10 +120,19 @@ struct Provider {
                           bool a_first, bool a_female, const char *a_node,
                           const char *a_key, const float *a_xyz) {
     CheckTransform(a_self, a_actor, a_first, a_female, a_node);
-    Expect(std::string_view(a_key) == "SFS_HH_SYNC" &&
-               a_xyz[0] == 0 && a_xyz[1] == 0 && a_xyz[2] == 0,
-           "Position ABI must be three floats and the bootstrap must be neutral");
+    Expect(a_xyz[0] == 0 && a_xyz[1] == 0 &&
+               ((std::string_view(a_key) == "SFS_HH_SYNC" && a_xyz[2] == 0) ||
+                (std::string_view(a_key) == "internal" && a_xyz[2] == 12)),
+           "Position ABI must preserve neutral bootstrap and selected heel value");
     a_self->calls.push_back(7);
+  }
+  static bool HasPosition(Provider *a_self, RE::TESObjectREFR *a_actor,
+                          bool a_first, bool a_female, const char *a_node,
+                          const char *a_key) {
+    CheckTransform(a_self, a_actor, a_first, a_female, a_node);
+    Expect(std::string_view(a_key) == "internal", "HasPosition slot 3 preserves key");
+    a_self->calls.push_back(3);
+    return true;
   }
   static bool RemovePosition(Provider *a_self, RE::TESObjectREFR *a_actor,
                              bool a_first, bool a_female, const char *a_node,
@@ -377,6 +386,7 @@ void TestIndependentMorphAndTransformVersions() {
   for (auto version : {3U, 4U, 99U, UINT32_MAX}) {
   Provider transform(version);
   transform.slots[7] = reinterpret_cast<std::uintptr_t>(&Provider::AddPosition);
+  transform.slots[3] = reinterpret_cast<std::uintptr_t>(&Provider::HasPosition);
   transform.slots[15] = reinterpret_cast<std::uintptr_t>(&Provider::RemovePosition);
   transform.slots[22] = reinterpret_cast<std::uintptr_t>(&Provider::UpdateAll);
   transform.slots[24] = reinterpret_cast<std::uintptr_t>(&Provider::UpdateNode);
@@ -386,7 +396,7 @@ void TestIndependentMorphAndTransformVersions() {
     race_menu_test::ExerciseTransform(static_cast<abi::INiTransformInterface *>(transform.Plugin()),
                                      transform.actor, transform.female);
   }
-  Expect(transform.calls == std::vector<int>({7, 22, 15, 24, 7, 22, 15, 24}),
+  Expect(transform.calls == std::vector<int>({7, 22, 15, 3, 7, 24, 7, 22, 15, 3, 7, 24}),
          "NiTransform v3 position/update slots must preserve actor-local call order");
   }
 }

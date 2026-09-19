@@ -105,6 +105,7 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor*) {}
 }
 }
 unsigned highHeelObservations{};
+bool ShouldResyncHighHeelAfterAttachment(RE::Actor*, bool) { return false; }
 bool RememberHighHeelAttachmentRoots(RE::Actor*,
   const std::vector<RE::NiPointer<RE::NiAVObject>>&, RE::FormID, bool) {
   ++highHeelObservations;

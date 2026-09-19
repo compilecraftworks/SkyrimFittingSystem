@@ -1,0 +1,7 @@
+Skyrim Fitting System v1.6.7 SE-AE
+- Fixed registered HH_OFFSET selection and height recovery after late ordinary-gear/non-heel attachments in legacy NiOverride and public NiTransform paths.
+- Reduced duplicate worn-equipment queries and repeated Papyrus caller-identity work without adding a persistent inventory cache.
+- Preserved strip/redress, DD/P+ caller tracking, live BodyMorph, dye, DAVE/DAV/native, visibility, IED and API v1 behavior. No new version whitelist or periodic actor scan.
+- All 23 regression executables and source checks passed; RaceMenu source ABI history checked at 19 interface-change snapshots.
+- Only SFSCore.dll changes in the runtime archive. Existing settings/kits and optional patch versions are unchanged.
+- No in-game testing or measured SkyUI speedup claim; the reported 3–4-second delay is not confirmed eliminated.

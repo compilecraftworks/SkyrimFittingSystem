@@ -7,6 +7,13 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.6.7 repairs registered high-heel height selection and late attachment
+recovery for legacy/current RaceMenu interfaces, and reduces repeated worn
+equipment and caller-identity work. See the
+[English](docs/RELEASE-NOTES-v1.6.7.md) / [Korean](docs/RELEASE-NOTES-v1.6.7-ko.md)
+notes and [technical audit](docs/HH-OFFSET-AND-INVENTORY-AUDIT-2026-09-19.md).
+The reported SkyUI delay has not been timed in game; no measured speedup is claimed.
+
 v1.6.6 adds an explicit SKSE game-task query entry for rendered
 outfit API consumers, preserving the legacy export and v1 data layout. See the
 [API fix and cleanup audit](docs/V1.6.6-GAMETASK-API-AUDIT.md) for the caller

@@ -25,6 +25,11 @@ void ExerciseTransform(abi::INiTransformInterface *a_interface,
   a_interface->UpdateNodeAllTransforms(a_actor);
   a_interface->RemoveNodeTransformPosition(a_actor, false, a_female, "NPC",
                                            "SFS_HH_SYNC");
+  if (a_interface->HasNodeTransformPosition(a_actor, false, a_female, "NPC", "internal")) {
+    abi::INiTransformInterface::Position selected{0, 0, 12};
+    a_interface->AddNodeTransformPosition(a_actor, false, a_female, "NPC",
+                                          "internal", selected);
+  }
   a_interface->UpdateNodeTransforms(a_actor, false, a_female, "NPC");
 }
 } // namespace race_menu_test

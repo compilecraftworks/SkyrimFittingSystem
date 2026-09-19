@@ -104,15 +104,21 @@ class NiOverrideDispatchCallback final
     : public RE::BSScript::IStackCallbackFunctor {
 public:
   explicit NiOverrideDispatchCallback(std::function<void()> a_continuation)
+      : continuation_([next = std::move(a_continuation)](RE::BSScript::Variable) {
+          if (next) { next(); }
+        }) {}
+
+  explicit NiOverrideDispatchCallback(
+      std::function<void(RE::BSScript::Variable)> a_continuation)
       : continuation_(std::move(a_continuation)) {}
 
-  void operator()(RE::BSScript::Variable) override {
+  void operator()(RE::BSScript::Variable a_result) override {
     auto continuation = std::move(continuation_);
     if (continuation) {
       // RaceMenu registers these NiOverride functions as NoWait natives.
       // Chaining from the completed VM callback preserves call order and
       // keeps the neutral bootstrap key alive for the shortest possible time.
-      continuation();
+      continuation(std::move(a_result));
     }
   }
 
@@ -120,7 +126,7 @@ public:
       const RE::BSTSmartPointer<RE::BSScript::Object> &) override {}
 
 private:
-  std::function<void()> continuation_;
+  std::function<void(RE::BSScript::Variable)> continuation_;
 };
 
 class ScopedUpdateModelWeightTask final {
@@ -652,6 +658,7 @@ struct LegacyHighHeelSyncRequest {
   std::uint64_t generation{0};
   bool isFemale{false};
   bool targetActive{false};
+  std::optional<float> targetOffset;
   bool clearRaceMenuInternalPosition{false};
 };
 
@@ -684,6 +691,23 @@ DispatchNiOverrideCall(const char *a_function,
       "NiOverride", a_function,
       RE::MakeFunctionArguments(std::forward<Args>(a_arguments)...),
       callback);
+}
+
+template <class... Args>
+[[nodiscard]] bool DispatchNiOverrideBoolCall(
+    const char *a_function, std::function<void(bool)> a_continuation,
+    Args &&...a_arguments) {
+  auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+  if (!vm) { return false; }
+  RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback(
+      new NiOverrideDispatchCallback(
+          std::function<void(RE::BSScript::Variable)>{
+              [next = std::move(a_continuation)](RE::BSScript::Variable value) {
+                next(value.IsBool() && value.GetBool());
+              }}));
+  return vm->DispatchStaticCall(
+      "NiOverride", a_function,
+      RE::MakeFunctionArguments(std::forward<Args>(a_arguments)...), callback);
 }
 
 void CompleteLegacyHighHeelSync(
@@ -763,7 +787,7 @@ void DispatchLegacyRemoveBootstrap(
       DispatchLegacyRemoveInternalPosition(a_request);
       break;
     case LegacyHighHeelCompletion::Synchronized:
-      CompleteLegacyHighHeelSync(a_request, true);
+      DispatchLegacyUpdateNode(a_request);
       break;
     }
   };
@@ -776,13 +800,54 @@ void DispatchLegacyRemoveBootstrap(
   }
 }
 
+void DispatchLegacySelectHeelPosition(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
+  if (!actor) {
+    CompleteLegacyHighHeelSync(a_request, false);
+    return;
+  }
+  // The target is captured by the game-task sync, not resolved from a VM
+  // callback. An appearance edit during dispatch queues the existing pending
+  // resync; do not traverse scene/UI state on a Papyrus callback thread.
+  if (!a_request->targetOffset) {
+    DispatchLegacyRemoveBootstrap(a_request, true);
+    return;
+  }
+  const auto continuation = [a_request](bool automaticPositionPresent) {
+    auto *currentActor = LookupLegacyHighHeelActor(*a_request);
+    if (!currentActor || !automaticPositionPresent || !a_request->targetOffset) {
+      // Do not force transforms when RaceMenu did not accept the scene source
+      // (e.g. equippable transforms disabled). Always clean the bootstrap.
+      DispatchLegacyRemoveBootstrap(a_request, false);
+      return;
+    }
+    if (!DispatchNiOverrideCall(
+            "AddNodeTransformPosition",
+            [a_request]() { DispatchLegacyRemoveBootstrap(a_request, true); },
+            static_cast<RE::Actor *>(currentActor), false,
+            static_cast<bool>(a_request->isFemale), std::string{"NPC"},
+            std::string{"internal"},
+            std::vector<float>{0.0F, 0.0F, *a_request->targetOffset})) {
+      DispatchLegacyRemoveBootstrap(a_request, false);
+    }
+  };
+  if (!DispatchNiOverrideBoolCall(
+          "HasNodeTransformPosition", continuation,
+          static_cast<RE::Actor *>(actor), false,
+          static_cast<bool>(a_request->isFemale), std::string{"NPC"},
+          std::string{"internal"})) {
+    DispatchLegacyRemoveBootstrap(a_request, false);
+  }
+}
+
 void DispatchLegacyUpdateAll(
     const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
   auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
   if (!actor ||
       !DispatchNiOverrideCall(
           "UpdateAllReferenceTransforms",
-          [a_request]() { DispatchLegacyRemoveBootstrap(a_request, true); },
+          [a_request]() { DispatchLegacySelectHeelPosition(a_request); },
           static_cast<RE::Actor *>(actor))) {
     // The neutral scale may already have been inserted. Always attempt its
     // removal before completing a failed chain.
@@ -804,6 +869,7 @@ void DispatchLegacyUpdateAll(
           .generation = a_generation,
           .isFemale = actorBase->IsFemale(),
           .targetActive = a_state.offset.has_value(),
+          .targetOffset = a_state.offset,
           .clearRaceMenuInternalPosition =
               !a_state.offset.has_value() &&
               !SceneHasNpcPositionSource(a_actor->Get3D(false)),
@@ -876,6 +942,19 @@ void DispatchLegacyUpdateAll(
 
   const auto actorFormID = a_actor->GetFormID();
   if (state.offset.has_value()) {
+    if (!transform->HasNodeTransformPosition(
+            a_actor, false, isFemale, nodeName, raceMenuInternalKey)) {
+      return HighHeelSyncAttempt::Retry;
+    }
+    // HH_OFFSET itself belongs to RaceMenu's automatic "internal" position.
+    // Resolve its value from the displayed registered heel, not the last
+    // unrelated HH/SDTA branch encountered by the full scan. Replacing this
+    // component does not add a second offset or create a persistent SFS key;
+    // every named user/mod transform and other transform component remains.
+    skee::INiTransformInterface::Position selected{0.0F, 0.0F, *state.offset};
+    transform->AddNodeTransformPosition(a_actor, false, isFemale, nodeName,
+                                        raceMenuInternalKey, selected);
+    transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
     {
       std::lock_guard lock(g_nodeMutex);
       g_registeredAppearanceHighHeelActors.insert(actorFormID);
@@ -1014,6 +1093,22 @@ void RememberAndMorphNewNodes(
   QueuePendingMorphSync(a_actor->GetFormID());
 }
 
+[[nodiscard]] bool ShouldResyncHighHeelAfterAttachment(
+    RE::Actor *a_actor, const bool a_firstPerson) {
+  if (!a_actor || a_firstPerson) {
+    return false;
+  }
+  std::lock_guard lock(g_nodeMutex);
+  const auto id = a_actor->GetFormID();
+  if (!g_highHeelAttachmentActors.contains(id)) {
+    return false; // Keep replacement previews outside the existing HH scope.
+  }
+  const auto roots = g_registeredAppearanceAttachmentRoots.find(id);
+  return g_registeredAppearanceHighHeelActors.contains(id) ||
+         (roots != g_registeredAppearanceAttachmentRoots.end() &&
+          !roots->second.empty());
+}
+
 class RegisteredAppearanceAttachmentObserver final
     : public skee::IAddonAttachmentInterface {
 public:
@@ -1023,8 +1118,20 @@ public:
                 [[maybe_unused]] RE::NiNode *a_skeleton,
                 [[maybe_unused]] RE::NiNode *a_root) override {
     auto *actor = a_reference ? a_reference->As<RE::Actor>() : nullptr;
-    if (!actor || !a_armor || !a_addon || !a_object ||
-        !sfs::native::IsDisplayedFittingArmor(actor, a_armor)) {
+    if (!actor || !a_armor || !a_addon || !a_object) {
+      return;
+    }
+
+    // RaceMenu's incremental attachment pass can clear its automatic position
+    // even when the newly attached armor has no HH_OFFSET. Rearm only actors
+    // already tracking registered heels, without enrolling ordinary gear in
+    // the independent morph/dye consumers below.
+    const bool resyncHighHeel =
+        ShouldResyncHighHeelAfterAttachment(actor, a_firstPerson);
+    if (!sfs::native::IsDisplayedFittingArmor(actor, a_armor)) {
+      if (resyncHighHeel) {
+        sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(actor);
+      }
       return;
     }
 
@@ -1048,9 +1155,10 @@ public:
       std::lock_guard lock(g_nodeMutex);
       observeHighHeels = g_highHeelAttachmentActors.contains(actor->GetFormID());
     }
-    if (observeHighHeels && RememberHighHeelAttachmentRoots(
+    const bool rememberedHighHeel = observeHighHeels && RememberHighHeelAttachmentRoots(
             actor, {RE::NiPointer<RE::NiAVObject>{a_object}},
-            a_armor->GetFormID(), a_firstPerson)) {
+            a_armor->GetFormID(), a_firstPerson);
+    if (rememberedHighHeel || resyncHighHeel) {
       // DAVE may complete the attachment after RefreshActor returns. Queue
       // from the event as well so that late asynchronous attachments cannot
       // miss the bounded actor-local synchronization window.
@@ -1655,8 +1763,8 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
       return;
     }
   }
-  // Two actor-local task frames cover DAVE/DAV/native rebuild handoff without
-  // persistent polling or scanning any actor other than the refresh target.
+  // Up to two additional attempts for unavailable/stale attachments. Success
+  // ends this request; later attachment events explicitly request another pass.
   QueueHighHeelSyncTask(actorFormID, generation, 2);
 }
 

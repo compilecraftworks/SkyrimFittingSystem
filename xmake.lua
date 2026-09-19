@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.6"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.7"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -228,6 +228,19 @@ target("ManualVisibilityRegressionTests")
             "build/.gens/manual-visibility-tests"})
     end)
 
+target("WornSnapshotRegressionTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/WornSnapshotRegressionTests.cpp")
+    add_includedirs("src", "build/.gens/worn-snapshot-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-CustomSkinningTestSource.ps1", "-OutputDirectory",
+            "build/.gens/worn-snapshot-tests"})
+    end)
+
 target("CustomSkinningRegressionTests")
     set_default(false)
     set_kind("binary")
@@ -267,6 +280,21 @@ target("RaceMenuInterfaceTests")
     if is_plat("windows") then
         add_cxxflags("/EHsc")
     end
+
+for _, regression in ipairs({"RaceMenuHighHeelTests", "CallerChainPerformanceTests"}) do
+target(regression)
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/" .. regression .. ".cpp")
+    add_includedirs("src", "build/.gens/" .. regression)
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-HighHeelTestSource.ps1", "-OutputDirectory",
+            "build/.gens/" .. target:name()})
+    end)
+end
 
 target("RaceMenuMorphTrackingTests")
     set_default(false)

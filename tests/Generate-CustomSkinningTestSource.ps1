@@ -2,6 +2,14 @@ param([Parameter(Mandatory=$true)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $groups = @{
+    'WornSnapshot.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        'class EquippedArmorSnapshot {'))
+    'WornQuery.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        '[[nodiscard]] static FinalRenderedOutfitSnapshot BuildFinalRenderedOutfitSnapshot(',
+        'FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(',
+        '[[nodiscard]] static bool SnapshotHasBodyKeyword(',
+        ('std::optional<bool>' + "`n" + 'GetDisplayedBodyKeywordState('),
+        'bool IsDisplayedFittingArmor('))
     'IedEvaluationQueue.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         'void ClearQueuedIedEvaluations()',
         '[[nodiscard]] bool IsActorRefreshable(',

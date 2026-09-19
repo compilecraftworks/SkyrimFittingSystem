@@ -339,6 +339,23 @@ public:
 [[nodiscard]] std::unordered_set<const RE::TESObjectARMO *>
 CollectEquippedArmors(RE::TESObjectREFR *a_target);
 
+// One decision owns one lazy worn snapshot. Never retain this across queries:
+// conditions, equipment and external suppression may change without a UI edit.
+class EquippedArmorSnapshot {
+public:
+  explicit EquippedArmorSnapshot(RE::Actor *a_actor) : actor_(a_actor) {}
+  [[nodiscard]] const std::unordered_set<const RE::TESObjectARMO *> &Get() {
+    if (!armors_) {
+      armors_ = CollectEquippedArmors(actor_);
+    }
+    return *armors_;
+  }
+
+private:
+  RE::Actor *actor_;
+  std::optional<std::unordered_set<const RE::TESObjectARMO *>> armors_;
+};
+
 [[nodiscard]] std::string ToLower(std::string a_value) {
   std::ranges::transform(a_value, a_value.begin(), [](const unsigned char ch) {
     return static_cast<char>(std::tolower(ch));
@@ -1576,7 +1593,8 @@ IsRealArmorVisibleInDisplaySet([[maybe_unused]] RE::Actor *a_actor,
 
 [[nodiscard]] DisplaySet
 BuildDisplaySet(RE::Actor *a_actor,
-                const bool a_applyTemporarySuppression = true) {
+                const bool a_applyTemporarySuppression = true,
+                EquippedArmorSnapshot *a_equippedSnapshot = nullptr) {
   DisplaySet displaySet;
   if (!a_actor) {
     return displaySet;
@@ -1604,7 +1622,9 @@ BuildDisplaySet(RE::Actor *a_actor,
     }
   }
 
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
+  EquippedArmorSnapshot localEquipped(a_actor);
+  const auto &equippedArmors =
+      (a_equippedSnapshot ? *a_equippedSnapshot : localEquipped).Get();
   const auto genitalEnvironment =
       sfs::native::genital_compatibility::GetEnvironment();
   const auto *resolvedGenitalArmor =
@@ -2909,13 +2929,14 @@ std::uint32_t GetDisplayedFittingSlotMask(RE::Actor *a_actor) {
 }
 
 [[nodiscard]] static FinalRenderedOutfitSnapshot BuildFinalRenderedOutfitSnapshot(
-    RE::Actor *a_actor, const DisplaySet &a_displaySet) {
+    RE::Actor *a_actor, const DisplaySet &a_displaySet,
+    EquippedArmorSnapshot &a_equippedSnapshot) {
   FinalRenderedOutfitSnapshot snapshot;
   snapshot.managedBySfs = a_displaySet.active;
   snapshot.additionalSlotMask = a_displaySet.slotMask;
   snapshot.visibleAdditionalArmors = a_displaySet.armors;
 
-  const auto equippedArmors = CollectEquippedArmors(a_actor);
+  const auto &equippedArmors = a_equippedSnapshot.Get();
   snapshot.visibleActualArmors =
       CollectVisibleRealArmors(a_actor, a_displaySet, equippedArmors);
   for (const auto *armor : snapshot.visibleActualArmors) {
@@ -2931,7 +2952,9 @@ FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(RE::Actor *a_actor) {
   if (!a_actor) {
     return {};
   }
-  return BuildFinalRenderedOutfitSnapshot(a_actor, BuildDisplaySet(a_actor));
+  EquippedArmorSnapshot equipped(a_actor);
+  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped);
+  return BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped);
 }
 
 [[nodiscard]] static bool SnapshotHasBodyKeyword(
@@ -2989,11 +3012,12 @@ GetDisplayedBodyKeywordState(RE::Actor *a_actor,
   // Vanilla already evaluated this keyword. Do not walk an unmanaged NPC's
   // worn inventory merely to return that same answer. Use the exact existing
   // display decision, including conditional real-equipment hides and previews.
-  const auto displaySet = BuildDisplaySet(a_actor);
+  EquippedArmorSnapshot equipped(a_actor);
+  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped);
   if (!displaySet.active) {
     return std::nullopt;
   }
-  const auto snapshot = BuildFinalRenderedOutfitSnapshot(a_actor, displaySet);
+  const auto snapshot = BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped);
   return SnapshotHasBodyKeyword(snapshot.visibleActualArmors,
       snapshot.visibleAdditionalArmors, a_keyword, asksClothingBody);
 }
@@ -3283,9 +3307,10 @@ bool IsDisplayedFittingArmor(RE::Actor *a_actor,
   if (!a_actor || !a_armor) {
     return false;
   }
-  const auto snapshot = GetFinalRenderedOutfitSnapshot(a_actor);
-  return std::ranges::find(snapshot.visibleAdditionalArmors, a_armor) !=
-         snapshot.visibleAdditionalArmors.end();
+  // Additional armors already are the final registered display decision.
+  // Building visible ACTUAL armor data here repeated a worn-inventory walk
+  // for every attachment and every tracked morph/high-heel root.
+  return BuildDisplaySet(a_actor).Contains(a_armor);
 }
 
 bool IsArmorShownForActor(RE::Actor *a_actor,

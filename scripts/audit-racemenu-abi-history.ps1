@@ -50,6 +50,22 @@ foreach ($commit in $commits) {
         $version = [regex]::Match($body, 'kCurrentPluginVersion\s*=\s*kPluginVersion(\d+)').Groups[1].Value
     }
     if (-not $version) { throw "Missing BodyMorph version at $commit" }
+    $transformBody = Class-Body $public 'INiTransformInterface'
+    if ($transformBody) {
+        $transformSlots = @(Top-LevelVirtuals $transformBody)
+        foreach ($expected in @(@('HasNodeTransformPosition', 3), @('AddNodeTransformPosition', 7),
+                                @('RemoveNodeTransformPosition', 15), @('UpdateNodeAllTransforms', 22),
+                                @('UpdateNodeTransforms', 24))) {
+            $actual = [array]::IndexOf($transformSlots, $expected[0]) + 3
+            if ($actual -ne $expected[1]) { throw "$commit NiTransform $($expected[0]): slot $actual != $($expected[1])" }
+        }
+    }
+    $papyrus = Read-GitFile $commit "$directory/PapyrusNiOverride.cpp"
+    foreach ($signature in @(
+        'NativeFunction5<StaticFunctionTag,\s*bool,\s*TESObjectREFR\s*\*,\s*bool,\s*bool,\s*BSFixedString,\s*BSFixedString>\("HasNodeTransformPosition"',
+        'NativeFunction6<StaticFunctionTag,\s*void,\s*TESObjectREFR\s*\*,\s*bool,\s*bool,\s*BSFixedString,\s*BSFixedString,\s*VMArray<float>>\("AddNodeTransformPosition"')) {
+        if ($papyrus -notmatch $signature) { throw "${commit}: missing legacy NiOverride transform signature $signature" }
+    }
     if ($body) {
         $slots = @(Top-LevelVirtuals $body)
         foreach ($expected in @(@('GetBodyMorphs', 6), @('VisitMorphs', 8), @('ApplyVertexDiff', 12), @('ApplyBodyMorphs', 13))) {
@@ -62,4 +78,4 @@ foreach ($commit in $commits) {
         Write-Output "$commit BodyMorph=$version historical concrete ABI (not public v4)"
     }
 }
-Write-Output "Audited $($commits.Count) interface/task change snapshots; $publicCount public-prefix snapshots passed. Pin=$pin. Package-to-binary correspondence remains separate evidence."
+Write-Output "Audited $($commits.Count) interface/task change snapshots; $publicCount public BodyMorph prefixes, public NiTransform slots where available, and legacy position signatures passed. Pin=$pin. Package-to-binary correspondence remains separate evidence."

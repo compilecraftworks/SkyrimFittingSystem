@@ -25,7 +25,10 @@ $targets = @(
     "CustomSkinningRegressionTests",
     "IntegrationInitializationTests",
     "RaceMenuInterfaceTests",
-    "RaceMenuMorphTrackingTests"
+    "RaceMenuMorphTrackingTests",
+    "RaceMenuHighHeelTests",
+    "CallerChainPerformanceTests",
+    "WornSnapshotRegressionTests"
 )
 
 Push-Location $repository
@@ -264,6 +267,14 @@ try {
     if ($bodyKeywordQuery -notmatch 'if \(!displaySet.active\)\s*\{\s*return std::nullopt;\s*\}\s*const auto snapshot = BuildFinalRenderedOutfitSnapshot' -or
         $bodyKeywordQuery.Contains('GetFinalRenderedOutfitSnapshot(a_actor)')) {
         throw "Unmanaged WornHasKeyword queries must retain vanilla results without collecting a final worn snapshot"
+    }
+    $displayBuilder = [regex]::Match($armorSkinningSource,
+        '(?s)BuildDisplaySet\(RE::Actor \*a_actor,.*?(?=\[\[nodiscard\]\] std::unordered_set)').Value
+    if (-not $displayBuilder.Contains('(a_equippedSnapshot ? *a_equippedSnapshot : localEquipped).Get()') -or
+        $displayBuilder.Contains('CollectEquippedArmors(') -or
+        -not $bodyKeywordQuery.Contains('BuildDisplaySet(a_actor, true, &equipped)') -or
+        -not $bodyKeywordQuery.Contains('BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped)')) {
+        throw "Final body queries must reuse one request-local worn snapshot, without changing runtime scan coverage"
     }
     $dyePerformanceSource = Get-Content -LiteralPath (
         Join-Path $repository "src/native/FittingDye.cpp") -Raw

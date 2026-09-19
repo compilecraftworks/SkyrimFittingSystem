@@ -586,11 +586,23 @@ BuildCallerChain(const RE::BSScript::Stack *a_stack) {
   if (!a_stack || !a_stack->top) {
     return chain;
   }
+  // Deduplicate repeated function objects before hashing/formatting. Keep the
+  // existing 24 distinct identities, not a new depth cutoff that could hide
+  // a trusted strip caller deeper in the stack. The small memo is local only.
+  std::array<const RE::BSScript::IFunction *, 24> seenFunctions{};
+  std::size_t seenCount = 0;
   for (auto *frame = a_stack->top->previousFrame;
        frame && chain.size() < 24; frame = frame->previousFrame) {
     const auto *function = frame->owningFunction.get();
     if (!function || function->GetIsNative()) {
       continue;
+    }
+    const auto seenEnd = seenFunctions.begin() + seenCount;
+    if (std::find(seenFunctions.begin(), seenEnd, function) != seenEnd) {
+      continue;
+    }
+    if (seenCount < seenFunctions.size()) {
+      seenFunctions[seenCount++] = function;
     }
     const auto codeHash = FunctionCodeHash(function);
     const auto source = function->GetSourceFilename().c_str();
@@ -2233,7 +2245,11 @@ void ApplyDisplayedBodyKeywordCompatibility(
     return operation;
   }
   auto &frame = *a_stack->top;
-  operation.callerChain = BuildCallerChain(a_stack);
+  // Displayed-body reads never consume caller identity or learn strip trust.
+  // Keep every mutation/token/filter route unchanged.
+  if (a_target != TargetNative::WornHasKeyword) {
+    operation.callerChain = BuildCallerChain(a_stack);
+  }
   if (a_target == TargetNative::FormHasKeyword ||
       a_target == TargetNative::FormGetKeywords ||
       a_target == TargetNative::FormGetNumKeywords ||
