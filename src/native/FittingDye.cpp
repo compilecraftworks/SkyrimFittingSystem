@@ -1,6 +1,7 @@
 #include "native/FittingDye.h"
 #include "ArmorUtils.h"
 #include "native/FittingDyeRules.h"
+#include "native/ActorResourceWork.h"
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 
@@ -149,6 +150,8 @@ struct ActiveRenderPass {
 
 std::mutex g_worldTintMutex;
 std::unordered_map<std::uintptr_t, WorldTintTarget> g_worldTintTargets;
+std::unordered_set<RE::FormID> g_worldTintActors;
+resource_work::ActorBuilds g_worldTintBuilds;
 // BSLighting SetupGeometry is a renderer hot path even when the user has
 // never used Fitting Dye. Keep the hook dormant without taking the map mutex
 // or growing the render-pass stack until a durable tint or amber preview is
@@ -181,8 +184,47 @@ constexpr std::uint32_t kSavedWorldTintRecordVersion = 1;
 std::mutex g_savedWorldTintMutex;
 std::unordered_map<RE::FormID, SavedWorldTintAppearances> g_savedWorldTints;
 std::mutex g_savedWorldTintRestoreQueueMutex;
-std::unordered_set<RE::FormID> g_queuedSavedWorldTintRestores;
-std::atomic<std::uint64_t> g_savedWorldTintRestoreGeneration{0};
+resource_work::ActorTasks g_queuedSavedWorldTintRestores;
+std::atomic<std::uint64_t> g_savedWorldTintRestoreEpoch{0};
+
+// Called only while changing targets, never on a renderer pass. Lets unload
+// events for unrelated objects avoid walking all dyed components.
+void UpdateWorldTintActivityLocked() {
+  g_worldTintActors.clear();
+  for (const auto &[_, target] : g_worldTintTargets) {
+    g_worldTintActors.insert(target.actorFormID);
+  }
+  g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
+                                 std::memory_order_release);
+}
+
+class WorldTintBuild final {
+public:
+  explicit WorldTintBuild(RE::FormID actor, std::uint64_t restoreTicket = 0)
+      : actor_(actor) {
+    std::scoped_lock lock(g_worldTintMutex, g_savedWorldTintRestoreQueueMutex);
+    if (!restoreTicket || g_queuedSavedWorldTintRestores.Current(actor, restoreTicket)) {
+      ticket_ = g_worldTintBuilds.Start(actor);
+    }
+  }
+  ~WorldTintBuild() {
+    std::lock_guard lock(g_worldTintMutex);
+    g_worldTintBuilds.Finish(actor_, ticket_);
+  }
+  WorldTintBuild(const WorldTintBuild &) = delete;
+  WorldTintBuild &operator=(const WorldTintBuild &) = delete;
+  bool Started() const { return ticket_ != 0; }
+  bool CurrentLocked() const { return g_worldTintBuilds.Current(actor_, ticket_); }
+private:
+  RE::FormID actor_;
+  std::uint64_t ticket_{0};
+};
+
+[[nodiscard]] bool IsCurrentSavedWorldTintRestore(
+    const RE::FormID actor, const std::uint64_t ticket) {
+  std::lock_guard lock(g_savedWorldTintRestoreQueueMutex);
+  return g_queuedSavedWorldTintRestores.Current(actor, ticket);
+}
 
 [[nodiscard]] bool IsDyeableRendererShape(const RenderedShapeInfo &a_shape) {
   return IsDyeableAppearanceComponent(a_shape);
@@ -280,12 +322,13 @@ std::atomic<std::uint64_t> g_savedWorldTintRestoreGeneration{0};
 
 void ClearRuntimeWorldTintsForActor(const RE::FormID a_actorFormID) {
   std::scoped_lock lock(g_worldTintMutex);
+  if (!g_worldTintActors.contains(a_actorFormID)) { return; }
   std::erase_if(g_worldTintTargets,
                 [a_actorFormID](const auto &a_entry) {
                   return a_entry.second.actorFormID == a_actorFormID;
                 });
-  g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
-                                 std::memory_order_release);
+  g_worldTintActors.erase(a_actorFormID);
+  g_worldTintTargetsActive.store(!g_worldTintTargets.empty(), std::memory_order_release);
 }
 
 [[nodiscard]] std::vector<SavedWorldTintRestoreItem>
@@ -304,7 +347,8 @@ SnapshotSavedWorldTintsForActor(const RE::FormID a_actorFormID) {
   return result;
 }
 
-void RestoreSavedWorldTintsForActor(RE::Actor *a_actor) {
+void RestoreSavedWorldTintsForActor(RE::Actor *a_actor,
+                                   const std::uint64_t a_ticket) {
   if (!a_actor || !a_actor->Is3DLoaded()) {
     return;
   }
@@ -315,6 +359,7 @@ void RestoreSavedWorldTintsForActor(RE::Actor *a_actor) {
   }
   const auto shapes = ScanLoadedActorShapes(a_actor);
   for (const auto &saved : savedComponents) {
+    if (!IsCurrentSavedWorldTintRestore(a_actor->GetFormID(), a_ticket)) { return; }
     if (!IsRegisteredAppearanceForActor(a_actor->GetFormID(),
                                         saved.appearanceFormID)) {
       continue;
@@ -364,7 +409,7 @@ void RestoreSavedWorldTintsForActor(RE::Actor *a_actor) {
                              a_actor->GetFormID(), saved.appearanceFormID,
                              matchedShapes,
                              component.color.red, component.color.green,
-                             component.color.blue, status)) {
+                             component.color.blue, status, a_ticket)) {
       logger::warn("Fitting Dye could not restore saved component for actor {:08X}: {}",
                    a_actor->GetFormID(), status);
     }
@@ -374,17 +419,13 @@ void RestoreSavedWorldTintsForActor(RE::Actor *a_actor) {
 void FinishQueuedSavedWorldTintRestore(const RE::FormID a_actorFormID,
                                        const std::uint64_t a_generation) {
   std::scoped_lock lock(g_savedWorldTintRestoreQueueMutex);
-  if (g_savedWorldTintRestoreGeneration.load(std::memory_order_acquire) ==
-      a_generation) {
-    g_queuedSavedWorldTintRestores.erase(a_actorFormID);
-  }
+  g_queuedSavedWorldTintRestores.Finish(a_actorFormID, a_generation);
 }
 
 void QueueSavedWorldTintRestoreTask(const RE::FormID a_actorFormID,
                                     const std::uint64_t a_generation,
                                     const std::uint8_t a_remainingFrames) {
-  if (g_savedWorldTintRestoreGeneration.load(std::memory_order_acquire) !=
-      a_generation) {
+  if (!IsCurrentSavedWorldTintRestore(a_actorFormID, a_generation)) {
     return;
   }
   auto *taskInterface = SKSE::GetTaskInterface();
@@ -393,13 +434,12 @@ void QueueSavedWorldTintRestoreTask(const RE::FormID a_actorFormID,
     return;
   }
   taskInterface->AddTask([a_actorFormID, a_generation, a_remainingFrames] {
-    if (g_savedWorldTintRestoreGeneration.load(std::memory_order_acquire) !=
-        a_generation) {
+    if (!IsCurrentSavedWorldTintRestore(a_actorFormID, a_generation)) {
       return;
     }
     auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
     if (actor && actor->Is3DLoaded()) {
-      RestoreSavedWorldTintsForActor(actor);
+      RestoreSavedWorldTintsForActor(actor, a_generation);
       FinishQueuedSavedWorldTintRestore(a_actorFormID, a_generation);
       return;
     }
@@ -1159,7 +1199,13 @@ bool ConfigureWorldTints(
     const RE::FormID a_actorFormID,
     const RE::FormID a_appearanceFormID,
     const std::vector<RenderedShapeInfo> &a_shapes, const float a_red,
-    const float a_green, const float a_blue, std::string &a_status) {
+    const float a_green, const float a_blue, std::string &a_status,
+    const std::uint64_t a_restoreTicket) {
+  WorldTintBuild build(a_actorFormID, a_restoreTicket);
+  if (!build.Started()) {
+    a_status = "This actor's previous scene restoration was cancelled.";
+    return false;
+  }
   if (!IsRegisteredAppearanceForActor(a_actorFormID, a_appearanceFormID)) {
     a_status = "The selected registered appearance is no longer available for this actor.";
     return false;
@@ -1238,6 +1284,10 @@ bool ConfigureWorldTints(
   }
   {
     std::scoped_lock lock(g_worldTintMutex);
+    if (!build.CurrentLocked()) {
+      a_status = "The selected actor's scene was unloaded during tint creation.";
+      return false;
+    }
     std::erase_if(g_worldTintTargets, [&](const auto &a_entry) {
       const auto &target = a_entry.second;
       return target.actorFormID == a_actorFormID &&
@@ -1249,8 +1299,7 @@ bool ConfigureWorldTints(
     for (auto &target : targets) {
       g_worldTintTargets[target.geometryAddress] = std::move(target);
     }
-    g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
-                                   std::memory_order_release);
+    UpdateWorldTintActivityLocked();
   }
   a_status = std::format(
       "World tint armed for {} linked renderer shape(s), including any verified first-person counterpart.",
@@ -1263,6 +1312,7 @@ bool PreviewWorldTint(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
                       const RE::FormID a_appearanceFormID,
                       const RenderedShapeInfo &a_shape,
                       std::string &a_status) {
+  WorldTintBuild build(a_actorFormID);
   auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
   if (!actor || !actor->Is3DLoaded() || a_shape.firstPerson ||
       !IsRegisteredAppearanceForActor(a_actorFormID, a_appearanceFormID) ||
@@ -1296,8 +1346,14 @@ bool PreviewWorldTint(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
   const auto now = std::chrono::steady_clock::now();
   {
     std::scoped_lock lock(g_worldTintMutex);
+    if (!build.CurrentLocked()) {
+      a_status = "The selected actor's scene was unloaded during preview creation.";
+      return false;
+    }
     g_worldTintPreview = {
-        .target = {.geometryAddress = a_shape.geometryAddress,
+        .target = {.actorFormID = a_actorFormID,
+                   .appearanceFormID = a_appearanceFormID,
+                   .geometryAddress = a_shape.geometryAddress,
                    .shaderPropertyAddress = a_shape.shaderPropertyAddress,
                    .rendererTextureAddress =
                        a_shape.diffuseRendererTextureAddress,
@@ -1331,15 +1387,18 @@ void ClearWorldTints(const RE::FormID a_actorFormID,
            target.componentDiffuseTexture == a_component.diffuseTexture &&
            target.componentScenePath == a_component.scenePath;
   });
-  g_worldTintTargetsActive.store(!g_worldTintTargets.empty(),
-                                 std::memory_order_release);
+  UpdateWorldTintActivityLocked();
   g_worldTintPreview.reset();
   g_worldTintPreviewActive.store(false, std::memory_order_release);
 }
 
 void ClearWorldTint() {
-  std::scoped_lock lock(g_worldTintMutex);
+  g_savedWorldTintRestoreEpoch.fetch_add(1, std::memory_order_acq_rel);
+  std::scoped_lock lock(g_worldTintMutex, g_savedWorldTintRestoreQueueMutex);
+  g_queuedSavedWorldTintRestores.Clear();
   g_worldTintTargets.clear();
+  g_worldTintActors.clear();
+  g_worldTintBuilds.Clear();
   g_worldTintTargetsActive.store(false, std::memory_order_release);
   g_worldTintPreview.reset();
   g_worldTintPreviewActive.store(false, std::memory_order_release);
@@ -1499,13 +1558,13 @@ void SerializeSavedWorldTints(SKSE::SerializationInterface *a_skse) {
 }
 
 void RevertSavedWorldTints() {
-  g_savedWorldTintRestoreGeneration.fetch_add(1, std::memory_order_acq_rel);
+  g_savedWorldTintRestoreEpoch.fetch_add(1, std::memory_order_acq_rel);
   {
     std::scoped_lock lock(g_savedWorldTintMutex);
     g_savedWorldTints.clear();
   }
   std::scoped_lock queueLock(g_savedWorldTintRestoreQueueMutex);
-  g_queuedSavedWorldTintRestores.clear();
+  g_queuedSavedWorldTintRestores.Clear();
 }
 
 void DeserializeSavedWorldTints(SKSE::SerializationInterface *a_skse) {
@@ -1609,6 +1668,7 @@ void DeserializeSavedWorldTints(SKSE::SerializationInterface *a_skse) {
 }
 
 void QueueSavedWorldTintRestore(RE::Actor *a_actor) {
+  const auto epoch = g_savedWorldTintRestoreEpoch.load(std::memory_order_acquire);
   if (!a_actor) {
     return;
   }
@@ -1623,21 +1683,40 @@ void QueueSavedWorldTintRestore(RE::Actor *a_actor) {
   if (!HasSavedWorldTintForActor(actorFormID)) {
     return;
   }
-  const auto generation =
-      g_savedWorldTintRestoreGeneration.load(std::memory_order_acquire);
+  std::optional<std::uint64_t> generation;
   {
     std::scoped_lock lock(g_savedWorldTintRestoreQueueMutex);
-    if (g_savedWorldTintRestoreGeneration.load(std::memory_order_acquire) !=
-        generation) {
-      return;
-    }
-    if (!g_queuedSavedWorldTintRestores.insert(actorFormID).second) {
-      return;
-    }
+    if (epoch != g_savedWorldTintRestoreEpoch.load(std::memory_order_acquire)) { return; }
+    generation = g_queuedSavedWorldTintRestores.Start(actorFormID);
   }
+  if (!generation) { return; }
   // Two actor-local frames cover Update3D/UpdateEquipment handoff without a
   // persistent poll. A scene that still is not ready simply remains neutral.
-  QueueSavedWorldTintRestoreTask(actorFormID, generation, 2);
+  QueueSavedWorldTintRestoreTask(actorFormID, *generation, 2);
+}
+
+void ReleaseActorSceneResources(const RE::FormID a_actorFormID) {
+  std::scoped_lock lock(g_worldTintMutex, g_savedWorldTintRestoreQueueMutex);
+  g_queuedSavedWorldTintRestores.Forget(a_actorFormID);
+  g_worldTintBuilds.Forget(a_actorFormID);
+  if (g_worldTintActors.contains(a_actorFormID)) {
+    std::erase_if(g_worldTintTargets, [a_actorFormID](const auto &entry) {
+      return entry.second.actorFormID == a_actorFormID;
+    });
+    g_worldTintActors.erase(a_actorFormID);
+    g_worldTintTargetsActive.store(!g_worldTintTargets.empty(), std::memory_order_release);
+  }
+  if (g_worldTintPreview && g_worldTintPreview->target.actorFormID == a_actorFormID) {
+    g_worldTintPreview.reset();
+    g_worldTintPreviewActive.store(false, std::memory_order_release);
+  }
+  // Saved colors are deliberately untouched. In-progress draw passes own
+  // their own ComPtr copies until RestoreGeometry restores the original SRVs.
+}
+
+void RestoreActorSceneResources(const RE::FormID a_actorFormID) {
+  if (!HasSavedWorldTintForActor(a_actorFormID)) { return; }
+  QueueSavedWorldTintRestore(RE::TESForm::LookupByID<RE::Actor>(a_actorFormID));
 }
 
 } // namespace sfs::native::dye

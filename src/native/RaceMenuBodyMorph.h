@@ -23,6 +23,8 @@ void MorphNewRegisteredAppearanceNodes(
 void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor);
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor, bool a_active,
                                           bool a_observeHighHeelAttachments);
-void ForgetRegisteredAppearanceNodes(RE::Actor *a_actor);
+// Only real object-unload/form-delete events. Never call for UI hiding or a
+// backend refresh that can retain its attachments. No RaceMenu transform edits.
+void ReleaseActorSceneResources(RE::FormID a_actorFormID, bool a_deleted);
 void ForgetAllRegisteredAppearanceNodes();
 } // namespace sfs::native::racemenu

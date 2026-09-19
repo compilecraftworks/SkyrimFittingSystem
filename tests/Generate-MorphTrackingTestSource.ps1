@@ -4,6 +4,7 @@ $repo = Split-Path -Parent $PSScriptRoot
 $source = (Get-Content -LiteralPath (Join-Path $repo 'src/native/RaceMenuBodyMorph.cpp') -Raw).Replace("`r`n", "`n")
 $names = @(
   'struct RegisteredAppearanceNode {',
+  'class SceneObservation final',
   '[[nodiscard]] bool IsRegisteredAppearanceDisplayActive(',
   ('[[nodiscard]] std::vector<RE::NiPointer<RE::NiAVObject>>' + "`n" + 'ResolveRegisteredAppearanceNodes('),
   '[[nodiscard]] bool ContainsExtraData(',
@@ -15,7 +16,7 @@ $names = @(
   'void RecordMorphUpdateRequest(',
   'void QueueUpdateModelWeightAppearanceSync(',
   'void ApplyBodyMorphsHook(',
-  'void ForgetRegisteredAppearanceNodes('
+  'void ReleaseActorSceneResources('
 )
 $blocks = [Collections.Generic.List[string]]::new()
 foreach ($name in $names) {

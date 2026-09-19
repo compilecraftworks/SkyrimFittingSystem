@@ -55,7 +55,7 @@ bool ConfigureWorldTints(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
                          RE::FormID a_appearanceFormID,
                          const std::vector<RenderedShapeInfo> &a_shapes,
                          float a_red, float a_green, float a_blue,
-                         std::string &a_status);
+                         std::string &a_status, std::uint64_t a_restoreTicket = 0);
 // A short visual locator for the currently selected UI row.  It is kept
 // separate from saved/armed world tints and automatically expires.
 bool PreviewWorldTint(ID3D11Device *a_device, ID3D11DeviceContext *a_context,
@@ -93,4 +93,7 @@ void RevertSavedWorldTints();
 // saved components whose exact rendered scene identity exists in that actor's
 // newly built 3D; it never performs a world scan or name-only guess.
 void QueueSavedWorldTintRestore(RE::Actor *a_actor);
+// Real unload/delete boundaries only; retain durable colors for reattachment.
+void ReleaseActorSceneResources(RE::FormID a_actorFormID);
+void RestoreActorSceneResources(RE::FormID a_actorFormID);
 } // namespace sfs::native::dye

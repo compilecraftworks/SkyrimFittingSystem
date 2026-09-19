@@ -1,6 +1,7 @@
 #include "native/RaceMenuBodyMorph.h"
 
 #include "native/ArmorSkinning.h"
+#include "native/ActorResourceWork.h"
 #include "native/FittingDye.h"
 #include "native/RaceMenuInterfaces.h"
 #include "native/RegisteredAppearanceMorphRules.h"
@@ -95,9 +96,32 @@ sfs::native::racemenu::rules::ActorMorphRequests g_morphRequests;
 std::unordered_set<RE::FormID> g_highHeelAttachmentActors;
 std::uint64_t g_nodeObservation{0}; // protected by g_nodeMutex
 std::mutex g_highHeelQueueMutex;
-std::unordered_set<RE::FormID> g_queuedHighHeelSyncs;
+sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
-std::atomic<std::uint64_t> g_highHeelQueueGeneration{0};
+std::atomic<std::uint64_t> g_highHeelQueueEpoch{0};
+// Only in-flight observations are recorded; unload cancels their publication
+// without disabling the next legitimate attachment for the same actor.
+sfs::native::resource_work::ActorBuilds g_sceneObservations;
+class SceneObservation final {
+public:
+  explicit SceneObservation(RE::FormID a_actor) : actor_(a_actor) {
+    std::lock_guard lock(g_nodeMutex);
+    ticket_ = g_sceneObservations.Start(actor_);
+  }
+  ~SceneObservation() {
+    std::lock_guard lock(g_nodeMutex);
+    g_sceneObservations.Finish(actor_, ticket_);
+  }
+  SceneObservation(const SceneObservation &) = delete;
+  SceneObservation &operator=(const SceneObservation &) = delete;
+  [[nodiscard]] bool CurrentLocked() const {
+    return g_sceneObservations.Current(actor_, ticket_);
+  }
+private:
+  RE::FormID actor_;
+  std::uint64_t ticket_{0};
+};
+
 thread_local std::uint32_t g_updateModelWeightTaskDepth{0};
 
 class NiOverrideDispatchCallback final
@@ -557,12 +581,14 @@ FindNewAttachmentRoots(
 [[nodiscard]] bool RememberHighHeelAttachmentRoots(
     RE::Actor *a_actor,
     const std::vector<RE::NiPointer<RE::NiAVObject>> &a_nodes,
-    const RE::FormID a_armorFormID, const bool a_firstPerson) {
+    const RE::FormID a_armorFormID, const bool a_firstPerson,
+    const SceneObservation *a_observation) {
   if (!a_actor || a_firstPerson || a_nodes.empty()) {
     return false;
   }
   bool foundHighHeelRoot = false;
   std::lock_guard lock(g_nodeMutex);
+  if (a_observation && !a_observation->CurrentLocked()) { return false; }
   auto &registered =
       g_registeredAppearanceAttachmentRoots[a_actor->GetFormID()];
   for (const auto &node : a_nodes) {
@@ -665,10 +691,15 @@ struct LegacyHighHeelSyncRequest {
 void FinishQueuedHighHeelSync(RE::FormID a_actorFormID,
                               std::uint64_t a_generation);
 
+[[nodiscard]] bool IsCurrentHighHeelSync(const RE::FormID a_actorFormID,
+                                        const std::uint64_t a_generation) {
+  std::lock_guard lock(g_highHeelQueueMutex);
+  return g_queuedHighHeelSyncs.Current(a_actorFormID, a_generation);
+}
+
 [[nodiscard]] RE::Actor *
 LookupLegacyHighHeelActor(const LegacyHighHeelSyncRequest &a_request) {
-  if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
-      a_request.generation) {
+  if (!IsCurrentHighHeelSync(a_request.actorFormID, a_request.generation)) {
     return nullptr;
   }
   auto *actor =
@@ -716,11 +747,13 @@ void CompleteLegacyHighHeelSync(
   if (!a_request) {
     return;
   }
-  if (a_success &&
-      g_highHeelQueueGeneration.load(std::memory_order_acquire) ==
-          a_request->generation) {
+  if (a_success) {
     {
-      std::lock_guard lock(g_nodeMutex);
+      std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+      if (!g_queuedHighHeelSyncs.Current(a_request->actorFormID,
+                                        a_request->generation)) {
+        return;
+      }
       if (a_request->targetActive) {
         g_registeredAppearanceHighHeelActors.insert(a_request->actorFormID);
       } else {
@@ -730,7 +763,7 @@ void CompleteLegacyHighHeelSync(
     logger::debug(
         "Synchronized registered-appearance HH_OFFSET through legacy NiOverride API actor={:08X} active={}",
         a_request->actorFormID, a_request->targetActive);
-  } else if (!a_success) {
+  } else if (IsCurrentHighHeelSync(a_request->actorFormID, a_request->generation)) {
     logger::warn(
         "Legacy NiOverride HH_OFFSET synchronization failed for actor {:08X}; no direct skeleton transform was applied",
         a_request->actorFormID);
@@ -956,8 +989,10 @@ void DispatchLegacyUpdateAll(
                                         raceMenuInternalKey, selected);
     transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
     {
-      std::lock_guard lock(g_nodeMutex);
-      g_registeredAppearanceHighHeelActors.insert(actorFormID);
+      std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+      if (g_queuedHighHeelSyncs.Current(actorFormID, a_generation)) {
+        g_registeredAppearanceHighHeelActors.insert(actorFormID);
+      }
     }
     logger::debug(
         "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
@@ -976,8 +1011,10 @@ void DispatchLegacyUpdateAll(
     transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
   }
   {
-    std::lock_guard lock(g_nodeMutex);
-    g_registeredAppearanceHighHeelActors.erase(actorFormID);
+    std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+    if (g_queuedHighHeelSyncs.Current(actorFormID, a_generation)) {
+      g_registeredAppearanceHighHeelActors.erase(actorFormID);
+    }
   }
   logger::debug("Cleared registered-appearance HH_OFFSET for SFS actor {:08X}",
                 actorFormID);
@@ -989,9 +1026,7 @@ void FinishQueuedHighHeelSync(const RE::FormID a_actorFormID,
   bool resync = false;
   {
     std::lock_guard lock(g_highHeelQueueMutex);
-    if (g_highHeelQueueGeneration.load(std::memory_order_acquire) ==
-        a_generation) {
-      g_queuedHighHeelSyncs.erase(a_actorFormID);
+    if (g_queuedHighHeelSyncs.Finish(a_actorFormID, a_generation)) {
       resync = g_pendingHighHeelResyncs.erase(a_actorFormID) != 0;
     }
   }
@@ -1004,8 +1039,7 @@ void FinishQueuedHighHeelSync(const RE::FormID a_actorFormID,
 void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
                            const std::uint64_t a_generation,
                            const std::uint8_t a_remainingFrames) {
-  if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
-      a_generation) {
+  if (!IsCurrentHighHeelSync(a_actorFormID, a_generation)) {
     return;
   }
   auto *taskInterface = SKSE::GetTaskInterface();
@@ -1015,8 +1049,7 @@ void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
   }
   taskInterface->AddTask(
       [a_actorFormID, a_generation, a_remainingFrames]() {
-        if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
-            a_generation) {
+        if (!IsCurrentHighHeelSync(a_actorFormID, a_generation)) {
           return;
         }
         auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
@@ -1045,7 +1078,8 @@ void RememberAndMorphNewNodes(
     skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor,
     const std::vector<RE::NiPointer<RE::NiAVObject>> &a_nodes,
     const RE::FormID a_armorFormID, const bool a_firstPerson,
-    const bool a_applyInitialMorphs) {
+    const bool a_applyInitialMorphs,
+    const SceneObservation *a_observation = nullptr) {
   if (!a_interface || !a_actor || a_nodes.empty()) {
     return;
   }
@@ -1072,6 +1106,7 @@ void RememberAndMorphNewNodes(
                                    .addonFormID = 0,
                                    .firstPerson = a_firstPerson};
     std::lock_guard lock(g_nodeMutex);
+    if (a_observation && !a_observation->CurrentLocked()) { return; }
     auto &registered =
         g_registeredAppearanceNodes[a_actor->GetFormID()];
     entry.observation = ++g_nodeObservation;
@@ -1121,6 +1156,7 @@ public:
     if (!actor || !a_armor || !a_addon || !a_object) {
       return;
     }
+    const SceneObservation observation(actor->GetFormID());
 
     // RaceMenu's incremental attachment pass can clear its automatic position
     // even when the newly attached armor has no HH_OFFSET. Rearm only actors
@@ -1157,7 +1193,7 @@ public:
     }
     const bool rememberedHighHeel = observeHighHeels && RememberHighHeelAttachmentRoots(
             actor, {RE::NiPointer<RE::NiAVObject>{a_object}},
-            a_armor->GetFormID(), a_firstPerson);
+            a_armor->GetFormID(), a_firstPerson, &observation);
     if (rememberedHighHeel || resyncHighHeel) {
       // DAVE may complete the attachment after RefreshActor returns. Queue
       // from the event as well so that late asynchronous attachments cannot
@@ -1175,6 +1211,7 @@ public:
                                   .firstPerson = a_firstPerson};
     {
       std::lock_guard lock(g_nodeMutex);
+      if (!observation.CurrentLocked()) { return; }
       auto &nodes = g_registeredAppearanceNodes[actor->GetFormID()];
       node.observation = ++g_nodeObservation;
       const auto existing = std::ranges::find(nodes, node);
@@ -1708,19 +1745,20 @@ void MorphNewRegisteredAppearanceNodes(
   if (!a_actor) {
     return;
   }
+  const SceneObservation observation(a_actor->GetFormID());
 
   auto *thirdPersonRoot = a_actor->Get3D(false);
   auto *firstPersonRoot = a_actor->Get3D(true);
   const auto newThirdPersonRoots =
       FindNewAttachmentRoots(thirdPersonRoot, a_before.thirdPersonObjects);
   static_cast<void>(RememberHighHeelAttachmentRoots(
-      a_actor, newThirdPersonRoots, a_armorFormID, false));
+      a_actor, newThirdPersonRoots, a_armorFormID, false, &observation));
   std::vector<RE::NiPointer<RE::NiAVObject>> newFirstPersonRoots;
   if (firstPersonRoot != thirdPersonRoot) {
     newFirstPersonRoots =
         FindNewAttachmentRoots(firstPersonRoot, a_before.firstPersonObjects);
     static_cast<void>(RememberHighHeelAttachmentRoots(
-        a_actor, newFirstPersonRoots, a_armorFormID, true));
+        a_actor, newFirstPersonRoots, a_armorFormID, true, &observation));
   }
 
   auto *bodyMorph = g_bodyMorphInterface.load();
@@ -1732,14 +1770,15 @@ void MorphNewRegisteredAppearanceNodes(
   }
 
   RememberAndMorphNewNodes(bodyMorph, a_actor, newThirdPersonRoots,
-                           a_armorFormID, false, a_applyInitialMorphs);
+                           a_armorFormID, false, a_applyInitialMorphs, &observation);
   if (firstPersonRoot != thirdPersonRoot) {
     RememberAndMorphNewNodes(bodyMorph, a_actor, newFirstPersonRoots,
-                             a_armorFormID, true, a_applyInitialMorphs);
+                             a_armorFormID, true, a_applyInitialMorphs, &observation);
   }
 }
 
 void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
+  const auto epoch = g_highHeelQueueEpoch.load(std::memory_order_acquire);
   if (!a_actor ||
       rules::ResolveHighHeelTransformRoute(
           g_transformInterfaceVersion.load(std::memory_order_acquire)) ==
@@ -1750,22 +1789,19 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
   if (actorFormID == 0) {
     return;
   }
-  const auto generation =
-      g_highHeelQueueGeneration.load(std::memory_order_acquire);
+  std::optional<std::uint64_t> generation;
   {
     std::lock_guard lock(g_highHeelQueueMutex);
-    if (g_highHeelQueueGeneration.load(std::memory_order_acquire) !=
-        generation) {
-      return;
-    }
-    if (!g_queuedHighHeelSyncs.insert(actorFormID).second) {
+    if (epoch != g_highHeelQueueEpoch.load(std::memory_order_acquire)) { return; }
+    generation = g_queuedHighHeelSyncs.Start(actorFormID);
+    if (!generation) {
       g_pendingHighHeelResyncs.insert(actorFormID);
       return;
     }
   }
   // Up to two additional attempts for unavailable/stale attachments. Success
   // ends this request; later attachment events explicitly request another pass.
-  QueueHighHeelSyncTask(actorFormID, generation, 2);
+  QueueHighHeelSyncTask(actorFormID, *generation, 2);
 }
 
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
@@ -1794,20 +1830,46 @@ void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
   }
 }
 
-void ForgetRegisteredAppearanceNodes(RE::Actor *a_actor) {
-  if (!a_actor) {
-    return;
+void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
+                               const bool a_deleted) {
+  if (a_actorFormID == 0) { return; }
+  // Drop the final NiPointer references outside our locks: a scene object's
+  // destructor may in turn release engine/renderer-owned resources.
+  decltype(g_registeredAppearanceNodes)::mapped_type releasedNodes;
+  decltype(g_registeredAppearanceAttachmentRoots)::mapped_type releasedRoots;
+  {
+    std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+    if (const auto it = g_registeredAppearanceNodes.find(a_actorFormID);
+        it != g_registeredAppearanceNodes.end()) {
+      releasedNodes = std::move(it->second);
+      g_registeredAppearanceNodes.erase(it);
+    }
+    if (const auto it = g_registeredAppearanceAttachmentRoots.find(a_actorFormID);
+        it != g_registeredAppearanceAttachmentRoots.end()) {
+      releasedRoots = std::move(it->second);
+      g_registeredAppearanceAttachmentRoots.erase(it);
+    }
+    g_registeredAppearanceHighHeelActors.erase(a_actorFormID);
+    g_sceneObservations.Forget(a_actorFormID);
+    g_morphRequests.Forget(a_actorFormID);
+    g_queuedHighHeelSyncs.Forget(a_actorFormID);
+    g_pendingHighHeelResyncs.erase(a_actorFormID);
+    // Eligibility is a display decision, not a scene resource. Keep it through
+    // unload: DAVE/RaceMenu can attach new 3D before ObjectLoaded(true) or an
+    // SFS refresh. Clearing it would drop valid first live-morph attachments.
+    // Hide/preview decisions still belong exclusively to ArmorSkinning.
+    if (a_deleted) {
+      g_morphActivity.SetActive(a_actorFormID, false);
+      g_highHeelAttachmentActors.erase(a_actorFormID);
+    }
   }
-  std::lock_guard lock(g_nodeMutex);
-  g_registeredAppearanceNodes.erase(a_actor->GetFormID());
-  g_morphRequests.Forget(a_actor->GetFormID());
 }
 
 void ForgetAllRegisteredAppearanceNodes() {
-  g_highHeelQueueGeneration.fetch_add(1, std::memory_order_acq_rel);
+  g_highHeelQueueEpoch.fetch_add(1, std::memory_order_acq_rel);
   {
     std::lock_guard queueLock(g_highHeelQueueMutex);
-    g_queuedHighHeelSyncs.clear();
+    g_queuedHighHeelSyncs.Clear();
     g_pendingHighHeelResyncs.clear();
   }
 
@@ -1818,6 +1880,7 @@ void ForgetAllRegisteredAppearanceNodes() {
                           g_registeredAppearanceHighHeelActors.end());
     g_registeredAppearanceNodes.clear();
     g_registeredAppearanceAttachmentRoots.clear();
+    g_sceneObservations.Clear();
     g_registeredAppearanceHighHeelActors.clear();
     g_morphActivity.Clear();
     g_morphRequests.Clear();

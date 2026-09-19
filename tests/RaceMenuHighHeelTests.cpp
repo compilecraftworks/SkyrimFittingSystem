@@ -18,6 +18,7 @@
 #include <unordered_set>
 #include <vector>
 #include "native/RegisteredAppearanceMorphRules.h"
+#include "native/ActorResourceWork.h"
 namespace RE {
 using FormID = std::uint32_t;
 template<class T> using BSTSmartPointer = std::shared_ptr<T>;
@@ -186,10 +187,13 @@ struct RegisteredHighHeelState {
   bool staleAttachmentStillPresent{}, previouslyActive{};
 };
 std::mutex g_nodeMutex, g_highHeelQueueMutex;
+sfs::native::resource_work::ActorBuilds g_sceneObservations;
+#include "observation.production.inc"
 std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
 std::unordered_set<RE::FormID> g_highHeelAttachmentActors;
-std::unordered_set<RE::FormID> g_queuedHighHeelSyncs, g_pendingHighHeelResyncs;
-std::atomic_uint64_t g_highHeelQueueGeneration{1};
+sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
+std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
+std::atomic<std::uint64_t> g_highHeelQueueEpoch{0};
 std::atomic<skee::INiTransformInterface*> g_transformInterface{&skee::transform};
 std::atomic_uint32_t g_transformInterfaceVersion{3};
 std::atomic<skee::IBodyMorphInterface*> g_bodyMorphInterface{&skee::morph};
@@ -214,7 +218,7 @@ RegisteredHighHeelState ResolveRegisteredHighHeelState(RE::Actor* a) {
 bool SceneHasNpcPositionSource(RE::Actor* a) { return !a->sceneOffsets.empty(); }
 bool IsRegisteredAppearanceDisplayActive(RE::FormID id) { return RE::TESForm::LookupByID<RE::Actor>(id)->active; }
 bool RememberHighHeelAttachmentRoots(RE::Actor*,
-    const std::vector<RE::NiPointer<RE::NiAVObject>>& nodes, RE::FormID, bool fp) {
+    const std::vector<RE::NiPointer<RE::NiAVObject>>& nodes, RE::FormID, bool fp, const SceneObservation*) {
   return !fp && std::ranges::any_of(nodes, [](const auto& n) { return n.get()->hasHeel; });
 }
 void QueuePendingMorphSync(RE::FormID) {}
@@ -242,7 +246,7 @@ void Reset(RE::Actor& a) {
   RE::TESForm::forms[a.id] = &a;
   g_registeredAppearanceHighHeelActors.clear();
   g_highHeelAttachmentActors = {a.id};
-  g_queuedHighHeelSyncs.clear(); g_pendingHighHeelResyncs.clear();
+  g_queuedHighHeelSyncs.Clear(); g_pendingHighHeelResyncs.clear();
   SKSE::tasks.pending.clear();
   RE::BSScript::Internal::vm.pending.clear();
   RE::BSScript::Internal::vm.calls.clear();
@@ -317,7 +321,7 @@ int main() {
     Check(a.resolverCalls == 3 && a.fullUpdates == 0, "stale visible branch retries boundedly without lowering");
     Reset(a); a.sceneOffsets = {12}; queue(); queue(); DrainAll();
     Check(a.fullUpdates == 2, "pending event coalesces into one subsequent pass");
-    Reset(a); a.sceneOffsets = {12}; queue(); ++g_highHeelQueueGeneration; DrainAll();
+    Reset(a); a.sceneOffsets = {12}; queue(); g_queuedHighHeelSyncs.Clear(); DrainAll();
     Check(a.fullUpdates == 0, "save generation invalidates stale queued work");
     Reset(a); a.selectedOffset.reset(); a.internalPosition = 12.0F; a.otherModHeight = 3;
     g_registeredAppearanceHighHeelActors.insert(a.id); queue(); DrainAll();
@@ -358,8 +362,26 @@ int main() {
           "legacy dispatch failure removes neutral bootstrap and does not report success");
   }
   Reset(a); a.sceneOffsets = {12}; queue(); SKSE::tasks.Drain();
-  ++g_highHeelQueueGeneration; DrainAll();
+  g_queuedHighHeelSyncs.Clear(); DrainAll();
   Check(a.fullUpdates == 0 && !g_registeredAppearanceHighHeelActors.contains(a.id),
         "old legacy callbacks cannot continue into a new load generation");
+
+  // An unload cancels one actor, not the other actor's pending height update.
+  // Reuse the same FormID immediately, before the old Papyrus callback arrives.
+  for (auto version : {1U, 2U, 3U, 4U, 99U}) {
+    g_transformInterfaceVersion = version;
+    g_transformInterface = version < 3 ? nullptr : &skee::transform;
+    Reset(a); a.sceneOffsets = {12}; queue();
+    if (version < 3) { SKSE::tasks.Drain(); }
+    g_queuedHighHeelSyncs.Forget(a.id);
+    g_pendingHighHeelResyncs.erase(a.id);
+    RE::Actor other{0xA001}; other.sceneOffsets = {12};
+    sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&other);
+    a.selectedOffset = 17.0F; a.sceneOffsets = {17}; queue();
+    DrainAll();
+    Check(a.displayedHeight == 17 && other.displayedHeight == 12 &&
+              g_queuedHighHeelSyncs.Size() == 0,
+          "actor cancellation/reload keeps new and other actor work, including legacy callbacks");
+  }
   std::printf("%u high-heel source regression checks passed; NOT in-game evidence.\n", checks);
 }

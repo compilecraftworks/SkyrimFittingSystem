@@ -14,6 +14,7 @@
 #include <unordered_set>
 #include <vector>
 #include "native/RegisteredAppearanceMorphRules.h"
+#include "native/ActorResourceWork.h"
 
 namespace RE {
 using FormID = std::uint32_t;
@@ -56,7 +57,8 @@ struct Actor : TESObjectREFR {
   using TESObjectREFR::TESObjectREFR;
   NiAVObject roots[2];
   std::unordered_set<FormID> displayed;
-  bool Is3DLoaded() const { return true; }
+  bool loaded{true};
+  bool Is3DLoaded() const { return loaded; }
   NiAVObject* Get3D(bool fp) { return &roots[fp]; }
 };
 }
@@ -97,7 +99,13 @@ namespace dye {
 std::unordered_map<RE::FormID, unsigned> restoreRequests;
 void QueueSavedWorldTintRestore(RE::Actor* actor) { ++restoreRequests[actor->id]; }
 }
+std::function<void()> beforeDisplayedQuery;
 bool IsDisplayedFittingArmor(RE::Actor* actor, const RE::TESObjectARMO* armor) {
+  if (beforeDisplayedQuery) {
+    auto hook = std::move(beforeDisplayedQuery);
+    beforeDisplayedQuery = {};
+    hook();
+  }
   return actor->displayed.contains(armor->id);
 }
 namespace racemenu {
@@ -105,14 +113,21 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor*) {}
 }
 }
 unsigned highHeelObservations{};
+class SceneObservation;
 bool ShouldResyncHighHeelAfterAttachment(RE::Actor*, bool) { return false; }
 bool RememberHighHeelAttachmentRoots(RE::Actor*,
-  const std::vector<RE::NiPointer<RE::NiAVObject>>&, RE::FormID, bool) {
+  const std::vector<RE::NiPointer<RE::NiAVObject>>&, RE::FormID, bool, const SceneObservation*) {
   ++highHeelObservations;
   return false;
 }
 namespace rules = sfs::native::racemenu::rules;
 std::mutex g_nodeMutex;
+sfs::native::resource_work::ActorBuilds g_sceneObservations;
+std::mutex g_highHeelQueueMutex;
+sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
+std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
+std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
+std::unordered_map<RE::FormID, std::vector<RE::NiPointer<RE::NiAVObject>>> g_registeredAppearanceAttachmentRoots;
 rules::ActorMorphActivity g_morphActivity;
 rules::ActorMorphRequests g_morphRequests;
 std::uint64_t g_nodeObservation{};
@@ -255,12 +270,12 @@ int main() {
   QueueUpdateModelWeightAppearanceSync(player.id);
   QueueUpdateModelWeightAppearanceSync(npc.id);
   const auto beforeForget = morph.writes[player.id];
-  ForgetRegisteredAppearanceNodes(&player);
+  ReleaseActorSceneResources(player.id, false);
   attach(player, playerNode); // Same FormID/node reused before the old task runs.
   DrainAll();
   Check(morph.writes[player.id] == beforeForget, "old actor task must be invalidated");
   Check(morph.writes[npc.id] == npcBefore + 1, "forget must not cancel another actor");
-  ForgetRegisteredAppearanceNodes(&player);
+  ReleaseActorSceneResources(player.id, false);
 
   RE::NiAVObject previewRoot{player.Get3D(false)};
   previewRoot.shapeData = false;
@@ -273,7 +288,7 @@ int main() {
   ApplyBodyMorphsHook(&morph, &player, false);
   Check(morph.writes[player.id] == initialBefore + 1,
         "recorded preview root must accept a later explicit live update");
-  ForgetRegisteredAppearanceNodes(&player);
+  ReleaseActorSceneResources(player.id, false);
   RE::NiAVObject savedRoot{player.Get3D(false)};
   savedRoot.shapeData = false;
   publish(player, false); DrainAll();
@@ -306,5 +321,70 @@ int main() {
         "high-heel observer must survive unavailable morph ABI without tracking it");
   g_bodyMorphInterface = &morph;
   Check(originalCalls != 0, "original public interface must still run");
+
+  // Actual unload/delete cleanup, not the old test-only morph forget helper.
+  const auto otherNodes = g_registeredAppearanceNodes[npc.id].size();
+  for (unsigned cycle = 0; cycle != 128; ++cycle) {
+    publish(player, false);
+    player.loaded = true;
+    playerNode.parent = player.Get3D(false);
+    attach(player, playerNode); DrainAll();
+    g_registeredAppearanceAttachmentRoots[player.id] = {&playerNode};
+    g_registeredAppearanceHighHeelActors.insert(player.id);
+    (void)g_queuedHighHeelSyncs.Start(player.id);
+    g_pendingHighHeelResyncs.insert(player.id);
+    QueueUpdateModelWeightAppearanceSync(player.id);
+    player.loaded = false;
+    ReleaseActorSceneResources(player.id, false);
+    DrainAll();
+    Check(!g_registeredAppearanceNodes.contains(player.id) &&
+          !g_registeredAppearanceAttachmentRoots.contains(player.id) &&
+          !g_registeredAppearanceHighHeelActors.contains(player.id) &&
+          !g_morphRequests.HasRequest(player.id) &&
+          !g_queuedHighHeelSyncs.Contains(player.id) &&
+          !g_pendingHighHeelResyncs.contains(player.id), "unload frees scene roots and cancels actor-local work");
+    Check(g_morphActivity.IsActive(player.id) && g_highHeelAttachmentActors.contains(player.id),
+          "unload retains eligibility for DAVE reattachment before an SFS refresh");
+    player.loaded = true;
+    attach(player, playerNode); DrainAll(); // No publish/refresh before attachment.
+    const auto before = morph.writes[player.id];
+    ApplyBodyMorphsHook(&morph, &player, false);
+    Check(morph.writes[player.id] == before + 1, "reload attachment resumes live morph without a new refresh");
+  }
+  Check(g_registeredAppearanceNodes[npc.id].size() == otherNodes, "unload never clears another actor");
+  sfs::native::beforeDisplayedQuery = [&] {
+    player.loaded = false;
+    ReleaseActorSceneResources(player.id, false);
+  };
+  attach(player, playerNode); DrainAll();
+  Check(!g_registeredAppearanceNodes.contains(player.id) && g_sceneObservations.Size() == 0,
+        "unload during attachment cannot republish the old node or retain an observation");
+  player.loaded = true;
+  attach(player, playerNode); DrainAll();
+  Check(g_registeredAppearanceNodes.contains(player.id) && g_sceneObservations.Size() == 0,
+        "cancelled observation does not block next legitimate attachment");
+  {
+    const SceneObservation oldBuild(player.id);
+    ReleaseActorSceneResources(player.id, false);
+    RememberAndMorphNewNodes(&morph, &player, {&playerNode}, armor.id, false, false, &oldBuild);
+    Check(!g_registeredAppearanceNodes.contains(player.id),
+          "native capture started before unload cannot republish the old node");
+  }
+  attach(player, playerNode); DrainAll();
+  QueueUpdateModelWeightAppearanceSync(player.id);
+  RE::TESForm::forms.erase(player.id);
+  ReleaseActorSceneResources(player.id, true);
+  DrainAll();
+  Check(!g_registeredAppearanceNodes.contains(player.id) &&
+        !g_morphActivity.IsActive(player.id) && !g_highHeelAttachmentActors.contains(player.id),
+        "delete removes eligibility and resources without looking up the form");
+  for (RE::FormID id = 0xA000; id != 0xA080; ++id) {
+    RE::Actor transient{id}; RE::NiAVObject node{transient.Get3D(false)};
+    transient.displayed.insert(armor.id); publish(transient, false); attach(transient, node);
+    RE::TESForm::forms.erase(id);
+    ReleaseActorSceneResources(id, true); DrainAll();
+    Check(!g_registeredAppearanceNodes.contains(id) && !g_morphActivity.IsActive(id),
+          "128 distinct deleted actors leave no tracked scene records");
+  }
   std::puts("RaceMenuMorphTrackingTests passed (production tracking functions, fake engine).");
 }

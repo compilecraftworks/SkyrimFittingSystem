@@ -1,0 +1,7 @@
+Skyrim Fitting System v1.6.8 SE-AE
+- Release actor-local morph/high-heel scene references and dye GPU targets/previews on actual unload or deletion.
+- Preserve saved colors, normal hide/show, preview, live BodyMorph and strip/redress; restore colors through the existing bounded load/attachment path.
+- Prevent stale callbacks and in-flight dye builds from overwriting or cancelling replacement scene work. Other actors/components remain independent.
+- No new polling, world scan, forced 3D rebuild, real equipment operation, runtime requirement or API version change.
+- All 24 regression executables and source checks passed, including repeated unload/reload and concurrent build cancellation. These are host tests, not in-game/GPU measurements.
+- Only SFSCore.dll changes. Keep existing settings, kits, saves and optional compatibility patches.

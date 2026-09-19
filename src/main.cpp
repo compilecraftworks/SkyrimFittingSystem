@@ -12,6 +12,7 @@
 #include "native/FittingDye.h"
 #include "native/GridInventoryIntegration.h"
 #include "native/GenitalCompatibility.h"
+#include "native/AppearanceResourceLifecycle.h"
 #include "native/HelmetToggle2Integration.h"
 #include "native/IedConditionIntegration.h"
 #include "native/OpenAnimationReplacerIntegration.h"
@@ -37,6 +38,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::native::oar::RegisterConditions();
     break;
   case SKSE::MessagingInterface::kDataLoaded:
+    sfs::native::appearance_resources::RegisterEvents();
     sfs::api::rendered::RegisterEvents();
     sfs::native::genital_compatibility::InitializeEnvironment();
     sfs::kit_generator::Generator::Get().SnapshotLoadedArmorForms();

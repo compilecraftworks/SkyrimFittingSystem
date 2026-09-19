@@ -2,6 +2,16 @@ param([Parameter(Mandatory=$true)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $groups = @{
+    'DyeResourceLifecycle.production.inc' = @('src/native/FittingDye.cpp', @(
+        'void UpdateWorldTintActivityLocked()', 'class WorldTintBuild final',
+        '[[nodiscard]] bool IsCurrentSavedWorldTintRestore(',
+        '[[nodiscard]] bool HasSavedWorldTintForActor(',
+        'void ClearRuntimeWorldTintsForActor(', 'void FinishQueuedSavedWorldTintRestore(',
+        'void QueueSavedWorldTintRestoreTask(', 'void QueueSavedWorldTintRestore(RE::Actor',
+        'void ReleaseActorSceneResources(', 'void RestoreActorSceneResources(',
+        'void ClearWorldTint()', 'void RevertSavedWorldTints()'))
+    'AppearanceResourceEvents.production.inc' = @('src/native/AppearanceResourceLifecycle.cpp', @(
+        'class Events final', 'void RegisterEvents()'))
     'WornSnapshot.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         'class EquippedArmorSnapshot {'))
     'WornQuery.production.inc' = @('src/native/ArmorSkinning.cpp', @(

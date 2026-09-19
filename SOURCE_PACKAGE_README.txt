@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.6.7 - Nexus Source Package
+Skyrim Fitting System v1.6.8 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,11 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.6.8 releases actor-local morph/HH scene references and dye GPU targets on
+real unload/delete events. Saved colors and ordinary hidden/preview tracking
+are preserved; old queued work cannot finish a replacement actor task. See
+docs/V1.6.8-ACTOR-RESOURCE-LIFECYCLE.md for scope, tests and limitations.
 
 v1.6.7 repairs registered HH_OFFSET selection and late attachment recovery in
 the legacy NiOverride and public NiTransform paths, and removes redundant worn

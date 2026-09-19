@@ -27,6 +27,7 @@ $targets = @(
     "RaceMenuInterfaceTests",
     "RaceMenuMorphTrackingTests",
     "RaceMenuHighHeelTests",
+    "AppearanceResourceLifecycleTests",
     "CallerChainPerformanceTests",
     "WornSnapshotRegressionTests"
 )
@@ -220,7 +221,6 @@ try {
     # DD, P+, and UI work) from silently taking ownership of live morph state.
     $morphOwnershipPatterns = @(
         "SetRegisteredAppearanceDisplayActive",
-        "ForgetRegisteredAppearanceNodes",
         "ForgetAllRegisteredAppearanceNodes"
     )
     $allowedMorphOwners = @(
@@ -479,6 +479,24 @@ try {
 
     $serializationSource = Get-Content -LiteralPath (
         Join-Path $repository "src\Serialization.cpp") -Raw
+    $appearanceLifecycle = Get-Content -LiteralPath (
+        Join-Path $repository "src/native/AppearanceResourceLifecycle.cpp") -Raw
+    $dyeLifecycle = Get-Content -LiteralPath (
+        Join-Path $repository "src/native/FittingDye.cpp") -Raw
+    if (-not $mainSource.Contains('sfs::native::appearance_resources::RegisterEvents()') -or
+        -not $appearanceLifecycle.Contains('racemenu::ReleaseActorSceneResources(event->formID, false)') -or
+        -not $appearanceLifecycle.Contains('racemenu::ReleaseActorSceneResources(event->formID, true)') -or
+        -not $appearanceLifecycle.Contains('dye::ReleaseActorSceneResources(event->formID)') -or
+        -not $appearanceLifecycle.Contains('dye::RestoreActorSceneResources(event->formID)') -or
+        $appearanceLifecycle -match 'RefreshArmorFor|QueueArmorRefresh|EquipObject|ForgetAllRegisteredAppearanceNodes|ClearWorldTint\(') {
+        throw "Scene resource lifecycle must stay event-driven, actor-local, and independent of renderer refresh/visibility"
+    }
+    if (-not $dyeLifecycle.Contains('status, a_ticket)') -or
+        -not $dyeLifecycle.Contains('WorldTintBuild build(a_actorFormID, a_restoreTicket)') -or
+        ([regex]::Matches($dyeLifecycle, 'if \(!build.CurrentLocked\(\)\)')).Count -ne 2 -or
+        -not $dyeLifecycle.Contains('.target = {.actorFormID = a_actorFormID')) {
+        throw "Dye restore, direct builds and previews must retain actor-local cancellation fences"
+    }
     $prepareStart = $serializationSource.IndexOf(
         "void PrepareForLoadTransition()")
     $saveStart = $serializationSource.IndexOf(

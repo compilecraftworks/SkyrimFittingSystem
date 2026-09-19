@@ -17,6 +17,7 @@ function Write-Slice([string]$Name, [string]$Start, [string]$End) {
 # Compile unchanged production bodies against recording providers. These are
 # source regression tests, not game/RaceMenu binary emulation or timing tests.
 $source = Get-Content -LiteralPath (Join-Path $repo 'src/native/RaceMenuBodyMorph.cpp') -Raw
+Write-Slice 'observation.production.inc' 'class SceneObservation final' 'thread_local std::uint32_t g_updateModelWeightTaskDepth'
 Write-Slice 'callback.production.inc' 'class NiOverrideDispatchCallback final' 'class ScopedUpdateModelWeightTask final'
 Write-Slice 'sync.production.inc' 'enum class HighHeelSyncAttempt' 'void QueuePendingMorphSync('
 Write-Slice 'observer.production.inc' '[[nodiscard]] bool ShouldResyncHighHeelAfterAttachment(' 'RegisteredAppearanceAttachmentObserver g_attachmentObserver;'
