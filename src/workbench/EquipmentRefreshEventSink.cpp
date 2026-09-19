@@ -289,8 +289,8 @@ void EquipmentRefreshEventSink::CancelQueuedRefreshes() {
     g_pendingEquipmentChangeRefreshActors.clear();
     g_pendingContextBoundaryRefreshActors.clear();
   }
-  GetSingleton()->refreshQueued_.store(false);
-  GetSingleton()->conditionPollQueued_.store(false);
+  GetSingleton()->refreshWork_.Cancel();
+  GetSingleton()->conditionPollWork_.Cancel();
   GetSingleton()->nextConditionPollMillis_.store(0);
   GetSingleton()->actorConditionSignatures_.clear();
   GetSingleton()->hasWorldConditionSignature_ = false;
@@ -556,26 +556,28 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
 #endif
 
 void EquipmentRefreshEventSink::QueueRefresh() {
-  bool expected = false;
-  if (!refreshQueued_.compare_exchange_strong(expected, true)) {
+  const auto generation = CurrentEventRefreshGeneration();
+  const auto ticket = refreshWork_.Start();
+  if (!ticket.has_value()) {
     return;
   }
 
   auto *taskInterface = SKSE::GetTaskInterface();
   if (!taskInterface) {
-    refreshQueued_.store(false);
+    refreshWork_.Finish(*ticket);
     logger::warn(
         "Skipped equipment refresh because SKSE task interface is unavailable");
     return;
   }
 
-  const auto generation = CurrentEventRefreshGeneration();
-  taskInterface->AddTask([generation]() {
-    if (!IsCurrentEventRefreshGeneration(generation)) {
-      EquipmentRefreshEventSink::GetSingleton()->refreshQueued_.store(false);
+  taskInterface->AddTask([generation, ticket = *ticket]() {
+    auto *sink = EquipmentRefreshEventSink::GetSingleton();
+    // Finish only this callback's enrollment, never a post-load replacement.
+    if (!sink->refreshWork_.Finish(ticket) ||
+        !IsCurrentEventRefreshGeneration(generation)) {
       return;
     }
-    EquipmentRefreshEventSink::GetSingleton()->RunRefresh();
+    sink->RunRefresh();
   });
 }
 
@@ -613,8 +615,6 @@ void EquipmentRefreshEventSink::QueueActorRefresh(RE::FormID a_actorFormID,
 }
 
 void EquipmentRefreshEventSink::RunRefresh() {
-  refreshQueued_.store(false);
-
   auto *menu = sfs::Menu::GetSingleton();
   if (!menu || !menu->IsGameDataLoaded()) {
     return;
@@ -625,6 +625,7 @@ void EquipmentRefreshEventSink::RunRefresh() {
 }
 
 void EquipmentRefreshEventSink::TickConditionState() {
+  const auto generation = CurrentEventRefreshGeneration();
   if (!IsGameReady()) {
     return;
   }
@@ -638,21 +639,20 @@ void EquipmentRefreshEventSink::TickConditionState() {
   nextConditionPollMillis_.store(now + kConditionPollIntervalMillis,
                                  std::memory_order_relaxed);
 
-  bool expected = false;
-  if (!conditionPollQueued_.compare_exchange_strong(
-          expected, true, std::memory_order_acq_rel)) {
+  const auto ticket = conditionPollWork_.Start();
+  if (!ticket.has_value()) {
     return;
   }
 
   auto *taskInterface = SKSE::GetTaskInterface();
   if (!taskInterface) {
-    conditionPollQueued_.store(false, std::memory_order_release);
+    conditionPollWork_.Finish(*ticket);
     return;
   }
 
-  taskInterface->AddTask([this]() {
-    conditionPollQueued_.store(false, std::memory_order_release);
-    if (IsGameReady()) {
+  taskInterface->AddTask([this, generation, ticket = *ticket]() {
+    if (conditionPollWork_.Finish(ticket) &&
+        IsCurrentEventRefreshGeneration(generation) && IsGameReady()) {
       PollConditionState();
     }
   });

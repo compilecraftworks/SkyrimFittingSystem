@@ -1,5 +1,7 @@
 #pragma once
 
+#include "workbench/CoalescedTask.h"
+
 #include <atomic>
 #include <cstdint>
 #include <unordered_map>
@@ -87,8 +89,8 @@ private:
     friend bool operator==(const WorldConditionSignature &, const WorldConditionSignature &) = default;
   };
 
-  std::atomic_bool refreshQueued_{false};
-  std::atomic_bool conditionPollQueued_{false};
+  CoalescedTask refreshWork_;
+  CoalescedTask conditionPollWork_;
   std::atomic<std::int64_t> nextConditionPollMillis_{0};
   std::unordered_map<RE::FormID, ActorConditionSignature>
       actorConditionSignatures_;

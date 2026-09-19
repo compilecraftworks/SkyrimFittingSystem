@@ -14,6 +14,10 @@ $targets = @(
     "BodyFamilyLogicTests",
     "ConditionCnfLogicTests",
     "ConditionDropLogicTests",
+    "WorkbenchTransactionTests",
+    "EquipmentRefreshQueueTests",
+    "StateBoundaryTests",
+    "ConditionStoreIntegrityTests",
     "ConditionFormTokenTests",
     "ConditionDropdownTests",
     "ConditionStringLifetimeTests",
@@ -68,8 +72,12 @@ try {
         -not $sfsInput.Contains('RE::INPUT_EVENT_TYPE::kDeviceConnect')) {
         throw "Menu Cancel must share one mapping/filter and analog rotation must copy input before filtering"
     }
+    $englishKeys = ((Get-Content -LiteralPath (Join-Path $repository "data/Interface/SkyrimFittingSystem/locales/en.json") -Raw | ConvertFrom-Json).strings).PSObject.Properties.Name
     foreach ($sfsLocale in @('en', 'kor', 'zh_cn')) {
         $sfsStrings = (Get-Content -LiteralPath (Join-Path $repository "data/Interface/SkyrimFittingSystem/locales/$sfsLocale.json") -Raw | ConvertFrom-Json).strings
+        foreach ($key in $englishKeys) {
+            if (-not $sfsStrings.$key) { throw "Missing/empty locale key ${sfsLocale}: $key" }
+        }
         if (-not $sfsStrings.'window.rotation_hint' -or -not $sfsStrings.'window.rotation_hint_compact') {
             throw "Rotation title hint is missing for $sfsLocale"
         }
@@ -82,6 +90,19 @@ try {
     }
     $conditionSave = Get-Content -LiteralPath (
         Join-Path $repository "src/ui/Menu.Conditions.State.cpp") -Raw
+    $saveImport = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.SaveData.cpp") -Raw
+    if ($saveImport -notmatch 'DeserializeState\([^;]*&a_error, false\)') {
+        throw "Import staging must not queue actor refreshes before condition validation succeeds"
+    }
+    $kitSave = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Kits.cpp") -Raw
+    $saveStart = $kitSave.IndexOf('bool Menu::SavePendingKit()')
+    $pathCheck = $kitSave.IndexOf('catalog::ResolveKitWritePath(', $saveStart)
+    $createDirectory = $kitSave.IndexOf('std::filesystem::create_directories(', $saveStart)
+    $truncate = $kitSave.IndexOf('std::ios::trunc', $saveStart)
+    if ($saveStart -lt 0 -or $pathCheck -le $saveStart -or
+        $createDirectory -le $pathCheck -or $truncate -le $createDirectory) {
+        throw "Kit containment must be checked before creating or truncating any path"
+    }
     $conditionValueEditors = Get-Content -LiteralPath (
         Join-Path $repository "src/ui/conditions/ValueEditors.cpp") -Raw
     $conditionClauseTable = Get-Content -LiteralPath (

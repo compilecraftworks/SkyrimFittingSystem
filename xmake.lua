@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.8"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.6.9"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -154,6 +154,22 @@ target("ConditionDropLogicTests")
     add_files("tests/ConditionDropLogicTests.cpp")
     add_includedirs("src")
 
+for _, regression in ipairs({"WorkbenchTransactionTests", "EquipmentRefreshQueueTests"}) do
+target(regression)
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_defines("EXCLUSIVE_SKYRIM_FLAT")
+    add_files("tests/" .. regression .. ".cpp")
+    add_includedirs("src", "build/.gens/" .. regression)
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-TransactionTestSource.ps1", "-OutputDirectory",
+            "build/.gens/" .. target:name()})
+    end)
+end
+
 target("ConditionFormTokenTests")
     set_default(false)
     set_kind("binary")
@@ -267,6 +283,25 @@ target("IntegrationInitializationTests")
             "tests/Generate-CustomSkinningTestSource.ps1", "-OutputDirectory",
             "build/.gens/integration-init-tests"})
     end)
+
+for _, regression in ipairs({"StateBoundaryTests", "ConditionStoreIntegrityTests"}) do
+target(regression)
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/" .. regression .. ".cpp")
+    add_includedirs("src", "build/.gens/" .. regression)
+    if regression == "ConditionStoreIntegrityTests" then
+        add_files("src/conditions/Defaults.cpp")
+        add_packages("nlohmann_json")
+    end
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-StateBoundaryTestSource.ps1", "-OutputDirectory",
+            "build/.gens/" .. target:name()})
+    end)
+end
 
 target("RaceMenuInterfaceTests")
     set_default(false)

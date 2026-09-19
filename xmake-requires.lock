@@ -54,6 +54,7 @@
         ["xbyak v7.06#f56260b5"] = {
             repo = {
                 branch = "master",
+                commit = "e36e822129b0fcbdfb51633a7fcee8c76af344bf",
                 url = "https://github.com/xmake-io/xmake-repo.git"
             },
             version = "v7.06"

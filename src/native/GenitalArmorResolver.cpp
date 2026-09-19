@@ -16,6 +16,17 @@ struct ResolverState {
 
 std::mutex g_resolverMutex;
 std::unordered_map<RE::FormID, ResolverState> g_resolverStates;
+// Never reset with the actor map: a VM callback may outlive a load/migration
+// boundary and the same actor FormID may already have a new pending request.
+std::uint64_t g_nextResolverGeneration{0}; // guarded by g_resolverMutex
+
+[[nodiscard]] bool IsResolutionPending(const RE::FormID a_actorFormID,
+                                       const std::uint64_t a_generation) {
+  std::lock_guard lock(g_resolverMutex);
+  const auto it = g_resolverStates.find(a_actorFormID);
+  return it != g_resolverStates.end() && it->second.pending &&
+         it->second.generation == a_generation;
+}
 
 void CompleteResolution(const RE::FormID a_actorFormID,
                         const std::uint64_t a_generation,
@@ -25,7 +36,8 @@ void CompleteResolution(const RE::FormID a_actorFormID,
     std::lock_guard lock(g_resolverMutex);
     const auto stateIt = g_resolverStates.find(a_actorFormID);
     if (stateIt == g_resolverStates.end() ||
-        stateIt->second.generation != a_generation) {
+        stateIt->second.generation != a_generation ||
+        !stateIt->second.pending) {
       return;
     }
 
@@ -53,6 +65,9 @@ public:
       : actorFormID_(a_actorFormID), generation_(a_generation) {}
 
   void operator()(RE::BSScript::Variable a_result) override {
+    if (!IsResolutionPending(actorFormID_, generation_)) {
+      return;
+    }
     const auto *armor = a_result.Unpack<RE::TESObjectARMO *>();
     CompleteResolution(actorFormID_, generation_,
                        armor ? armor->GetFormID() : 0);
@@ -74,6 +89,9 @@ public:
       : actorFormID_(a_actorFormID), generation_(a_generation) {}
 
   void operator()(RE::BSScript::Variable a_result) override {
+    if (!IsResolutionPending(actorFormID_, generation_)) {
+      return;
+    }
     auto *addon = a_result.Unpack<RE::TESQuest *>();
     auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
     if (!addon || !vm) {
@@ -114,7 +132,7 @@ void RememberGenitalArmor(RE::Actor *a_actor,
 
   std::lock_guard lock(g_resolverMutex);
   auto &state = g_resolverStates[a_actor->GetFormID()];
-  ++state.generation;
+  state.generation = ++g_nextResolverGeneration;
   state.armorFormID = a_armor->GetFormID();
   state.pending = false;
   state.attempted = true;
@@ -127,7 +145,7 @@ void ForgetGenitalArmor(RE::Actor *a_actor) {
 
   std::lock_guard lock(g_resolverMutex);
   auto &state = g_resolverStates[a_actor->GetFormID()];
-  ++state.generation;
+  state.generation = ++g_nextResolverGeneration;
   state.armorFormID = 0;
   state.pending = false;
   state.attempted = true;
@@ -148,7 +166,7 @@ void RequestGenitalArmorResolution(RE::Actor *a_actor, const bool a_force) {
       return;
     }
 
-    generation = ++state.generation;
+    generation = state.generation = ++g_nextResolverGeneration;
     state.pending = true;
     state.attempted = false;
   }

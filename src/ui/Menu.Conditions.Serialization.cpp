@@ -7,7 +7,9 @@
 
 #include <algorithm>
 #include <charconv>
+#include <limits>
 #include <nlohmann/json.hpp>
+#include <unordered_set>
 
 namespace {
 constexpr std::uint32_t kConditionSerializationType = 'COND';
@@ -129,6 +131,10 @@ bool DeserializeConditionStore(const nlohmann::json &a_root,
   parsedStore.samplesSeeded = a_root.value("samplesSeeded", false);
 
   int maxConditionId = 0;
+  std::unordered_set<std::string> seenIds;
+  for (const auto &definition : parsedStore.definitions) {
+    seenIds.insert(definition.id);
+  }
   if (const auto conditionsIt = a_root.find("conditions");
       conditionsIt != a_root.end() && conditionsIt->is_array()) {
     parsedStore.definitions.reserve(parsedStore.definitions.size() +
@@ -171,6 +177,16 @@ bool DeserializeConditionStore(const nlohmann::json &a_root,
 
       if (!condition.id.empty() && !condition.name.empty() &&
           !condition.clauses.empty()) {
+        // References are ID-based. Renaming an ambiguous ID would silently
+        // retarget rows/nested conditions, so reject before publishing either
+        // the parsed store or its materialization caches.
+        if (sfs::conditions::IsBuiltInCondition(condition.id) ||
+            !seenIds.insert(condition.id).second) {
+          if (a_error) {
+            *a_error = "Duplicate or reserved condition ID: " + condition.id;
+          }
+          return false;
+        }
         if (sfs::conditions::FindDefinitionByName(parsedStore.definitions,
                                                    condition.name) != nullptr ||
             RE::SCRIPT_FUNCTION::LocateScriptCommand(condition.name.c_str()) !=
@@ -196,6 +212,11 @@ bool DeserializeConditionStore(const nlohmann::json &a_root,
     }
   }
 
+  if (maxConditionId >= (std::numeric_limits<int>::max)() - 1 ||
+      parsedStore.nextConditionId >= (std::numeric_limits<int>::max)() - 1) {
+    if (a_error) { *a_error = "Condition ID counter is out of range."; }
+    return false;
+  }
   parsedStore.nextConditionId =
       (std::max)(parsedStore.nextConditionId, maxConditionId + 1);
   FinalizeConditionStore(parsedStore);

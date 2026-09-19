@@ -8,25 +8,6 @@
 namespace sfs {
 namespace {
 [[nodiscard]] std::vector<int>
-BuildPlayerRegistrationRowIndices(
-    const workbench::VariantWorkbench &a_workbench,
-    const RE::FormID a_playerFormID) {
-  std::vector<int> indices;
-  const auto &rows = a_workbench.GetRows();
-  indices.reserve(rows.size());
-  for (int index = 0; index < static_cast<int>(rows.size()); ++index) {
-    // Never edit global rows: legacy/global registrations can affect NPCs.
-    // Grid Costume belongs to the player and therefore owns only explicit
-    // player rows.
-    if (rows[static_cast<std::size_t>(index)].ownerActorFormID ==
-        a_playerFormID) {
-      indices.push_back(index);
-    }
-  }
-  return indices;
-}
-
-[[nodiscard]] std::vector<int>
 BuildPlayerBaseRegistrationRowIndices(
     const workbench::VariantWorkbench &a_workbench,
     const RE::FormID a_playerFormID) {
@@ -80,16 +61,15 @@ bool Menu::ApplyGridInventoryCostume(const std::uint32_t *a_formIDs,
   workbench_.SyncRowsFromActor(player);
 
   const auto playerFormID = player->GetFormID();
-  const auto allPlayerRows =
-      BuildPlayerRegistrationRowIndices(workbench_, playerFormID);
-  bool changed = workbench_.ResetAllRows(&allPlayerRows);
-
   const auto basePlayerRows =
       BuildPlayerBaseRegistrationRowIndices(workbench_, playerFormID);
   const auto initialEquippedState =
       workbench::VariantWorkbench::BuildInitialEquippedState(player);
-  changed |= workbench_.ApplyKitLayout(
-      *layout, false, std::nullopt, playerFormID, &initialEquippedState,
+  // Let the normal kit projection validate first, then replace only explicit
+  // player base rows. Conditional/NPC/global registrations are not owned by
+  // Grid; locked cards and unusable layouts keep the usual kit protections.
+  const bool changed = workbench_.ApplyKitLayout(
+      *layout, true, std::nullopt, playerFormID, &initialEquippedState,
       &basePlayerRows, true);
 
   if (!changed) {

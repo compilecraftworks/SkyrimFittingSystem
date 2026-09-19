@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.6.8 - Nexus Source Package
+Skyrim Fitting System v1.6.9 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,12 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.6.9 fixes Grid base-row replacement scope, condition-action drop rejection,
+and stale equipment/condition queue ownership at save/load boundaries. See
+docs/V1.6.9-TRANSACTION-REGRESSION-FIXES.md. Additional fixes cover stale SOS
+callbacks, UI control ownership, kit paths, condition IDs and locale parity;
+see docs/V1.6.9-STATE-BOUNDARY-FIXES.md and the bilingual release notes.
 
 v1.6.8 releases actor-local morph/HH scene references and dye GPU targets on
 real unload/delete events. Saved colors and ordinary hidden/preview tracking

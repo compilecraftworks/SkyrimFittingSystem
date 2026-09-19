@@ -7,6 +7,16 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.6.9 preserves conditional appearance cards during Grid Costume changes,
+makes rejected condition-action drops leave both endpoints intact, and prevents
+pre-load callbacks from releasing new equipment/condition queue ownership.
+It also fixes stale SOS results, UI control restoration, kit path containment,
+condition ID integrity and missing localized tooltips.
+See the [English](docs/RELEASE-NOTES-v1.6.9.md) /
+[Korean](docs/RELEASE-NOTES-v1.6.9-ko.md) notes and
+[transaction verification](docs/V1.6.9-TRANSACTION-REGRESSION-FIXES.md) /
+[state-boundary verification](docs/V1.6.9-STATE-BOUNDARY-FIXES.md).
+
 v1.6.8 releases actor-local morph/high-heel scene references and dye GPU targets
 at actual unload/delete boundaries, preserving saved colors and ordinary
 hide/preview behavior. See the [English](docs/RELEASE-NOTES-v1.6.8.md) /

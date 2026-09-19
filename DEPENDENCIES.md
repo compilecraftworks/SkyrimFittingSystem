@@ -46,6 +46,11 @@ Their package versions and immutable XMake recipe repository revision
 repository's descriptive `branch = "master"` field, but resolution is pinned by
 the adjacent full commit and package version rather than by the moving branch.
 
+The v1.6.9 rebuild also records the previously omitted Xbyak recipe-repository
+commit `e36e822129b0fcbdfb51633a7fcee8c76af344bf` (GitHub xmake-repo mirror).
+The selected Xbyak v7.06 version and archive checksum above are unchanged;
+this is lock metadata completion, not an independent transitive upgrade.
+
 The project enables Xbyak and disables Skyrim VR. Optional CommonLib packages
 behind disabled REX/VR/test options are not part of the normal SFS dependency
 graph.

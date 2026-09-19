@@ -10,6 +10,7 @@
 #include "kit_generator/UI.h"
 #include "native/ArmorSkinning.h"
 #include "native/GridInventoryIntegration.h"
+#include "ui/GameplayControlLease.h"
 #include "ui/components/PinnableTooltip.h"
 #include "workbench/EquipmentRefreshEventSink.h"
 
@@ -44,6 +45,31 @@ constexpr auto kBlockedGameplayControls = static_cast<UserEventFlag>(
     static_cast<std::underlying_type_t<UserEventFlag>>(
         UserEventFlag::kWheelZoom) |
     static_cast<std::underlying_type_t<UserEventFlag>>(UserEventFlag::kVATS));
+
+sfs::ui::GameplayControlLease g_gameplayControlLease;
+
+void AcquireGameplayControls() {
+  if (auto *controls = RE::ControlMap::GetSingleton()) {
+    std::uint32_t enabled = 0, stored = 0;
+    controls->GetControlsState(enabled, stored);
+    const auto owned = g_gameplayControlLease.Acquire(
+        enabled, static_cast<std::uint32_t>(kBlockedGameplayControls));
+    if (owned != 0) {
+      controls->ToggleControls(static_cast<UserEventFlag>(owned), false, false);
+    }
+  }
+}
+
+void ReleaseGameplayControls() {
+  const auto invalid = static_cast<std::uint32_t>(UserEventFlag::kInvalid);
+  auto *controls = RE::ControlMap::GetSingleton();
+  std::uint32_t enabled = 0, stored = invalid;
+  if (controls) { controls->GetControlsState(enabled, stored); }
+  const auto restore = g_gameplayControlLease.Release(stored, invalid);
+  if (controls && restore != 0) {
+    controls->ToggleControls(static_cast<UserEventFlag>(restore), true, false);
+  }
+}
 
 bool IsCurrentFrameEditableTextInputActive() {
   auto *context = ImGui::GetCurrentContext();
@@ -114,6 +140,7 @@ void Menu::Close() {
 }
 
 void Menu::NotifyWindowShutdown() {
+  ReleaseGameplayControls();
   ui::MenuCharacterPresentation::GetSingleton()->Restore();
   hooks::ResetInputFilterState();
   api::SetMenuLifecycleActive(false);
@@ -167,10 +194,7 @@ void Menu::OnMenuShow() {
     catalogDerived_.gear = {};
   }
 
-  if (auto *controlMap = RE::ControlMap::GetSingleton();
-      controlMap != nullptr) {
-    controlMap->ToggleControls(kBlockedGameplayControls, false, false);
-  }
+  AcquireGameplayControls();
 
   auto &io = ImGui::GetIO();
   io.MouseDrawCursor = false;
@@ -224,8 +248,8 @@ void Menu::OnMenuHide() {
       AllowTextInput(controlMap, false);
       skyrimTextInputAllowed_ = false;
     }
-    controlMap->ToggleControls(kBlockedGameplayControls, true, false);
   }
+  ReleaseGameplayControls();
   wantTextInput_ = false;
 
   auto &io = ImGui::GetIO();

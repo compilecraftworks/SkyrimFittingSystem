@@ -98,7 +98,7 @@ bool Menu::ImportSaveDataJson(std::string_view a_path, std::string &a_error) {
     workbench::VariantWorkbench importedWorkbench;
     if (!importedWorkbench.DeserializeState(
             *workbenchIt, std::string(ui::conditions::kDefaultConditionId),
-            &a_error)) {
+            &a_error, false)) {
       return false;
     }
 

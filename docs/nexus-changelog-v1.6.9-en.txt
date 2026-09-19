@@ -1,0 +1,12 @@
+Skyrim Fitting System v1.6.9 SE-AE
+
+- Preserve conditional, NPC/global and locked appearances when Grid replaces player base appearances.
+- Make condition-action drops atomic: rejected drops preserve source and target.
+- Prevent old equipment/condition tasks and SOS callbacks from overwriting replacement work after loading.
+- Restore only SFS-owned gameplay controls on UI close; respect existing and current stored-control locks.
+- Validate kit write destinations while retaining nested/Unicode collections and normal overwrites.
+- Reject conflicting condition IDs/counter overflow before publication; avoid refreshes during import staging.
+- Restore missing Korean/Chinese tooltips and add localized path errors.
+- 28 regression executables passed in release and releasedbg. No in-game test or measured SkyUI/GPU improvement claim.
+
+Keep existing settings, kits, saves and optional patches. API ABI, dependencies and supported runtimes are unchanged.

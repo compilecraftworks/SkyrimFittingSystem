@@ -2608,19 +2608,34 @@ condition_drop::Status VariantWorkbench::ApplyConditionalActionDropTransaction(
     if (!targetRuleIndex.has_value()) {
       return condition_drop::Status::TargetNotFound;
     }
-    targetChanged = a_request.registerFittingTarget
-        ? staged.ConvertConditionalVisibilityRuleToFittingRow(
-              *targetRuleIndex, a_request.formID)
-        : [&]() {
-            const bool targetReplaced =
-                staged.SetConditionalVisibilityRuleTarget(
-                    *targetRuleIndex, a_request.targetKind,
-                    a_request.formID);
-            const bool polarityChanged =
-                staged.SetConditionalVisibilityRuleVisible(
-                    *targetRuleIndex, a_request.visibleWhenTrue);
-            return targetReplaced || polarityChanged;
-          }();
+    if (a_request.registerFittingTarget) {
+      targetChanged = staged.ConvertConditionalVisibilityRuleToFittingRow(
+          *targetRuleIndex, a_request.formID);
+    } else {
+      // The legacy setter returns false for both rejection and no change.
+      // Validate before touching polarity so a rejected target cannot appear
+      // successful and consume its source. Valid polarity-only edits remain
+      // supported when the existing target already matches.
+      EquipmentWidgetItem targetItem{};
+      const auto *targetArmor =
+          RE::TESForm::LookupByID<RE::TESObjectARMO>(a_request.formID);
+      if (!targetArmor || !BuildCatalogItem(a_request.formID, targetItem) ||
+          IsAppearanceRegistrationProtectedSlotMask(
+              armor::GetArmorDisplaySlotMask(targetArmor))) {
+        return condition_drop::Status::InvalidRequest;
+      }
+      auto &targetRule = staged.conditionalVisibilityRules_[*targetRuleIndex];
+      const bool targetReplaced =
+          targetRule.targetKind != a_request.targetKind ||
+          targetRule.target.formID != a_request.formID;
+      targetChanged = targetReplaced ||
+                      targetRule.visibleWhenTrue != a_request.visibleWhenTrue;
+      if (targetReplaced) {
+        targetRule.targetKind = a_request.targetKind;
+        targetRule.target = std::move(targetItem);
+      }
+      targetRule.visibleWhenTrue = a_request.visibleWhenTrue;
+    }
   } else {
     return condition_drop::Status::InvalidRequest;
   }

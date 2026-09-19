@@ -5,6 +5,7 @@
 #include "Utf8Path.h"
 #include "catalog/EntryBuilders.h"
 #include "catalog/KitLayoutMetadata.h"
+#include "catalog/KitPathRules.h"
 #include "imgui_internal.h"
 #include "ui/Localization.h"
 #include "ui/catalog/Widgets.h"
@@ -429,7 +430,14 @@ bool Menu::SavePendingKit() {
     relativePath =
         utf8::PathFromUtf8(collection) / utf8::PathFromUtf8(name + ".json");
   }
-  const auto fullPath = sfs::catalog::GetPrimaryKitPath() / relativePath;
+  const auto checkedPath = catalog::ResolveKitWritePath(
+      catalog::GetPrimaryKitPath(), relativePath);
+  if (!checkedPath) {
+    createDialog.error =
+        std::string(localization->Get("kits.create_error.collection_path"));
+    return false;
+  }
+  const auto &fullPath = *checkedPath;
 
   try {
     std::filesystem::create_directories(fullPath.parent_path());
