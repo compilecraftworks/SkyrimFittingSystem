@@ -1,0 +1,10 @@
+Skyrim Fitting System v1.7.1 SE-AE
+
+- Reduced redundant inspection of repeatedly queried Papyrus script types.
+- Removed unused caller tracing from ordinary non-token Form keyword reads.
+- Preserved first-call hooks, late native binding, failed-install retries, and both SexLab P+ member observers.
+- Bounded inspection history to 128 entries with load/revert cleanup.
+- Kept final-rendered nudity checks, strip/redress integration, and existing gameplay behavior unchanged.
+- Only SFSCore.dll changes in the runtime ZIP. Keep settings, kits, saves, the helper ESL, and optional patches.
+
+The 29 regression executables and source checks passed. The controlled 256-lookup test reduced function-entry probes from 3,096 to 24; this is not an in-game timing measurement. The reported NPC dialogue pause still requires in-game confirmation.

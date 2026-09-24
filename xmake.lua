@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.0"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.1"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -230,6 +230,19 @@ target("CoreBehaviorRegressionTests")
     set_targetdir("build/v" .. build_version .. "/tests")
     add_files("tests/CoreBehaviorRegressionTests.cpp")
     add_includedirs("src")
+
+target("PapyrusObserverInspectionTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/PapyrusObserverInspectionTests.cpp")
+    add_includedirs("src", "build/.gens/papyrus-observer-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-PapyrusObserverTestSource.ps1", "-OutputDirectory",
+            "build/.gens/papyrus-observer-tests"})
+    end)
 
 target("ManualVisibilityRegressionTests")
     set_default(false)

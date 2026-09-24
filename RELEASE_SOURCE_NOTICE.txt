@@ -1,6 +1,6 @@
-Skyrim Fitting System v1.7.0 is distributed under GNU GPL version 3.
+Skyrim Fitting System v1.7.1 is distributed under GNU GPL version 3.
 
 Corresponding source code, build files, and third-party notices are available
 at https://github.com/compilecraftworks/SkyrimFittingSystem and in the
-"Skyrim Fitting System v1.7.0 Source.zip" archive distributed with this
+"Skyrim Fitting System v1.7.1 Source.zip" archive distributed with this
 release.

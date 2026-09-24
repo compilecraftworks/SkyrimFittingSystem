@@ -33,6 +33,7 @@ $targets = @(
     "RaceMenuHighHeelTests",
     "AppearanceResourceLifecycleTests",
     "CallerChainPerformanceTests",
+    "PapyrusObserverInspectionTests",
     "WornSnapshotRegressionTests"
 )
 
@@ -273,6 +274,11 @@ try {
         Join-Path $repository "src\native\ArmorSkinning.cpp") -Raw
     $tokenPerformanceSource = Get-Content -LiteralPath (
         Join-Path $repository "src/features/virtual_tokens/VirtualWornTokens.cpp") -Raw
+    $tokenRuntimeReset = [regex]::Match($tokenPerformanceSource,
+        '(?s)void ResetVirtualWornTokenRuntimeState\(\).*?(?=void SerializeVirtualWornTokenState)').Value
+    if (-not $tokenRuntimeReset.Contains('ResetScriptTypeInspectionMemo();')) {
+        throw "The bounded Papyrus type memo must release its ownership at save-load/revert boundaries"
+    }
     $tokenRebuild = [regex]::Match($tokenPerformanceSource,
         '(?s)void UpdateVirtualWornTokenCache\(\).*?(?=void InitializeVirtualWornTokens\()').Value
     $bulkLookup = [regex]::Match($armorSkinningSource,

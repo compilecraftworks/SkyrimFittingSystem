@@ -7,6 +7,15 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.1 reduces redundant Papyrus type inspection and unused caller tracing
+for ordinary Form keyword reads, while preserving final-rendered nudity,
+strip/redress observation, first-call installation, late binding and P+ retries.
+See the [English](docs/RELEASE-NOTES-v1.7.1.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.1-ko.md) notes and
+[verification](docs/NPC-DIALOGUE-PERFORMANCE-2026-09-24.md).
+The reported NPC dialogue pause has not been timed in game; no measured
+in-game speedup or universal stall-resolution claim is made.
+
 v1.7.0 restores SFS appearance attachment and armor hiding when another plugin
 has replaced a supported skinning CALL site with an E9 inline jump. Passive
 actors retain the original inline path; actors with active SFS skinning use

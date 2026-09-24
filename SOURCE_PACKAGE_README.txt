@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.0 - Nexus Source Package
+Skyrim Fitting System v1.7.1 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,12 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.7.1 reduces repeated Papyrus type inspection and unused caller tracing on
+ordinary Form keyword reads. First-call hooks, late native binding, P+ retries,
+final-rendered nudity, and strip/redress behavior are retained. The reported
+NPC dialogue pause has not been timed in game. See
+docs/NPC-DIALOGUE-PERFORMANCE-2026-09-24.md and the bilingual release notes.
 
 v1.7.0 handles E9 inline detours at supported armor skinning call sites.
 Passive actors keep the previous inline route with original machine state;

@@ -2245,17 +2245,22 @@ void ApplyDisplayedBodyKeywordCompatibility(
     return operation;
   }
   auto &frame = *a_stack->top;
-  // Displayed-body reads never consume caller identity or learn strip trust.
-  // Keep every mutation/token/filter route unchanged.
-  if (a_target != TargetNative::WornHasKeyword) {
-    operation.callerChain = BuildCallerChain(a_stack);
-  }
-  if (a_target == TargetNative::FormHasKeyword ||
+  const bool formKeywordQuery =
+      a_target == TargetNative::FormHasKeyword ||
       a_target == TargetNative::FormGetKeywords ||
       a_target == TargetNative::FormGetNumKeywords ||
-      a_target == TargetNative::FormGetNthKeyword) {
+      a_target == TargetNative::FormGetNthKeyword;
+  if (formKeywordQuery) {
     operation.item = frame.self.Unpack<RE::TESForm *>();
-  } else if (a_target == TargetNative::DeviousDevicesSyncSetting ||
+  }
+  // Displayed-body reads never consume caller identity or learn strip trust.
+  // Ordinary Form keyword reads cannot resolve a contextual virtual token.
+  // Keep token reads and every mutation/worn-query/catalog-filter route intact.
+  if (a_target != TargetNative::WornHasKeyword &&
+      (!formKeywordQuery || MaskForToken(operation.item) != 0)) {
+    operation.callerChain = BuildCallerChain(a_stack);
+  }
+  if (formKeywordQuery || a_target == TargetNative::DeviousDevicesSyncSetting ||
              a_target == TargetNative::FilterFormsByKeywordString ||
              a_target == TargetNative::FilterFormsByKeyword ||
              a_target == TargetNative::FilterBySlotMask ||
@@ -3504,18 +3509,33 @@ struct NativeDispatchHook {
 };
 
 [[nodiscard]] bool PatchSelectedNativeFunction(
-    RE::BSScript::IFunction *a_function) {
-  if (!a_function || !a_function->GetIsNative()) {
+    RE::BSScript::IFunction *a_function, bool *a_settled = nullptr) {
+  if (a_settled) {
+    *a_settled = false;
+  }
+  if (!a_function) {
+    return false;
+  }
+  if (!a_function->GetIsNative()) {
+    if (a_settled) {
+      *a_settled = true;
+    }
     return false;
   }
   auto *native = static_cast<NativeFunctionBase *>(a_function);
   const auto target = ClassifyNative(native);
   if (target == TargetNative::None) {
+    if (a_settled) {
+      *a_settled = true;
+    }
     return false;
   }
 
   std::unique_lock lock(g_nativeFunctionPatchMutex);
   if (g_nativeFunctionPatches.contains(native)) {
+    if (a_settled) {
+      *a_settled = true;
+    }
     return false;
   }
 
@@ -3577,33 +3597,41 @@ struct NativeDispatchHook {
   logger::info("Selectively hooked virtual token native {}.{} ({})",
                native->GetObjectTypeName().c_str(),
                native->GetName().c_str(), TargetName(target));
+  if (a_settled) {
+    *a_settled = true;
+  }
   return true;
 }
 
-void PatchSelectedNativesInType(RE::BSScript::ObjectTypeInfo *a_type,
-                                std::size_t &a_patchedCount,
-                                const bool a_globalsOnly = false) {
+bool PatchSelectedNativesInType(RE::BSScript::ObjectTypeInfo *a_type,
+                               std::size_t &a_patchedCount,
+                               const bool a_globalsOnly = false) {
   // A type returned by the loader can report linked before its state/member
   // arrays have finished being published.  Never walk an unlinked type, and
   // let the post-load observer inspect only the stable global-native table.
   // Engine types are process-lifetime residents and are scanned in full once
   // during SFS registration below.
   if (!a_type || !a_type->IsLinked()) {
-    return;
+    return false;
   }
+  bool complete = true;
   const auto patch = [&](RE::BSScript::IFunction *a_function) {
-    if (PatchSelectedNativeFunction(a_function)) {
+    bool settled = false;
+    if (PatchSelectedNativeFunction(a_function, &settled)) {
       ++a_patchedCount;
     }
+    complete = complete && settled;
   };
   if (auto *functions = a_type->GetGlobalFuncIter()) {
     for (std::uint32_t index = 0; index < a_type->GetNumGlobalFuncs();
          ++index) {
       patch(functions[index].func.get());
     }
+  } else if (a_type->GetNumGlobalFuncs() != 0) {
+    complete = false;
   }
   if (a_globalsOnly) {
-    return;
+    return complete;
   }
   if (auto *functions = a_type->GetMemberFuncIter()) {
     for (std::uint32_t index = 0; index < a_type->GetNumMemberFuncs();
@@ -3622,6 +3650,132 @@ void PatchSelectedNativesInType(RE::BSScript::ObjectTypeInfo *a_type,
         patch(functions[functionIndex].func.get());
       }
     }
+  }
+  return complete;
+}
+
+// Bounded installation memo, NOT an actor/appearance/condition-result cache.
+// Retaining each cached type prevents pointer reuse from masquerading as an
+// already inspected type. Collisions evict entries and merely cause a rescan.
+struct ScriptTypeInspectionStamp {
+  RE::BSScript::IVirtualMachine *vm{};
+  RE::BSScript::ObjectTypeInfo *type{};
+  const void *globals{};
+  std::uint32_t count{};
+  std::uint64_t revision{};
+  bool operator==(const ScriptTypeInspectionStamp &) const = default;
+};
+
+struct ScriptTypeInspectionEntry {
+  RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> owner;
+  ScriptTypeInspectionStamp stamp;
+  bool postLinkComplete{};
+};
+
+constexpr std::size_t kScriptTypeInspectionCacheSize = 128;
+std::array<ScriptTypeInspectionEntry, kScriptTypeInspectionCacheSize>
+    g_scriptTypeInspections;
+std::mutex g_scriptTypeMemoMutex;
+std::atomic<std::uint64_t> g_scriptTypeInspectionRevision{1};
+
+[[nodiscard]] std::size_t ScriptTypeInspectionIndex(
+    const RE::BSScript::ObjectTypeInfo *a_type) {
+  const auto address = reinterpret_cast<std::uintptr_t>(a_type);
+  return ((address >> 4) ^ (address >> 12)) % kScriptTypeInspectionCacheSize;
+}
+
+[[nodiscard]] ScriptTypeInspectionStamp CaptureScriptTypeInspectionStamp(
+    RE::BSScript::IVirtualMachine *a_vm,
+    RE::BSScript::ObjectTypeInfo *a_type) {
+  if (!a_vm || !a_type || !a_type->IsLinked()) {
+    return {};
+  }
+  const auto revision =
+      g_scriptTypeInspectionRevision.load(std::memory_order_acquire);
+  const auto *globals = a_type->GetGlobalFuncIter();
+  const auto count = a_type->GetNumGlobalFuncs();
+  if (count != 0 && !globals) {
+    return {};
+  }
+  return {a_vm, a_type, globals, count, revision};
+}
+
+struct ScriptTypeInspectionResult {
+  ScriptTypeInspectionStamp stamp;
+  bool needsPostLink{true};
+};
+
+[[nodiscard]] ScriptTypeInspectionResult InspectScriptTypeGlobals(
+    RE::BSScript::IVirtualMachine *a_vm,
+    const RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> &a_type,
+    std::size_t &a_patchedCount, const bool a_postLink = false) {
+  ScriptTypeInspectionResult result{
+      CaptureScriptTypeInspectionStamp(a_vm, a_type.get())};
+  ScriptTypeInspectionEntry retired;
+  const auto index = ScriptTypeInspectionIndex(a_type.get());
+  {
+    std::lock_guard lock(g_scriptTypeMemoMutex);
+    auto &entry = g_scriptTypeInspections[index];
+    if (!result.stamp.type) {
+      if (entry.owner.get() == a_type.get()) {
+        retired = std::move(entry);
+        entry = {};
+      }
+      return result;
+    }
+    if (!a_postLink && entry.stamp == result.stamp) {
+      result.needsPostLink = !entry.postLinkComplete;
+      return result;
+    }
+  }
+
+  // First access is still synchronous. The post-link barrier always scans
+  // again, even if the immediate pass saw the same table address/count.
+  // Never hold the memo lock while invoking native/engine functions.
+  if (!PatchSelectedNativesInType(a_type.get(), a_patchedCount, true)) {
+    // A null entry or unsuccessful selected hook is not an inspected type.
+    // Do not turn a transient publication/patch failure into a permanent skip.
+    std::lock_guard lock(g_scriptTypeMemoMutex);
+    auto &entry = g_scriptTypeInspections[index];
+    if (entry.owner.get() == a_type.get()) {
+      retired = std::move(entry);
+      entry = {};
+    }
+    result.stamp = {};
+    return result;
+  }
+  if (CaptureScriptTypeInspectionStamp(a_vm, a_type.get()) == result.stamp) {
+    std::lock_guard lock(g_scriptTypeMemoMutex);
+    if (g_scriptTypeInspectionRevision.load(std::memory_order_acquire) ==
+        result.stamp.revision) {
+      auto &entry = g_scriptTypeInspections[index];
+      retired = std::move(entry);
+      entry = {a_type, result.stamp, false};
+    }
+  }
+  // Evicted type references are released outside the memo lock.
+  return result;
+}
+
+void CompleteScriptTypeInspection(const ScriptTypeInspectionStamp &a_stamp) {
+  if (!a_stamp.type) {
+    return;
+  }
+  std::lock_guard lock(g_scriptTypeMemoMutex);
+  auto &entry = g_scriptTypeInspections[ScriptTypeInspectionIndex(a_stamp.type)];
+  if (entry.stamp == a_stamp &&
+      g_scriptTypeInspectionRevision.load(std::memory_order_acquire) ==
+          a_stamp.revision) {
+    entry.postLinkComplete = true;
+  }
+}
+
+void ResetScriptTypeInspectionMemo() {
+  decltype(g_scriptTypeInspections) retired;
+  {
+    std::lock_guard lock(g_scriptTypeMemoMutex);
+    g_scriptTypeInspectionRevision.fetch_add(1, std::memory_order_acq_rel);
+    retired.swap(g_scriptTypeInspections);
   }
 }
 
@@ -3682,11 +3836,10 @@ void QueuePostLinkTypeInspection(
     return;
   }
 
-  // GetScriptObjectType1 runs inside the Papyrus loader.  Accessing the type's
-  // function/state arrays from that call caused the PoC13 startup CTD while
-  // FormArray.pex was still being linked.  The loader hook now records only a
-  // class name; all inspection happens after a short post-link barrier on the
-  // game task queue.
+  // GetScriptObjectType1 runs inside the Papyrus loader. Early member/state
+  // traversal caused the historical FormArray startup CTD. The immediate
+  // pass is globals-only; this barrier retries globals and permits only the
+  // existing targeted P+ member inspection on the game task queue.
   std::thread([a_vm]() {
     std::this_thread::sleep_for(kScriptTypeInspectionDelay);
     auto *task = SKSE::GetTaskInterface();
@@ -3720,7 +3873,12 @@ void QueuePostLinkTypeInspection(
         }
 
         std::size_t patchedCount = 0;
-        PatchSelectedNativesInType(type.get(), patchedCount, true);
+        const auto inspection =
+            InspectScriptTypeGlobals(a_vm, type, patchedCount, true);
+        if (!inspection.stamp.type &&
+            attempt + 1 < kScriptTypeInspectionMaxAttempts) {
+          QueuePostLinkTypeInspection(a_vm, className, attempt + 1);
+        }
         if (patchedCount != 0) {
           logger::info("Generic post-link Papyrus observer attached {} "
                        "equipment native(s) from '{}'",
@@ -3743,7 +3901,12 @@ void QueuePostLinkTypeInspection(
                       kScriptTypeInspectionMaxAttempts)) {
             QueuePostLinkTypeInspection(a_vm, className, attempt + 1);
           }
+          // P+ has two independent member observers. Keep their existing
+          // natural-lookup reinspection (including recovery after exhausted
+          // retries); a globals-only memo cannot certify either member hook.
+          continue;
         }
+        CompleteScriptTypeInspection(inspection.stamp);
       }
     });
   }).detach();
@@ -3771,13 +3934,16 @@ struct ScriptTypeLoadHook {
       // delayed inspection below as a post-link fallback for types whose
       // global table is not ready yet.
       std::size_t patchedCount = 0;
-      PatchSelectedNativesInType(a_type.get(), patchedCount, true);
+      const auto inspection =
+          InspectScriptTypeGlobals(a_vm, a_type, patchedCount);
       if (patchedCount != 0) {
         logger::info("Generic immediate Papyrus observer attached {} "
                      "equipment native(s) from '{}'",
                      patchedCount, a_className.c_str());
       }
-      QueuePostLinkTypeInspection(a_vm, a_className.c_str());
+      if (inspection.needsPostLink) {
+        QueuePostLinkTypeInspection(a_vm, a_className.c_str());
+      }
     }
     return loaded;
   }
@@ -3834,6 +4000,9 @@ struct NativeRegistrationHook {
     const bool registered = original(a_vm, a_function);
     if (registered) {
       static_cast<void>(PatchSelectedNativeFunction(a_function));
+      // Late binds can replace entries in-place without changing the table's
+      // address/count. Patch the new native now and invalidate prior memos.
+      g_scriptTypeInspectionRevision.fetch_add(1, std::memory_order_acq_rel);
     }
     return registered;
   }
@@ -4086,6 +4255,7 @@ bool RegisterVirtualWornTokenPapyrus(RE::BSScript::IVirtualMachine *a_vm) {
 
 void ResetVirtualWornTokenRuntimeState() {
   g_runtimeEpoch.fetch_add(1, std::memory_order_acq_rel);
+  ResetScriptTypeInspectionMemo();
   std::vector<std::pair<RE::FormID, std::uint32_t>> applied;
   {
     std::lock_guard lock(g_runtimeMutex);
