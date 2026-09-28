@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.1"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.2"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -24,6 +24,7 @@ set_license("GPL-3.0")
 
 set_languages("c++23")
 set_warnings("allextra")
+
 
 set_policy("package.requires_lock", true)
 
@@ -117,6 +118,41 @@ target("KitGeneratorLogicTests")
     add_includedirs("src", "lib/imgui", "lib/imgui/backends")
     set_pcxxheader("src/pch.h")
 
+target("CommunityGroupingTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/CommunityGroupingTests.cpp")
+    add_includedirs("src")
+
+target("CommunityGroupingAudit")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_deps("commonlibsse-ng")
+    add_packages("nlohmann_json")
+    add_files("tests/CommunityGroupingAudit.cpp", "src/kit_generator/Localization.cpp", "src/ui/Localization.cpp")
+    add_includedirs("src", "lib/imgui", "lib/imgui/backends")
+    set_pcxxheader("src/pch.h")
+
+target("SheetGroupingTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/SheetGroupingTests.cpp")
+    add_includedirs("src")
+
+target("AddScreenshotTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/AddScreenshotTests.cpp")
+    add_includedirs("src")
+
 target("RuntimeLayoutTests")
     set_default(false)
     set_kind("binary")
@@ -204,6 +240,33 @@ target("ConditionValueParsingTests")
     add_files("tests/ConditionValueParsingTests.cpp", "src/conditions/ValueParsing.cpp")
     add_includedirs("tests/condition_value_stubs", "src")
 
+target("ConditionMaterializationReadTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/ConditionMaterializationReadTests.cpp")
+    add_includedirs("tests/condition_string_stubs", "src", "build/.gens/condition-materialization-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-ConditionMaterializationTestSource.ps1", "-OutputDirectory",
+            "build/.gens/condition-materialization-tests"})
+    end)
+
+target("RaceMenuHighHeelRootTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/RaceMenuHighHeelRootTests.cpp")
+    add_includedirs("src", "tests", "build/.gens/high-heel-root-tests")
+    add_packages("nlohmann_json")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-HighHeelRootTestSource.ps1", "-OutputDirectory",
+            "build/.gens/high-heel-root-tests"})
+    end)
+
 target("FittingDyeRulesTests")
     set_default(false)
     set_kind("binary")
@@ -215,6 +278,19 @@ target("FittingDyeRulesTests")
     )
     add_includedirs("src")
 
+target("KeyboardInputRoutingTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/KeyboardInputRoutingTests.cpp")
+    add_includedirs("src", "build/.gens/input-routing-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-KeyboardInputRoutingTestSource.ps1", "-OutputDirectory",
+            "build/.gens/input-routing-tests"})
+    end)
+
 target("KitListNavigationTests")
     set_default(false)
     set_kind("binary")
@@ -222,6 +298,7 @@ target("KitListNavigationTests")
     set_targetdir("build/v" .. build_version .. "/tests")
     add_files("tests/KitListNavigationTests.cpp")
     add_includedirs("src")
+    add_packages("nlohmann_json")
 
 target("CoreBehaviorRegressionTests")
     set_default(false)

@@ -14,9 +14,16 @@ $groups = @{
         'class Events final', 'void RegisterEvents()'))
     'WornSnapshot.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         'class EquippedArmorSnapshot {'))
+    'WornMaskQuery.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        ('[[nodiscard]] std::uint32_t' + "`n" + 'CollectVisibleWornSlotMask('),
+        ('[[nodiscard]] std::uint32_t' + "`n" + 'CollectHiddenWornSlotMask('),
+        'std::uint32_t GetHiddenRealEquipmentSlotMask(',
+        'bool IsRealEquipmentHiddenForActorSlots(',
+        'std::uint32_t GetDisplayWornMask('))
     'WornQuery.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         '[[nodiscard]] static FinalRenderedOutfitSnapshot BuildFinalRenderedOutfitSnapshot(',
         'FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(',
+        'std::uint32_t GetDisplayedFittingSlotMask(',
         '[[nodiscard]] static bool SnapshotHasBodyKeyword(',
         ('std::optional<bool>' + "`n" + 'GetDisplayedBodyKeywordState('),
         'bool IsDisplayedFittingArmor('))
@@ -32,7 +39,8 @@ $groups = @{
         '[[nodiscard]] static bool SnapshotHasBodyKeyword('))
     'RenderedOutfitProducer.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         ('void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,' + "`n" +
-         '    const std::unordered_set<const RE::TESObjectARMO*>& equipped) {')))
+         '    const std::unordered_set<const RE::TESObjectARMO*>& equipped,' + "`n" +
+         '    std::optional<std::vector<const RE::TESObjectARMO*>>* visibleActual = nullptr) {')))
     'IntegrationOar.production.inc' = @('src/native/OpenAnimationReplacerIntegration.cpp', @(
         'bool RegisterConditionsImpl()', 'void RegisterConditions()'))
     'IntegrationDaveQuery.production.inc' = @('src/native/DaveIntegration.cpp', @(

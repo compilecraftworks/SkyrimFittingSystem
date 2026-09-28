@@ -32,4 +32,10 @@ void InvalidateConditionMaterializationCachesFrom(
 [[nodiscard]] std::optional<MaterializedCondition>
 MaterializeConditionById(std::string_view a_conditionId,
                          std::vector<Definition> &a_conditions);
+
+// Shares the same cache/invalidation and owning condition as the UI accessor,
+// without copying display CNF, signatures or refresh-target lists on each test.
+[[nodiscard]] std::shared_ptr<RE::TESCondition>
+AcquireExecutableConditionById(std::string_view a_conditionId,
+                               std::vector<Definition> &a_conditions);
 } // namespace sfs::conditions

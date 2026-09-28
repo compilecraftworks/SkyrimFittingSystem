@@ -13,6 +13,7 @@
 #include "StringUtils.h"
 #include "catalog/KitPathRules.h"
 #include "ui/GameplayControlLease.h"
+#include "ui/catalog/FilterFocus.h"
 
 namespace logger { template <class... T> void debug(T&&...) {} }
 namespace RE {
@@ -101,7 +102,7 @@ sfs::ui::GameplayControlLease g_gameplayControlLease;
 #include "ControlLease.production.inc"
 void AllowTextInput(RE::ControlMap*, bool) {}
 namespace sfs {
-namespace hooks { void ResetInputFilterState() {} }
+namespace hooks { void ResetInputFilterState(bool = false) {} }
 namespace api { void SetMenuLifecycleActive(bool) {} void SetMenuInitialized(bool) {} }
 namespace ui {
 namespace catalog {
@@ -135,6 +136,7 @@ struct Menu {
     ui::catalog::BrowserTab activeTab{ui::catalog::BrowserTab::Kits};
     std::string selectedKey;
     std::vector<std::string> selectedGearKeys;
+    ui::catalog::FilterFocus filterFocus;
   } browserState;
   struct CatalogDerived { int gear{}; } catalogDerived_;
   struct Pane { ui::catalog::TransientPopup activeTransientPopup{}; bool closeActiveTransientPopupRequested{}; } catalogPane_;

@@ -728,12 +728,8 @@ void EquipmentRefreshEventSink::PollConditionState() {
           sfs::conditions::IsWorkbenchSelectable(*definition) &&
           sfs::conditions::EvaluateDefinitionStatus(*definition, conditions)
               .IsActive()) {
-        if (const auto materialized =
-                sfs::conditions::MaterializeConditionById(conditionID,
-                                                           conditions);
-            materialized.has_value()) {
-          condition = materialized->condition;
-        }
+        condition = sfs::conditions::AcquireExecutableConditionById(
+            conditionID, conditions);
       }
       materializedConditions.emplace(conditionID, std::move(condition));
     }

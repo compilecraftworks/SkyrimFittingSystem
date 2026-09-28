@@ -78,7 +78,8 @@ struct DisplaySet {
 };
 
 void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,
-    const std::unordered_set<const RE::TESObjectARMO*>& equipped);
+    const std::unordered_set<const RE::TESObjectARMO*>& equipped,
+    std::optional<std::vector<const RE::TESObjectARMO*>>* visibleActual);
 
 struct DavFallbackRefreshSignature {
   bool active{false};
@@ -1411,13 +1412,9 @@ IsConditionActiveForActor(const std::optional<std::string> &a_conditionId,
     return false;
   }
 
-  auto materialized =
-      sfs::conditions::MaterializeConditionById(*a_conditionId, conditions);
-  if (!materialized || !materialized->condition) {
-    return false;
-  }
-
-  return materialized->condition->IsTrue(a_actor, a_actor);
+  auto condition =
+      sfs::conditions::AcquireExecutableConditionById(*a_conditionId, conditions);
+  return condition && condition->IsTrue(a_actor, a_actor);
 }
 
 [[nodiscard]] bool
@@ -1594,7 +1591,10 @@ IsRealArmorVisibleInDisplaySet([[maybe_unused]] RE::Actor *a_actor,
 [[nodiscard]] DisplaySet
 BuildDisplaySet(RE::Actor *a_actor,
                 const bool a_applyTemporarySuppression = true,
-                EquippedArmorSnapshot *a_equippedSnapshot = nullptr) {
+                EquippedArmorSnapshot *a_equippedSnapshot = nullptr,
+                std::optional<std::vector<const RE::TESObjectARMO*>>*
+                    a_visibleActual = nullptr) {
+  if (a_visibleActual) { a_visibleActual->reset(); }
   DisplaySet displaySet;
   if (!a_actor) {
     return displaySet;
@@ -1994,7 +1994,7 @@ BuildDisplaySet(RE::Actor *a_actor,
   }
 
   if (a_applyTemporarySuppression && g_buildDisplaySetDepth == 1) {
-    PrepareOutfitValue(a_actor, displaySet, equippedArmors);
+    PrepareOutfitValue(a_actor, displaySet, equippedArmors, a_visibleActual);
   }
   return displaySet;
 }
@@ -2189,12 +2189,11 @@ private:
 };
 
 [[nodiscard]] std::uint32_t
-CollectVisibleWornSlotMask(RE::TESObjectREFR *a_target,
-                           const DisplaySet &a_displaySet) {
+CollectVisibleWornSlotMask(RE::Actor *a_actor, const DisplaySet &a_displaySet,
+                           EquippedArmorSnapshot &a_equipped) {
   std::uint32_t slotMask = 0;
-  for (const auto *armor : CollectEquippedArmors(a_target)) {
-    auto *actor = a_target ? a_target->As<RE::Actor>() : nullptr;
-    if (ShouldHideRealArmor(actor, a_displaySet, armor)) {
+  for (const auto *armor : a_equipped.Get()) {
+    if (ShouldHideRealArmor(a_actor, a_displaySet, armor)) {
       continue;
     }
     slotMask |=
@@ -2204,12 +2203,11 @@ CollectVisibleWornSlotMask(RE::TESObjectREFR *a_target,
 }
 
 [[nodiscard]] std::uint32_t
-CollectHiddenWornSlotMask(RE::TESObjectREFR *a_target,
-                          const DisplaySet &a_displaySet) {
+CollectHiddenWornSlotMask(RE::Actor *a_actor, const DisplaySet &a_displaySet,
+                          EquippedArmorSnapshot &a_equipped) {
   std::uint32_t slotMask = 0;
-  for (const auto *armor : CollectEquippedArmors(a_target)) {
-    auto *actor = a_target ? a_target->As<RE::Actor>() : nullptr;
-    if (ShouldHideRealArmor(actor, a_displaySet, armor)) {
+  for (const auto *armor : a_equipped.Get()) {
+    if (ShouldHideRealArmor(a_actor, a_displaySet, armor)) {
       slotMask |= GetSkinningSlotMask(
           armor, a_displaySet.genitalCompatibilityAvailable);
     }
@@ -2930,15 +2928,23 @@ std::uint32_t GetDisplayedFittingSlotMask(RE::Actor *a_actor) {
 
 [[nodiscard]] static FinalRenderedOutfitSnapshot BuildFinalRenderedOutfitSnapshot(
     RE::Actor *a_actor, const DisplaySet &a_displaySet,
-    EquippedArmorSnapshot &a_equippedSnapshot) {
+    EquippedArmorSnapshot &a_equippedSnapshot,
+    std::optional<std::vector<const RE::TESObjectARMO*>>* a_visibleActual = nullptr) {
   FinalRenderedOutfitSnapshot snapshot;
   snapshot.managedBySfs = a_displaySet.active;
   snapshot.additionalSlotMask = a_displaySet.slotMask;
   snapshot.visibleAdditionalArmors = a_displaySet.armors;
 
-  const auto &equippedArmors = a_equippedSnapshot.Get();
-  snapshot.visibleActualArmors =
-      CollectVisibleRealArmors(a_actor, a_displaySet, equippedArmors);
+  // Move the visible list already computed by this exact display decision,
+  // never a published API value from an earlier task/query. Unmanaged or nested
+  // decisions that did not produce a list keep the original direct path.
+  if (a_visibleActual && a_visibleActual->has_value()) {
+    snapshot.visibleActualArmors = std::move(a_visibleActual->value());
+    a_visibleActual->reset();
+  } else {
+    snapshot.visibleActualArmors =
+        CollectVisibleRealArmors(a_actor, a_displaySet, a_equippedSnapshot.Get());
+  }
   for (const auto *armor : snapshot.visibleActualArmors) {
     if (armor) {
       snapshot.visibleActualSlotMask |= static_cast<std::uint32_t>(
@@ -2953,8 +2959,9 @@ FinalRenderedOutfitSnapshot GetFinalRenderedOutfitSnapshot(RE::Actor *a_actor) {
     return {};
   }
   EquippedArmorSnapshot equipped(a_actor);
-  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped);
-  return BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped);
+  std::optional<std::vector<const RE::TESObjectARMO*>> visibleActual;
+  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped, &visibleActual);
+  return BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped, &visibleActual);
 }
 
 [[nodiscard]] static bool SnapshotHasBodyKeyword(
@@ -3013,11 +3020,12 @@ GetDisplayedBodyKeywordState(RE::Actor *a_actor,
   // worn inventory merely to return that same answer. Use the exact existing
   // display decision, including conditional real-equipment hides and previews.
   EquippedArmorSnapshot equipped(a_actor);
-  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped);
+  std::optional<std::vector<const RE::TESObjectARMO*>> visibleActual;
+  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped, &visibleActual);
   if (!displaySet.active) {
     return std::nullopt;
   }
-  const auto snapshot = BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped);
+  const auto snapshot = BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped, &visibleActual);
   return SnapshotHasBodyKeyword(snapshot.visibleActualArmors,
       snapshot.visibleAdditionalArmors, a_keyword, asksClothingBody);
 }
@@ -3081,8 +3089,9 @@ GetActiveFittingArmorSlotMaskForSlot(RE::Actor *a_actor,
 }
 
 std::uint32_t GetHiddenRealEquipmentSlotMask(RE::Actor *a_actor) {
-  const auto displaySet = BuildDisplaySet(a_actor);
-  return CollectHiddenWornSlotMask(a_actor, displaySet);
+  EquippedArmorSnapshot equipped(a_actor);
+  const auto displaySet = BuildDisplaySet(a_actor, true, &equipped);
+  return CollectHiddenWornSlotMask(a_actor, displaySet, equipped);
 }
 
 bool IsRealEquipmentHiddenForActorSlots(RE::Actor *a_actor,
@@ -3126,7 +3135,8 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
                                  const std::uint32_t a_baseWornMask) {
   (void)a_inventory;
   auto *actor = a_target ? a_target->As<RE::Actor>() : nullptr;
-  const auto displaySet = BuildDisplaySet(actor);
+  EquippedArmorSnapshot equipped(actor);
+  const auto displaySet = BuildDisplaySet(actor, true, &equipped);
   const auto releasedActualHairSlotMask =
       sfs::native::helmet_toggle::GetActualHairSlotReleaseMask(
           actor, displaySet.slotMask);
@@ -3144,9 +3154,9 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
     // by the DAVE variant synchronized before RefreshActor, so only merge the
     // registered-appearance projection.
     const auto hiddenWornSlots =
-        CollectHiddenWornSlotMask(a_target, displaySet);
+        CollectHiddenWornSlotMask(actor, displaySet, equipped);
     const auto visibleWornSlots =
-        CollectVisibleWornSlotMask(a_target, displaySet);
+        CollectVisibleWornSlotMask(actor, displaySet, equipped);
     const auto sfsHiddenWornSlots =
         sfs::native::refresh_rules::ResolveSfsHiddenWornSlotMask(
             hiddenWornSlots, visibleWornSlots);
@@ -3166,9 +3176,9 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
 
   if (sfs::native::dave::IsDynamicArmorVariantsLoaded()) {
     const auto hiddenWornSlots =
-        CollectHiddenWornSlotMask(a_target, displaySet);
+        CollectHiddenWornSlotMask(actor, displaySet, equipped);
     const auto visibleWornSlots =
-        CollectVisibleWornSlotMask(a_target, displaySet);
+        CollectVisibleWornSlotMask(actor, displaySet, equipped);
     const auto result = PreserveUnmanagedHeadgearWornMask(
         actor, displaySet, a_baseWornMask,
         (a_baseWornMask & ~hiddenWornSlots) | visibleWornSlots |
@@ -3179,7 +3189,7 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
   const auto result = PreserveUnmanagedHeadgearWornMask(
       actor, displaySet, a_baseWornMask,
       displaySet.slotMask |
-          CollectVisibleWornSlotMask(a_target, displaySet));
+          CollectVisibleWornSlotMask(actor, displaySet, equipped));
   logger::debug(
       "SFS native: worn-mask actor={:08X} base={:08X} displaySlot={:08X} "
       "hiddenSlot={:08X} result={:08X} daveLoaded=false",
@@ -3252,10 +3262,11 @@ void VisitWornItemsWithHiddenRealEquipmentFilter(
   // Defer publication to a game task. This records an observed skinning pass,
   // not a GPU fence or a guarantee that parallel scene attachments have ended.
   if (actor) { sfs::api::rendered::NotifySkinning(actor->GetFormID()); }
-  const auto displaySet = BuildDisplaySet(actor);
+  EquippedArmorSnapshot equipped(actor);
+  const auto displaySet = BuildDisplaySet(actor, true, &equipped);
   const auto filterRequired =
       displaySet.active &&
-      CollectHiddenWornSlotMask(target, displaySet) != 0;
+      CollectHiddenWornSlotMask(actor, displaySet, equipped) != 0;
   const auto iedChainTarget = g_iedVisitWornItemsChainTarget.load();
   const auto route = sfs::native::ied::rules::ResolveVisitorRoute(
       filterRequired, a_visitWornItems, iedChainTarget,
@@ -3533,7 +3544,9 @@ bool HasDisplayConfiguration(const std::uint32_t actorFormID) {
 
 namespace {
 void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,
-    const std::unordered_set<const RE::TESObjectARMO*>& equipped) {
+    const std::unordered_set<const RE::TESObjectARMO*>& equipped,
+    std::optional<std::vector<const RE::TESObjectARMO*>>* visibleActual = nullptr) {
+  if (visibleActual) { visibleActual->reset(); }
   namespace abi = sfs::rendered_outfit_api;
   // Only the top-level BuildDisplaySet enters here; no external callbacks run
   // from the producer. One POD scratch buffer per thread, not per actor, avoids
@@ -3546,7 +3559,7 @@ void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,
     sfs::api::rendered::PrepareValue(actor->GetFormID(), value);
     return;
   }
-  const auto actualArmors = CollectVisibleRealArmors(actor, display, equipped);
+  auto actualArmors = CollectVisibleRealArmors(actor, display, equipped);
   value.status = abi::Status::Ready;
   value.items.reserve(actualArmors.size() + display.armors.size());
   const auto append = [&](const auto* armor, const std::uint32_t mask,
@@ -3573,6 +3586,7 @@ void PrepareOutfitValue(RE::Actor* actor, const DisplaySet& display,
     value.bodyFlags |= abi::ClothingBody;
   }
   sfs::api::rendered::PrepareValue(actor->GetFormID(), value);
+  if (visibleActual) { *visibleActual = std::move(actualArmors); }
   if (value.items.capacity() > 256) {
     // Large custom outfits are fully published, but don't permanently retain
     // an unusually large scratch allocation on a long-lived engine thread.

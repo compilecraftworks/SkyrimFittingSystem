@@ -208,10 +208,9 @@ IsConditionActiveForActor(const std::optional<std::string> &a_conditionID,
            .IsActive()) {
     return false;
   }
-  auto materialized =
-      sfs::conditions::MaterializeConditionById(*a_conditionID, conditions);
-  return materialized && materialized->condition &&
-         materialized->condition->IsTrue(a_actor, a_actor);
+  auto condition =
+      sfs::conditions::AcquireExecutableConditionById(*a_conditionID, conditions);
+  return condition && condition->IsTrue(a_actor, a_actor);
 }
 
 [[nodiscard]] bool

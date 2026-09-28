@@ -265,11 +265,58 @@ int main() {
   Check(InspectScriptTypeGlobals(&vm, replacement, count).needsPostLink,
         "reset during scan does not publish stale completed entry");
 
+  // Pick actual pointer collisions, not a simulated hash; retain allocations
+  // while searching so the allocator cannot keep returning the same address.
+  ResetScriptTypeInspectionMemo();
+  std::map<std::size_t, std::vector<std::shared_ptr<Type>>> buckets;
+  std::vector<std::shared_ptr<Type>> colliding;
+  for (unsigned n = 0; n < 1024 && colliding.empty(); ++n) {
+    auto candidate = std::make_shared<Type>();
+    auto& bucket = buckets[ScriptTypeInspectionIndex(candidate.get())];
+    bucket.push_back(candidate);
+    if (bucket.size() == 5) colliding = bucket;
+  }
+  Check(colliding.size() == 5, "find five live types in one cache bucket");
+  for (unsigned n = 0; n < 4; ++n) {
+    const auto result = InspectScriptTypeGlobals(&vm, colliding[n], count, true);
+    CompleteScriptTypeInspection(result.stamp);
+  }
+  const auto beforeCollisions = probes;
+  for (unsigned n = 0; n < 1024; ++n) {
+    Check(!InspectScriptTypeGlobals(&vm, colliding[n % 4], count).needsPostLink,
+          "four colliding settled types retain completion");
+  }
+  Check(probes == beforeCollisions, "1024 colliding hot lookups require zero native rescans");
+  (void)InspectScriptTypeGlobals(&vm, colliding[0], count); // make 0 MRU; 1 is LRU
+  const auto fifth = InspectScriptTypeGlobals(&vm, colliding[4], count);
+  Check(fifth.needsPostLink && colliding[4]->globals.front().func->patched,
+        "capacity overflow still installs a new type synchronously");
+  CompleteScriptTypeInspection(fifth.stamp);
+  for (auto index : {0, 2, 3, 4}) {
+    Check(!InspectScriptTypeGlobals(&vm, colliding[index], count).needsPostLink,
+          "LRU retains recently used types, including the new type");
+  }
+  Check(InspectScriptTypeGlobals(&vm, colliding[1], count).needsPostLink,
+        "evicted type is rechecked, never permanently excluded");
+  // A type becoming unlinked must only invalidate itself, not its neighbors.
+  colliding[1]->linked = false;
+  (void)InspectScriptTypeGlobals(&vm, colliding[1], count);
+  Check(!InspectScriptTypeGlobals(&vm, colliding[4], count).needsPostLink,
+        "invalid type leaves colliding completed neighbors untouched");
+  colliding[1]->linked = true;
+  Check(InspectScriptTypeGlobals(&vm, colliding[1], count).needsPostLink,
+        "unlinked type is retried after becoming linked");
+
   // Bounded ownership and evictions: never grow a script-type retention map.
   ResetScriptTypeInspectionMemo();
   std::vector<std::weak_ptr<Type>> lifetime;
   for (unsigned n=0; n<4096; ++n) {
-    auto transient = std::make_shared<Type>();
+    auto transient = std::shared_ptr<Type>(new Type, [](Type* value) {
+      std::unique_lock lock(g_scriptTypeMemoMutex, std::try_to_lock);
+      Check(lock.owns_lock(), "eviction/reset releases final engine-type reference outside memo lock");
+      lock.unlock();
+      delete value;
+    });
     lifetime.emplace_back(transient);
     const auto result = InspectScriptTypeGlobals(&vm, transient, count);
     CompleteScriptTypeInspection(result.stamp);

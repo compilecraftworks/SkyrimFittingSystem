@@ -67,6 +67,8 @@ bool Menu::DrawGearCatalogTable() {
     ImGui::TableHeadersRow();
 
     const auto &rows = GetSortedGearRows(ImGui::TableGetSortSpecs());
+    const auto filterFocus = browser.filterFocus.Consume(
+        rows, browser.selectedKey, browser.selectedGearKeys, true);
     const auto findRowIndex = [&](const std::string_view a_key) {
       if (a_key.empty()) {
         return -1;
@@ -87,7 +89,15 @@ bool Menu::DrawGearCatalogTable() {
     bool applySelected = false;
     bool previewSelected = false;
     ConsumeKitListCommands(moveDelta, applySelected, previewSelected);
-    int requestedScrollRowIndex = -1;
+    int requestedScrollRowIndex = filterFocus.row;
+    if (filterFocus.consumed) {
+      // The input that confirmed the filter is not a list apply/preview command.
+      moveDelta = 0;
+      applySelected = previewSelected = false;
+      ImGui::SetScrollY(0.0f);
+    } else if (moveDelta != 0 || applySelected || previewSelected) {
+      browser.filterFocus.AcceptSelection();
+    }
 
     // InputManager owns keyboard/gamepad list commands. Reading ImGui's
     // physical key state here as well made one arrow press move two rows.
@@ -157,9 +167,6 @@ bool Menu::DrawGearCatalogTable() {
         selectedRowIndex = 0;
         browser.selectedKey = rows.front()->id;
         browser.selectedGearKeys = {rows.front()->id};
-        if (previewRequested) {
-          previewSelectedGear();
-        }
         requestedScrollRowIndex = 0;
       }
 
@@ -170,14 +177,14 @@ bool Menu::DrawGearCatalogTable() {
         browser.selectedGearKeys = {entry.id};
         browser.selectedKey = entry.id;
         requestedScrollRowIndex = selectedRowIndex;
-        if (previewRequested) {
-          previewSelectedGear();
-        }
       }
 
       if (selectedRowIndex >= 0 &&
           selectedRowIndex < static_cast<int>(rows.size())) {
         const auto &entry = *rows[static_cast<std::size_t>(selectedRowIndex)];
+        if (previewRequested) {
+          previewSelectedGear();
+        }
         if (applySelected) {
           rowClicked = true;
           AddGearEntryToWorkbench(entry);
@@ -218,6 +225,7 @@ bool Menu::DrawGearCatalogTable() {
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(0, 0, 0, 0));
         const bool selected = isSelectedGearKey(entry.id);
+        if (rowIndex == filterFocus.row) ImGui::SetKeyboardFocusHere();
         ImGui::Selectable(
             ("##catalog-row-hit-" + std::to_string(rowIndex)).c_str(), selected,
             ImGuiSelectableFlags_SpanAllColumns |
@@ -306,7 +314,8 @@ bool Menu::DrawGearCatalogTable() {
               browser.selectedKey = browser.selectedGearKeys.back();
               previewSelectedGear();
             }
-          } else if (selected && browser.selectedGearKeys.size() == 1) {
+          } else if (selected && browser.selectedGearKeys.size() == 1 &&
+                     !browser.filterFocus.IsFocusOnly(entry.id)) {
             ClearCatalogSelection();
           } else {
             browser.selectedGearKeys.assign(1, entry.id);
@@ -318,6 +327,7 @@ bool Menu::DrawGearCatalogTable() {
             }
           }
         }
+        if (doubleClicked || releasedOnRow) browser.filterFocus.AcceptSelection();
         if (rowIndex == requestedScrollRowIndex) {
           ScrollCurrentTableRowIntoView();
         }

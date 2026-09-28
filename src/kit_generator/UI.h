@@ -1,5 +1,8 @@
 #pragma once
 
+#include "ResultSelection.h"
+#include "ui/catalog/BodyFamilyFilter.h"
+
 #include <array>
 #include <cstddef>
 #include <cstdint>
@@ -30,6 +33,7 @@ private:
   void DrawCandidateList();
   void DrawCandidateDetail();
   void DrawCandidateEditor();
+  bool DrawBodyFilter(const char* a_id, ui::catalog::BodyFamilyFilter& a_filter);
   void PreviewCandidate(std::size_t a_kitIndex, std::size_t a_candidateIndex);
   void PreviewCandidatePiece(std::size_t a_kitIndex,
                              std::size_t a_candidateIndex,
@@ -48,6 +52,10 @@ private:
   std::optional<std::size_t> editorCandidateIndex_;
   std::optional<std::size_t> focusedKitIndex_;
   std::optional<std::size_t> focusedPluginIndex_;
+  std::optional<std::size_t> pluginSelectionAnchor_;
+  bool wornModelPluginsOnly_{false};
+  ui::catalog::BodyFamilyFilter pluginBodyFilter_{ui::catalog::BodyFamilyFilter::All};
+  ui::catalog::BodyFamilyFilter resultBodyFilter_{ui::catalog::BodyFamilyFilter::All};
   std::optional<std::size_t> renamingKitIndex_;
   std::array<char, 512> renameBuffer_{};
 #if defined(SFS_PERSONAL_KIT_COMPLETION)
@@ -59,7 +67,7 @@ private:
   std::array<char, 256> pluginSearchBuffer_{};
   std::array<char, 256> kitSearchBuffer_{};
   std::array<char, 256> candidateSearchBuffer_{};
-  std::vector<bool> candidateGroupSelections_;
+  ResultSelection resultSelection_;
   std::vector<bool> editorPieceSelections_;
   EditorPane editorFocusedPane_{EditorPane::AvailablePieces};
   std::optional<std::size_t> editorFocusedCurrentPieceIndex_;

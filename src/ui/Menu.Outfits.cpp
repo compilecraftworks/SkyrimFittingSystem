@@ -61,6 +61,8 @@ bool Menu::DrawOutfitTab() {
     ImGui::TableHeadersRow();
 
     const auto &sortedRows = GetSortedOutfitRows(ImGui::TableGetSortSpecs());
+    const auto filterFocus = browser.filterFocus.Consume(
+        sortedRows, browser.selectedKey, browser.selectedGearKeys, false);
     const auto findRowIndex = [&](const std::string_view a_key) {
       if (a_key.empty()) {
         return -1;
@@ -77,7 +79,14 @@ bool Menu::DrawOutfitTab() {
     bool applySelected = false;
     bool previewSelected = false;
     ConsumeKitListCommands(moveDelta, applySelected, previewSelected);
-    int requestedScrollRowIndex = -1;
+    int requestedScrollRowIndex = filterFocus.row;
+    if (filterFocus.consumed) {
+      moveDelta = 0;
+      applySelected = previewSelected = false;
+      ImGui::SetScrollY(0.0f);
+    } else if (moveDelta != 0 || applySelected || previewSelected) {
+      browser.filterFocus.AcceptSelection();
+    }
     // InputManager owns keyboard/gamepad list commands. Reading ImGui's
     // physical key state here as well made one arrow press move two rows.
     moveDelta = std::clamp(moveDelta, -1, 1);
@@ -101,9 +110,6 @@ bool Menu::DrawOutfitTab() {
         selectedRowIndex = 0;
         browser.selectedKey = sortedRows.front()->id;
         requestedScrollRowIndex = 0;
-        if (previewRequested) {
-          previewSelectedOutfit();
-        }
       }
 
       if (moveDelta != 0) {
@@ -112,10 +118,9 @@ bool Menu::DrawOutfitTab() {
             static_cast<int>(sortedRows.size()) - 1);
         browser.selectedKey = sortedRows[static_cast<std::size_t>(selectedRowIndex)]->id;
         requestedScrollRowIndex = selectedRowIndex;
-        if (previewRequested) {
-          previewSelectedOutfit();
-        }
       }
+
+      if (previewRequested) previewSelectedOutfit();
 
       if (selectedRowIndex >= 0 &&
           selectedRowIndex < static_cast<int>(sortedRows.size()) &&
@@ -147,7 +152,9 @@ bool Menu::DrawOutfitTab() {
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(0, 0, 0, 0));
         const bool selected = browser.selectedKey == outfit.id &&
                               (!browser.previewSelected ||
+                               browser.filterFocus.IsFocusOnly(outfit.id) ||
                                workbench_.IsPreviewingSelection(outfit.id));
+        if (rowIndex == filterFocus.row) ImGui::SetKeyboardFocusHere();
         ImGui::Selectable(
             ("##outfit-row-hit-" + std::to_string(rowIndex)).c_str(), selected,
             ImGuiSelectableFlags_SpanAllColumns |
@@ -193,7 +200,7 @@ bool Menu::DrawOutfitTab() {
           AddOutfitEntryToWorkbench(outfit);
         } else if (releasedOnRow) {
           rowClicked = true;
-          if (selected) {
+          if (selected && !browser.filterFocus.IsFocusOnly(outfit.id)) {
             ClearCatalogSelection();
           } else {
             CatalogBrowserState().selectedKey = outfit.id;
@@ -204,6 +211,7 @@ bool Menu::DrawOutfitTab() {
             }
           }
         }
+        if (doubleClicked || releasedOnRow) browser.filterFocus.AcceptSelection();
         if (!ImGui::IsDragDropActive() &&
             ui::components::ShouldDrawPinnableTooltip("outfit:" + outfit.id,
                                                       rowHovered)) {

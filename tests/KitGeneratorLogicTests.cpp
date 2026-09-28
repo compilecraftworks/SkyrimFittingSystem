@@ -10,6 +10,14 @@
 
 #include "catalog/KitJsonRules.h"
 
+// The offline generator test never snapshots live engine forms. Keep that
+// boundary explicit; body classification/aggregation has its own rule tests.
+namespace sfs::body_family {
+Mask ClassifyCatalogArmor(const RE::TESObjectARMO*) {
+  throw std::runtime_error("Live armor classification is not available in offline generator tests");
+}
+}
+
 #if defined(SFS_INTEGRATED_KIT_GENERATOR_TEST)
 namespace kit_generator_under_test = sfs::kit_generator;
 #else
@@ -928,6 +936,346 @@ void TestUnicodeKitOutputPath() {
           "A long generated filename must retain its collision identity");
 }
 
+void TestCommunityReferencePipeline() {
+  namespace community = sfs::kit_generator::community;
+  std::vector<ArmorRecord> records;
+  for (const auto &ref : community::kCommunityReferences) {
+    if (ref.name != "[DX] Dark Knight Armor (Long)" &&
+        ref.name != "[DX] Dark Knight Armor (Short)") continue;
+    for (const auto &member : std::span(community::kCommunityMembers).subspan(ref.offset, ref.count)) {
+      if (std::ranges::any_of(records, [&](const auto &r) { return r.editorID == member.editorID; })) continue;
+      auto armor = MakeArmor(static_cast<std::uint32_t>(records.size() + 5000),
+                             "번역된 의상 " + std::to_string(records.size()), {32}, records.size());
+      armor.pluginName = std::string(ref.plugin);
+      armor.editorID = std::string(member.editorID);
+      armor.armorAddonFormIDs = {1234}; // Same model must not erase separate identities.
+      records.push_back(std::move(armor));
+    }
+  }
+  const auto deduplicated = DeduplicateAppearanceRecords(records);
+  Require(deduplicated.size() == records.size(), "Reference identities must survive identical ARMA records");
+  const auto groups = BuildFinalOutfitGroups(deduplicated);
+  Require(groups.size() == 1 && groups.front().variants.size() == 2,
+          "Long/Short must share one kit while retaining two separate membership pools");
+  for (const auto &group : groups) {
+    Require(group.name == "[DX] Dark Knight Armor",
+            "The family must retain the full reference outfit name");
+    const auto candidates = BuildCandidates(group, {}, {}, 1);
+    Require(!candidates.empty(), "Reference groups still use the existing candidate builder");
+    for (const auto &candidate : candidates) {
+      Require(CountSlotConflicts(candidate.items) == 0, "Reference candidates must obey real slots");
+      const auto source = std::ranges::find_if(group.variants, [&](const auto& variant) {
+        return std::ranges::all_of(candidate.items, [&](const auto& item) {
+          return std::ranges::any_of(variant.items, [&](const auto& member) { return member.Identifier() == item.Identifier(); });
+        });
+      });
+      Require(source != group.variants.end(), "Every candidate must remain within one explicit reference");
+    }
+  }
+  auto unmatched = MakeArmor(6001, "Unknown Outfit Body", {32}, 0);
+  auto feet = MakeArmor(6002, "Unknown Outfit Boots", {37}, 1);
+  const auto oldGroups = BuildHeuristicOutfitGroups({unmatched, feet});
+  const auto newGroups = BuildFinalOutfitGroups({unmatched, feet});
+  Require(oldGroups.size() == newGroups.size() && oldGroups.front().name == newGroups.front().name &&
+              newGroups.front().items.size() == 2,
+          "Unlisted plugins must retain their original heuristic path");
+  std::stop_source stop;
+  stop.request_stop();
+  bool cancelled = false;
+  try { (void)BuildFinalOutfitGroups(records, stop.get_token()); }
+  catch (const ScanCancelled &) { cancelled = true; }
+  Require(cancelled, "Cancellation must propagate through the integrated reference phase");
+}
+
+void TestNumberedVariantFamilies() {
+  std::vector<ArmorRecord> records;
+  for (unsigned variant = 1; variant <= 16; ++variant) {
+    for (const auto part : {"Bikini", "Suit"}) {
+      auto armor = MakeArmor(11000 + static_cast<unsigned>(records.size()),
+          std::format("{:02} Birth Lingerie {}", variant, part),
+          part == std::string_view("Bikini") ? std::initializer_list<int>{32} : std::initializer_list<int>{44}, records.size());
+      armor.pluginName = "[YoerkSun] Birth Lingerie.esp";
+      armor.editorID = part == std::string_view("Suit") && variant == 1 ? "BirthLingerie01Suit" :
+          std::format("BirthLingerie{}{:02}", part, variant);
+      armor.armorAddonFormIDs = {armor.runtimeFormID + 1000};
+      armor.armorModelPaths = {"armor/bandit/body1m_1.nif",
+          std::format("yoerksun/birth lingerie/{}_1.nif", part)};
+      records.push_back(std::move(armor));
+    }
+  }
+  const auto groups = BuildFinalOutfitGroups(records);
+  Require(groups.size() == 1 && groups.front().name == "Birth Lingerie" &&
+          groups.front().variants.size() == 16 && groups.front().items.size() == 32,
+          "Birth 01-16 must become one family with 16 separate paired variants");
+  const auto candidates = BuildCandidates(groups.front(), {}, {}, 1);
+  Require(candidates.size() == 16, "Numbered pairs must yield 16 candidates, not 16 kits or 256 mixed pairs");
+  for (const auto& candidate : candidates) {
+    Require(candidate.items.size() == 2 && !CountSlotConflicts(candidate.items), "Both complementary pieces must survive");
+    Require(candidate.items[0].name.substr(0, 2) == candidate.items[1].name.substr(0, 2),
+            "Bikini and Suit numbers must never cross");
+  }
+  std::ranges::reverse(records);
+  const auto reversed = BuildCandidates(BuildFinalOutfitGroups(records).front(), {}, {}, 2);
+  Require(reversed.size() == candidates.size(), "Source order and worker budget must not lose versions");
+  auto negative = records;
+  for (auto& record : negative) record.editorID = std::format("Different{}Body", record.runtimeFormID);
+  Require(BuildFinalOutfitGroups(negative).size() == 16,
+          "Display numbering alone cannot join unrelated EDID outfit identities");
+  auto longNumber = MakeArmor(12000, "1001 Nights Body", {32}, 0);
+  auto longNumberFeet = MakeArmor(12001, "1001 Nights Boots", {37}, 1);
+  auto another = MakeArmor(12002, "1002 Nights Body", {32}, 2);
+  auto anotherFeet = MakeArmor(12003, "1002 Nights Boots", {37}, 3);
+  Require(BuildFinalOutfitGroups({longNumber, longNumberFeet, another, anotherFeet}).size() == 2,
+          "Long numeric outfit titles must not become leading-number variants");
+}
+
+void TestFamilyCompositionBoundaries() {
+  const auto make = [](std::string name, unsigned id, std::string plugin = "Family.esp") {
+    auto body = MakeArmor(id, name + " Body", {32}, id);
+    auto feet = MakeArmor(id + 1, name + " Boots", {37}, id + 1);
+    body.pluginName = feet.pluginName = plugin;
+    return OutfitGroup{std::move(name), {std::move(body), std::move(feet)}};
+  };
+  for (int cycle = 0; cycle < 128; ++cycle) {
+    const auto groups = GroupCommunityFamilies({
+        make("[Maker] Outfit (Black)", 13000), make("[Maker] Outfit (White)", 13010),
+        make("[Maker] Different Outfit (Black)", 13020),
+        make("[Maker] Outfit (Red)", 13030, "Other.esp")}, {});
+    Require(groups.size() == 3 && groups[0].variants.size() == 2,
+            "Same-family references combine without crossing semantic title or plugin");
+    const auto candidates = BuildCandidates(groups[0], {}, {}, 1);
+    Require(candidates.size() == 2 && candidates[0].items.size() == 2 && candidates[1].items.size() == 2,
+            "Reference outfits must stay whole, not expand to cross-color products");
+    for (const auto& candidate : candidates)
+      Require(candidate.items[0].localFormID / 10 == candidate.items[1].localFormID / 10,
+              "Every explicit candidate must retain the original paired pieces");
+  }
+  std::vector<OutfitGroup> many;
+  for (unsigned i = 0; i < 256; ++i) many.push_back(make(std::format("[Maker] Outfit ({})", i), 14000 + 10 * i));
+  const auto grouped = GroupCommunityFamilies(many, {});
+  Require(grouped.size() == 1 && BuildCandidates(grouped.front(), {}, {}, 1).size() == 256,
+          "Every explicit version must retain one candidate at the budget boundary");
+  many.push_back(make("[Maker] Outfit (256)", 17000));
+  Require(GroupCommunityFamilies(many, {}).size() == 257,
+          "An oversized explicit family must remain accessible as separate kits, never silently discard versions");
+  std::stop_source stop;
+  stop.request_stop();
+  bool cancelled = false;
+  try { static_cast<void>(BuildCandidates(grouped.front(), {}, stop.get_token(), 1)); }
+  catch (const ScanCancelled&) { cancelled = true; }
+  Require(cancelled, "Cancellation must be honored before any family candidate work");
+}
+
+void TestSheetGroupingPipeline() {
+  const auto make = [](std::uint32_t id, std::string name, int slot) {
+    auto item = MakeArmor(id, std::move(name), {slot}, id);
+    item.pluginName = "[SunJeong] Ninirim Collection.esp";
+    return item;
+  };
+  std::vector<ArmorRecord> items{
+    make(7100, "검은색 크리스탈 씨쓰루 상의", 32),
+    make(7101, "크리스탈 시스루 신발", 37),
+    make(7102, "크리스탈 시스루 장갑", 33),
+    make(7103, "고타 렌사 상의", 32),
+    make(7104, "고타 렌사 신발", 37)};
+  const auto groups = BuildFinalOutfitGroups(items);
+  Require(groups.size() == 2, "Sheet-connected aliases must form two complete, separate outfits");
+  std::size_t count = 0;
+  for (const auto &group : groups) {
+    count += group.items.size();
+    Require(group.rootFamilyExpanded, "Sheet families must retain variant candidate profiles");
+    const auto candidates = BuildCandidates(group, {}, {}, 1);
+    Require(!candidates.empty(), "Sheet group must reach the candidate builder");
+    for (const auto &candidate : candidates) Require(!CountSlotConflicts(candidate.items), "Sheet candidates must remain slot safe");
+  }
+  Require(count == items.size(), "Every classified part must remain in exactly one sheet family");
+  auto first = items.front(), second = items.back();
+  first.sourceSlotMask = second.sourceSlotMask = SlotMask(32);
+  first.armorAddonFormIDs = second.armorAddonFormIDs = {100};
+  Require(DeduplicateAppearanceRecords({first, second}).size() == 2,
+          "Identical ARMA records from distinct sheet families must not erase a family member");
+  const auto singles = BuildFinalOutfitGroups({items.front(), items.back()});
+  Require(singles.empty(), "Separate explicit families cannot be merged just to manufacture a two-item kit");
+  std::stop_source stop;
+  stop.request_stop();
+  bool cancelled = false;
+  try { (void)BuildFinalOutfitGroups(items, stop.get_token()); } catch (const ScanCancelled &) { cancelled = true; }
+  Require(cancelled, "Sheet grouping must honor scan cancellation");
+}
+
+void TestCoordinatedReferenceVariations() {
+  // Reference titles can be English or PNG labels while equipment is translated.
+  // The same candidate builder serves community, screenshot and spreadsheet groups.
+  for (const std::string title : {"Community Outfit", "ADD Photo 02", "Sheet Family"}) {
+    OutfitGroup group{title, {
+      MakeArmor(8100, "번역 의상 상의 [Black]", {32}, 0),
+      MakeArmor(8101, "번역 의상 상의 [Red]", {32}, 1),
+      MakeArmor(8102, "번역 의상 장갑 [레드]", {33}, 2),
+      MakeArmor(8103, "번역 의상 장갑 [검은색]", {33}, 3),
+      MakeArmor(8104, "번역 의상 신발 [黑色]", {37}, 4),
+      MakeArmor(8105, "번역 의상 신발 [빨간색]", {37}, 5),
+      MakeArmor(8106, "번역 의상 목걸이", {35}, 6)}, true};
+    const auto candidates = BuildCandidates(group, {}, {}, 1);
+    Require(candidates.size() == 2, "Equivalent localized color names must yield two complete palettes");
+    for (const auto &candidate : candidates) {
+      Require(candidate.items.size() == 4 && !CountSlotConflicts(candidate.items),
+              "Every palette must have all matching parts plus the common necklace without slot overlap");
+      const bool black = HasName(candidate, "번역 의상 상의 [Black]");
+      Require(HasName(candidate, black ? "번역 의상 장갑 [검은색]" : "번역 의상 장갑 [레드]") &&
+              HasName(candidate, black ? "번역 의상 신발 [黑色]" : "번역 의상 신발 [빨간색]"),
+              "A candidate must coordinate colors across languages and input ordering");
+    }
+    group.items = {
+      MakeArmor(8200, "번역 의상 Celestial 상의", {32}, 0),
+      MakeArmor(8201, "번역 의상 Infernal 상의", {32}, 1),
+      MakeArmor(8202, "번역 의상 Infernal 신발", {37}, 2),
+      MakeArmor(8203, "번역 의상 Celestial 신발", {37}, 3)};
+    for (const auto slot : {33, 35, 42, 46, 49, 53})
+      group.items.push_back(MakeArmor(8300 + slot, "번역 의상 공용 장식", {slot}, group.items.size()));
+    const auto styles = BuildCandidates(group, {}, {}, 1);
+    Require(styles.size() == 2, "Repeated named styles must survive many common accessory slots");
+    for (const auto &candidate : styles) {
+      Require(candidate.items.size() == 8 && !CountSlotConflicts(candidate.items),
+              "Style candidates must retain common parts and real slot safety");
+      const bool celestial = HasName(candidate, "번역 의상 Celestial 상의");
+      Require(HasName(candidate, celestial ? "번역 의상 Celestial 신발" : "번역 의상 Infernal 신발"),
+              "Styles must coordinate even when reference title does not match translated equipment names");
+    }
+    group.items = {
+      MakeArmor(8400, "번역 의상 상의 [Black]", {32}, 0),
+      MakeArmor(8401, "번역 의상 상의 [오닉스]", {32}, 1),
+      MakeArmor(8402, "번역 의상 신발 [오닉스]", {37}, 2),
+      MakeArmor(8403, "번역 의상 신발 [Black]", {37}, 3)};
+    const auto namedPalettes = BuildCandidates(group, {}, {}, 1);
+    Require(namedPalettes.size() == 2, "Named palettes and known colors must not form invented mixed combinations");
+    for (const auto &candidate : namedPalettes)
+      Require(HasName(candidate, "번역 의상 상의 [Black]") == HasName(candidate, "번역 의상 신발 [Black]"),
+              "A custom palette must not mix with a competing known color");
+  }
+}
+
+void TestGenericProfileNormalizationAndBudgets() {
+  const auto translated = MakeArmor(9000, "Aster Boots 그레이", {37}, 0);
+  const bool earlyColor = CanonicalProfile(Tokenize(ExtractProfile("Aster", translated))) == "gray" &&
+      NormalizeKitName("Aster Coat 그레이") == "Aster";
+
+  std::vector<LocalChoiceDimension> dimensions;
+  for (int axis = 0; axis < 10; ++axis)
+    dimensions.push_back({std::format("localchoice{}v1", axis), std::format("localchoice{}v2", axis)});
+  const auto bounded = ChooseProfiles({{MakeArmor(9001, "Aster Body", {32}, 0), {}, "body"}}, dimensions, {});
+  const bool completeAxes = bounded.size() <= kMaximumGeneratedCandidateProfiles &&
+      std::ranges::all_of(bounded, [&](const auto &profile) {
+        const auto tokens = ProfileTokens(profile);
+        return std::ranges::all_of(dimensions, [&](const auto &dimension) {
+          return std::ranges::count_if(dimension, [&](const auto &option) { return tokens.contains(option); }) == 1;
+        });
+      });
+  const bool everyAxisOption = std::ranges::all_of(dimensions, [&](const auto &dimension) {
+    return std::ranges::all_of(dimension, [&](const auto &option) {
+      return std::ranges::any_of(bounded, [&](const auto &profile) { return ProfileTokens(profile).contains(option); });
+    });
+  });
+  OutfitGroup group{"Unlisted Family", {}, true};
+  for (int style = 0; style < 24; ++style)
+    group.items.push_back(MakeArmor(9100 + style, std::format("Unlisted Family Body [Style{} Black]", style), {32}, style));
+  for (int option = 0; option < 4; ++option)
+    group.items.push_back(MakeArmor(9200 + option, "Unlisted Family Boots", {37}, 24 + option));
+  for (int option = 0; option < 3; ++option)
+    group.items.push_back(MakeArmor(9300 + option, "Unlisted Family Gloves", {33}, 28 + option));
+  for (int option = 0; option < 2; ++option)
+    group.items.push_back(MakeArmor(9400 + option, "Unlisted Family Amulet", {35}, 31 + option));
+  const auto candidates = BuildCandidates(group, {}, {}, 1);
+  std::set<std::uint32_t> coveredBodies;
+  for (const auto &candidate : candidates) {
+    Require(candidate.items.size() == 4 && !CountSlotConflicts(candidate.items),
+            "Budgeted profiles must still produce complete, slot-safe candidates");
+    for (const auto &item : candidate.items)
+      if (item.sourceSlotMask & SlotMask(32)) coveredBodies.insert(item.localFormID);
+  }
+  OutfitGroup manyChoices{"Aster", {MakeArmor(9500, "Aster Body", {32}, 0)}};
+  for (int i = 0; i < 7; ++i)
+    manyChoices.items.push_back(MakeArmor(9501 + i, "Aster Boots", {37}, i + 1));
+  const auto sevenChoices = BuildCandidates(manyChoices, {}, {}, 1);
+  const auto unrelated = BuildHeuristicOutfitGroups({MakeArmor(9600, "Falcon Body", {32}, 0),
+                                                    MakeArmor(9601, "Orchid Boots", {37}, 1)});
+  std::cout << "Generic regression: early-color=" << earlyColor << " complete-axes=" << completeAxes
+            << " all-axis-options=" << everyAxisOption << " styles=" << coveredBodies.size()
+            << "/24 local-choices=" << sevenChoices.size() << "/7 unrelated-groups=" << unrelated.size() << "\n";
+  Require(earlyColor, "Color aliases must normalize before grouping and profile recognition, including unbracketed local parts");
+  Require(completeAxes && everyAxisOption, "The profile cap must retain every axis and cover each individual choice when capacity allows");
+  Require(coveredBodies.size() == 24, "Observed styles must be represented before local combinations consume the profile budget");
+  Require(sevenChoices.size() == 7, "Five or more alternatives must not silently collapse to a single local choice");
+  Require(unrelated.empty(), "Different reliable outfit identities cannot be merged merely to meet the minimum group size");
+  Require(NormalizeKitName("Aster Black Rose Coat") != NormalizeKitName("Aster White Rose Coat"),
+          "Colors inside actual outfit titles must remain distinct identities");
+  std::stop_source stop;
+  stop.request_stop();
+  bool cancelled = false;
+  try { (void)ChooseProfiles({}, dimensions, stop.get_token()); }
+  catch (const ScanCancelled &) { cancelled = true; }
+  Require(cancelled, "Bounded profile enumeration must honor cancellation even without source items");
+}
+
+void TestGenericFamilyFragmentation() {
+  auto firstBody = MakeArmor(9700, "[Maker] Aster Obsidian Body", {32}, 0);
+  auto firstBoots = MakeArmor(9701, "[Maker] Aster Obsidian Boots", {37}, 1);
+  auto secondBody = MakeArmor(9702, "[Maker] Aster Porcelain Body", {32}, 2);
+  auto secondBoots = MakeArmor(9703, "[Maker] Aster Porcelain Boots", {37}, 3);
+  firstBody.armorModelPaths = {"armor/bandit/body1m_1.nif", "meshes/aster/body.nif"};
+  secondBody.armorModelPaths = {"ARMOR\\BANDIT\\BODY1M_1.NIF", "ASTER\\BODY.NIF"};
+  firstBoots.armorModelPaths = secondBoots.armorModelPaths = {"aster/boots.nif"};
+  const auto combined = BuildHeuristicOutfitGroups({firstBody, firstBoots, secondBody, secondBoots});
+  Require(combined.size() == 1 && combined.front().items.size() == 4,
+          "Same-family named variants with matching body and footwear models must become candidates of one kit");
+  const auto candidates = BuildCandidates(combined.front(), {}, {}, 1);
+  Require(candidates.size() == 2, "Merged named styles must remain two coherent candidates");
+  for (const auto &candidate : candidates) {
+    Require(candidate.items.size() == 2 && !CountSlotConflicts(candidate.items), "Merged styles must keep complete real-slot-safe candidates");
+    Require(HasName(candidate, firstBody.name) == HasName(candidate, firstBoots.name), "Merged family must not mix the named styles");
+  }
+  secondBody.armorModelPaths.back() = "different/body.nif";
+  Require(BuildHeuristicOutfitGroups({firstBody, firstBoots, secondBody, secondBoots}).size() == 2,
+          "A shared male fallback and shared shoe cannot merge outfits with different body models");
+  Require(BuildHeuristicOutfitGroups({MakeArmor(9710, "[Maker] Falcon Body", {32}, 0),
+                                     MakeArmor(9711, "[Maker] Orchid Boots", {37}, 1)}).empty(),
+          "An author tag alone must not manufacture a shared outfit identity");
+}
+
+void TestGenericPartAssembly() {
+  const std::vector<std::string> names{"은하상의", "은하 치마", "Aurora 손장식", "별빛 신발"};
+  const std::vector<std::string> ids{"AuroraSetTop1SMP", "AuroraSetSkirt2aSMP", "AuroraSetGloves", "AuroraSetBoots"};
+  const std::vector<int> slots{32, 49, 33, 37};
+  std::vector<ArmorRecord> parts;
+  for (std::size_t i = 0; i < names.size(); ++i) {
+    auto item = MakeArmor(9800 + i, names[i], {slots[i]}, i);
+    item.editorID = ids[i];
+    item.armorModelPaths = {std::format("author/auroraset/part{}.nif", i)};
+    parts.push_back(std::move(item));
+  }
+  const auto groups = BuildHeuristicOutfitGroups(parts);
+  Require(groups.size() == 1 && groups.front().items.size() == 4,
+          "Translated and differently spaced body/lower/hands/feet must assemble from EDID-family and shared asset evidence");
+  const auto candidates = BuildCandidates(groups.front(), {}, {}, 1);
+  Require(!candidates.empty() && std::ranges::all_of(candidates, [](const auto &candidate) {
+    return candidate.items.size() == 4 && !CountSlotConflicts(candidate.items);
+  }), "Assembled parts must reach a complete candidate, not four separate kits");
+  Require(IsComponentPartToken("톱1smp") && IsComponentPartToken("Skirt2aSMP"),
+          "Attached numbered physics suffixes must remain part variants");
+  Require(EditorOutfitFamily("MORDHAU01TorsoBrigandinChest").empty(),
+          "An EDID with its actual set identity after the component must not be truncated to an author/category prefix");
+  Require(EditorOutfitFamily("AuroraSet1Top") != EditorOutfitFamily("AuroraSet2Gloves"),
+          "Design numbers before the component must stay in the EDID family identity");
+  auto withAccessory = parts;
+  withAccessory.push_back(MakeArmor(9810, "은하상의 귀걸이", {36}, 4));
+  const auto retained = BuildHeuristicOutfitGroups(withAccessory);
+  Require(retained.size() == 1 && retained.front().items.size() == 5,
+          "An existing named earring must survive when asset evidence bridges the larger outfit");
+  parts.back().editorID = "DifferentSetBoots";
+  const auto separated = BuildHeuristicOutfitGroups(parts);
+  Require(std::ranges::none_of(separated, [](const auto &group) { return group.items.size() == 4; }),
+          "A shared model directory alone must not join different EDID families");
+}
+
 void TestModexKitItemCompatibilityRules() {
   using namespace sfs::catalog::kit_json;
 
@@ -949,8 +1297,57 @@ void TestModexKitItemCompatibilityRules() {
 }
 } // namespace
 
+void TestExplicitCheckedExport() {
+  using kit_generator_under_test::Generator;
+  using kit_generator_under_test::ScanState;
+  const auto originalDirectory = std::filesystem::current_path();
+  const auto testRoot = std::filesystem::temp_directory_path() /
+      std::format("sfs-checked-export-{}", std::chrono::steady_clock::now().time_since_epoch().count());
+  Require(std::filesystem::create_directory(testRoot), "Isolated output test directory must be new");
+  std::filesystem::current_path(testRoot);
+  const auto restoreDirectory = [&]() { std::filesystem::current_path(originalDirectory); };
+  try {
+    Generator generator;
+    generator.state_.store(ScanState::Complete);
+    for (std::size_t i = 0; i < 3; ++i) {
+      GeneratedKit kit;
+      kit.name = std::format("CheckedExport{}", i);
+      kit.candidates.push_back(KitCandidate{.items = {MakeArmor(100 + static_cast<std::uint32_t>(i), "Body", {32}, i)}});
+      generator.generatedKits_.push_back(std::move(kit));
+    }
+    std::string error;
+    Require(generator.CreateKitFiles({}, error) == 0 && error.empty() &&
+            !std::filesystem::exists("Data"), "Empty selection must not create any directory or kit");
+    Require(generator.CreateKitFiles({0, 99}, error) == 0 && !error.empty() &&
+            !std::filesystem::exists("Data"), "Invalid selection must be rejected before any write");
+    Require(generator.CreateKitFiles({2, 0, 2}, error) == 2 && error.empty(),
+            "Create only checked indices and deduplicate repeated indices");
+    const auto output = testRoot / "Data/Interface/SkyrimFittingSystem/user/kits";
+    std::vector<std::filesystem::path> createdFiles;
+    for (const auto& entry : std::filesystem::directory_iterator(output)) {
+      std::ifstream stream(entry.path());
+      const auto json = nlohmann::json::parse(stream);
+      const auto data = json.dump();
+      Require(data.find("CheckedExport1") == std::string::npos,
+              "Unchecked single-candidate kit must never be emitted");
+      createdFiles.push_back(entry.path());
+    }
+    Require(createdFiles.size() == 2 && generator.generatedKits_.size() == 3,
+            "Export must not mutate the result list or create unchecked outputs");
+    restoreDirectory();
+    for (const auto& path : createdFiles) std::filesystem::remove(path);
+    // Only remove this test's now-empty directories, never recursively.
+    for (auto directory = output; directory != testRoot.parent_path(); directory = directory.parent_path())
+      Require(std::filesystem::remove(directory), "Test output directory must be empty before removal");
+  } catch (...) {
+    restoreDirectory();
+    throw;
+  }
+}
+
 int main() {
   try {
+    TestExplicitCheckedExport();
     TestAngelSynchronizedChoices();
     TestIndependentUnderwearChoices();
     TestAltColorFallback();
@@ -974,6 +1371,14 @@ int main() {
     TestMultiMerge();
     TestUnicodeKitOutputPath();
     TestModexKitItemCompatibilityRules();
+    TestCommunityReferencePipeline();
+    TestNumberedVariantFamilies();
+    TestFamilyCompositionBoundaries();
+    TestSheetGroupingPipeline();
+    TestCoordinatedReferenceVariations();
+    TestGenericProfileNormalizationAndBudgets();
+    TestGenericFamilyFragmentation();
+    TestGenericPartAssembly();
     std::cout << "Generator logic regression tests passed\n";
     return 0;
   } catch (const std::exception &exception) {

@@ -37,6 +37,7 @@ void Menu::ClearCatalogSelection() {
   auto &browser = CatalogBrowserState();
   browser.selectedKey.clear();
   browser.selectedGearKeys.clear();
+  browser.filterFocus.Reset();
   pendingKitListMoveDelta_ = 0;
   pendingKitListApply_ = false;
   pendingKitListPreview_ = false;
@@ -86,8 +87,8 @@ void Menu::SetFavorite(const ui::catalog::BrowserTab a_tab,
     CatalogBrowserState().favoriteKeys.insert(key);
   } else {
     CatalogBrowserState().favoriteKeys.erase(key);
-    if (CatalogBrowserState().favoritesOnly &&
-        CatalogBrowserState().activeTab == a_tab &&
+    if (CatalogBrowserState().activeTab == a_tab &&
+        CatalogBrowserState().FavoritesOnlyFor(a_tab) &&
         CatalogBrowserState().selectedKey == a_id) {
       ClearCatalogSelection();
     }
@@ -578,19 +579,60 @@ void Menu::DrawCatalogHostBody(const bool a_drawBodyChild) {
 
     ImGui::Separator();
     DrawCatalogFilters();
+    // Wrap controls in narrow/docked panes instead of clipping the preview toggle.
+    const auto continueCheckboxRow = [](const std::string_view a_label) {
+      const auto &style = ImGui::GetStyle();
+      const auto nextX = ImGui::GetItemRectMax().x + style.ItemSpacing.x;
+      const auto right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+      const auto width = ImGui::GetFrameHeight() + style.ItemInnerSpacing.x +
+                         ImGui::CalcTextSize(a_label.data()).x;
+      if (nextX + width <= right) {
+        ImGui::SameLine();
+      }
+    };
     if (browser.activeTab != ui::catalog::BrowserTab::Conditions &&
         browser.activeTab != ui::catalog::BrowserTab::Options &&
         browser.activeTab != ui::catalog::BrowserTab::KitGenerator) {
-      if (ImGui::Checkbox(favoritesOnlyLabel.data(), &browser.favoritesOnly)) {
-        if (browser.favoritesOnly && !browser.selectedKey.empty() &&
-            !IsFavorite(browser.activeTab, browser.selectedKey)) {
-          ClearCatalogSelection();
+      const std::array<std::string_view, 7> bodyFamilyLabels{
+          localization->Get("catalog.body_family.all"), "CBBE/3BA",
+          "UNP/BHUNP", "UBE", "HIMBO", "SAM",
+          localization->Get("catalog.body_family.vanilla")};
+      float bodyFamilyWidth = 0.0f;
+      for (const auto label : bodyFamilyLabels) {
+        bodyFamilyWidth = (std::max)(bodyFamilyWidth, ImGui::CalcTextSize(label.data()).x);
+      }
+      bodyFamilyWidth += ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2.0f;
+      ImGui::SetNextItemWidth((std::min)(bodyFamilyWidth, ImGui::GetContentRegionAvail().x));
+      if (ImGui::BeginCombo("##catalog-body-family",
+                            bodyFamilyLabels[static_cast<std::size_t>(browser.bodyFamilyFilter)].data())) {
+        for (std::size_t index = 0; index < bodyFamilyLabels.size(); ++index) {
+          const auto filter = ui::catalog::kBodyFamilyFilters[index];
+          const bool selected = browser.bodyFamilyFilter == filter;
+          if (ImGui::Selectable(bodyFamilyLabels[index].data(), selected) && !selected) {
+            browser.bodyFamilyFilter = filter;
+            // Focus the first sorted row without applying or changing preview.
+            browser.filterFocus.Request();
+            InvalidateCatalogDerivedState();
+            SaveUserSettings();
+          }
+          if (selected) {
+            ImGui::SetItemDefaultFocus();
+          }
         }
+        ImGui::EndCombo();
+      }
+      if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+        ImGui::SetTooltip("%s", localization->GetCStr("catalog.body_family.tooltip"));
+      }
+      continueCheckboxRow(favoritesOnlyLabel);
+      if (ImGui::Checkbox(favoritesOnlyLabel.data(), &browser.ActiveFavoritesOnly())) {
+        // Filtering affects list focus only, never the workbench preview.
+        browser.filterFocus.Request();
         SaveUserSettings();
       }
     }
     if (browser.activeTab == ui::catalog::BrowserTab::Gear) {
-      ImGui::SameLine();
+      continueCheckboxRow(inventoryOnlyLabel);
       if (ImGui::Checkbox(inventoryOnlyLabel.data(), &browser.inventoryOnly) &&
           browser.inventoryOnly && !browser.selectedKey.empty()) {
         const auto &catalog = EquipmentCatalog::Get().GetGear();
@@ -605,7 +647,7 @@ void Menu::DrawCatalogHostBody(const bool a_drawBodyChild) {
         SaveUserSettings();
       }
 
-      ImGui::SameLine();
+      continueCheckboxRow(hideUnnamedLabel);
       if (ImGui::Checkbox(hideUnnamedLabel.data(), &browser.hideUnnamedGear) &&
           browser.hideUnnamedGear && !browser.selectedKey.empty()) {
         const auto &catalog = EquipmentCatalog::Get().GetGear();
@@ -620,7 +662,7 @@ void Menu::DrawCatalogHostBody(const bool a_drawBodyChild) {
     if (browser.activeTab != ui::catalog::BrowserTab::Conditions &&
         browser.activeTab != ui::catalog::BrowserTab::Options &&
         browser.activeTab != ui::catalog::BrowserTab::KitGenerator) {
-      ImGui::SameLine();
+      continueCheckboxRow(previewSelectedLabel);
       if (ImGui::Checkbox(previewSelectedLabel.data(),
                           &browser.previewSelected)) {
         if (!browser.previewSelected) {

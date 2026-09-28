@@ -11,6 +11,9 @@ $targets = @(
     "RenderedOutfitAPITests",
     "RuntimeLayoutTests",
     "KitGeneratorLogicTests",
+    "CommunityGroupingTests",
+    "SheetGroupingTests",
+    "AddScreenshotTests",
     "BodyFamilyLogicTests",
     "ConditionCnfLogicTests",
     "ConditionDropLogicTests",
@@ -21,9 +24,11 @@ $targets = @(
     "ConditionFormTokenTests",
     "ConditionDropdownTests",
     "ConditionStringLifetimeTests",
+    "ConditionMaterializationReadTests",
     "ConditionValueParsingTests",
     "FittingDyeRulesTests",
     "KitListNavigationTests",
+    "KeyboardInputRoutingTests",
     "CoreBehaviorRegressionTests",
     "ManualVisibilityRegressionTests",
     "CustomSkinningRegressionTests",
@@ -31,6 +36,7 @@ $targets = @(
     "RaceMenuInterfaceTests",
     "RaceMenuMorphTrackingTests",
     "RaceMenuHighHeelTests",
+    "RaceMenuHighHeelRootTests",
     "AppearanceResourceLifecycleTests",
     "CallerChainPerformanceTests",
     "PapyrusObserverInspectionTests",
@@ -39,7 +45,7 @@ $targets = @(
 
 Push-Location $repository
 try {
-    & $Xmake -y @targets
+    & $Xmake -P $repository -y -j 6 @targets
     if ($LASTEXITCODE -ne 0) {
         throw "Regression test build failed with exit code $LASTEXITCODE"
     }
@@ -66,6 +72,38 @@ try {
     }
     $sfsInput = Get-Content -LiteralPath (Join-Path $repository "src/InputManager.cpp") -Raw
     $sfsInputHooks = Get-Content -LiteralPath (Join-Path $repository "src/Hooks.cpp") -Raw
+    $sfsVisibility = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Visibility.cpp") -Raw
+    $sfsGeneratorUI = Get-Content -LiteralPath (Join-Path $repository "src/kit_generator/UI.cpp") -Raw
+    $sfsGenerator = Get-Content -LiteralPath (Join-Path $repository "src/kit_generator/Generator.cpp") -Raw
+    $sfsCatalogBrowser = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Browser.cpp") -Raw
+    $sfsCatalogFilters = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Catalog.Filters.cpp") -Raw
+    foreach ($tab in @('gear', 'outfits', 'kits')) {
+        if (@([regex]::Matches($sfsCatalogFilters, "browser\.favoriteFilters\.$tab\b")).Count -ne 2) {
+            throw "Favorite matching and derived cache must use their own $tab setting"
+        }
+    }
+    if (-not $sfsCatalogBrowser.Contains('&browser.ActiveFavoritesOnly()') -or
+        $sfsCatalogBrowser.Contains('browser.favoritesOnly') -or
+        -not $menuSettingsDefaults.Contains('browser.favoriteFilters.Load(json)') -or
+        -not $menuSettingsDefaults.Contains('CatalogBrowserState().favoriteFilters.Save(json)')) {
+        throw 'Favorite UI and persistence must remain independent per catalog tab'
+    }
+    if (-not $sfsGeneratorUI.Contains('generator.CreateKitFiles(resultSelection_.CheckedIndices(), error)') -or
+        -not $sfsGeneratorUI.Contains('resultSelection_.CheckRow(visibleKitIndices, kitIndex, rowChecked)') -or
+        -not $sfsGeneratorUI.Contains('resultSelection_.CheckVisible(visibleKitIndices)') -or
+        -not $sfsGeneratorUI.Contains('DrawResultRow(rowChecked,') -or
+        $sfsGeneratorUI.Contains('candidates.multi_select_guide') -or
+        $sfsGeneratorUI.Contains('kit.candidates.size() <= 1') -or
+        -not $sfsGenerator.Contains('record.bodyFamilyMask = body_family::ClassifyCatalogArmor(armor)') -or
+        -not $sfsGeneratorUI.Contains('MatchesKitBodyFilter(kit, resultBodyFilter_)')) {
+        throw "Generated kits must use explicit checked export and disjoint row/checkbox input, show single candidates, and share catalog body classification"
+    }
+    if ($sfsVisibility -notmatch 'void Menu::OnMenuHide\(\)\s*\{[^}]*hooks::ResetInputFilterState\(true\)' -or
+        -not $sfsInputHooks.Contains('listNavigationActive = menu->IsKeyboardListNavigationActive()') -or
+        $sfsGeneratorUI -notmatch 'SelectPluginRows\(visibleSourceIndices, index, selected,\s*io.KeyShift' -or
+        $sfsGeneratorUI -notmatch 'if \(applySelected && focusedRowIndex >= 0') {
+        throw "List keys must share navigation ownership, close must finish owned presses, and filtered plugin selection must use visible rows/Shift ranges"
+    }
     if (-not $sfsInput.Contains('input::IsMenuCancel(*buttonEvent)') -or
         -not $sfsInputHooks.Contains('sfs::input::IsMenuCancel(*buttonEvent)') -or
         $sfsInputHooks.IndexOf('AddEventToQueue(a_events)') -gt $sfsInputHooks.IndexOf('FilterBlockedInputEvents(a_events);') -or
@@ -178,9 +216,9 @@ try {
 
     $catalogFilterSource = Get-Content -LiteralPath (
         Join-Path $repository "src\ui\Menu.Catalog.Filters.cpp") -Raw
-    if (-not $catalogFilterSource.Contains("body_family::Matches") -or
-        -not $catalogFilterSource.Contains("catalogBodyFamilyFilterEnabled_")) {
-        throw "Equipment, Outfits, and Kits must retain the optional BodyFamily filter"
+    if (([regex]::Matches($catalogFilterSource, "ui::catalog::MatchesBodyFamilyFilter")).Count -ne 3 -or
+        $catalogFilterSource.Contains("body_family::ResolveActor")) {
+        throw "All three catalog tabs must use the explicit body selection independently of the actor"
     }
 
     $workbenchFilterSource = Get-Content -LiteralPath (
@@ -189,6 +227,35 @@ try {
         throw "The registered-appearance workbench must remain outside BodyFamily filtering"
     }
 
+    $bodyFilterBrowser = Get-Content -LiteralPath (
+        Join-Path $repository "src\ui\Menu.Browser.cpp") -Raw
+    $bodySelectionHandler = [regex]::Match($bodyFilterBrowser,
+        '(?s)if \(ImGui::Selectable\(bodyFamilyLabels\[index\]\.data\(\), selected\) && !selected\) \{(?<body>.*?)\}')
+    $bodySelectionStatements = [regex]::Replace(
+        $bodySelectionHandler.Groups['body'].Value, '//[^\r\n]*|\s+', '')
+    if (-not $bodySelectionHandler.Success -or $bodySelectionStatements -cne
+        'browser.bodyFamilyFilter=filter;browser.filterFocus.Request();InvalidateCatalogDerivedState();SaveUserSettings();') {
+        throw "Body filter changes may only update list visibility/focus/cache/settings, never preview or workbench"
+    }
+    foreach ($bodyFilterExcludedFile in @('src/ui/Menu.Gear.cpp', 'src/ui/Menu.Outfits.cpp',
+        'src/ui/Menu.Kits.cpp', 'src/VariantWorkbench.cpp')) {
+        $bodyFilterExcludedSource = Get-Content -LiteralPath (
+            Join-Path $repository $bodyFilterExcludedFile) -Raw
+        if ($bodyFilterExcludedSource -match 'MatchesBodyFamilyFilter|bodyFamilyFilter|catalogBodyFamilySelection') {
+            throw "Body-family list filters cannot gate apply/preview: $bodyFilterExcludedFile"
+        }
+    }
+    foreach ($bodyFilterList in @('Gear', 'Outfits', 'Kits')) {
+        $listSource = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.$bodyFilterList.cpp") -Raw
+        foreach ($required in @('browser.filterFocus.Consume(', 'int requestedScrollRowIndex = filterFocus.row;',
+            'applySelected = previewSelected = false;', 'ImGui::SetScrollY(0.0f);',
+            'if (rowIndex == filterFocus.row) ImGui::SetKeyboardFocusHere();',
+            '!browser.filterFocus.IsFocusOnly(')) {
+            if (-not $listSource.Contains($required)) { throw "Filter focus boundary missing in $bodyFilterList : $required" }
+        }
+    }
+    Write-Host "Body-family filtering is list-only; first-row focus does not apply or preview"
+
     $settingsSource = Get-Content -LiteralPath (
         Join-Path $repository "src\ui\Menu.Settings.cpp") -Raw
     $criticalSettingKeys = @(
@@ -196,7 +263,7 @@ try {
         "smoothScroll",
         "menuCharacterSide",
         "addCrosshairNpcToActorList",
-        "catalogBodyFamilyFilterEnabled",
+        "catalogBodyFamilySelection",
         "specialEffectProtectedSlots",
         "shieldAppearanceSlotEnabled",
         "externalModStripLinkMode",
@@ -225,9 +292,9 @@ try {
         $localeJson = Get-Content -LiteralPath $localePath -Raw |
             ConvertFrom-Json
         if (-not $localeJson.strings.PSObject.Properties[
-                "options.catalog_body_family_filter"] -or
+                "catalog.body_family.all"] -or
             -not $localeJson.strings.PSObject.Properties[
-                "options.catalog_body_family_filter.tooltip"] -or
+                "catalog.body_family.tooltip"] -or
             -not $localeJson.strings.PSObject.Properties[
                 "dye.popup.multiply_note"] -or
             -not $localeJson.strings.PSObject.Properties[
@@ -299,8 +366,9 @@ try {
         '(?s)BuildDisplaySet\(RE::Actor \*a_actor,.*?(?=\[\[nodiscard\]\] std::unordered_set)').Value
     if (-not $displayBuilder.Contains('(a_equippedSnapshot ? *a_equippedSnapshot : localEquipped).Get()') -or
         $displayBuilder.Contains('CollectEquippedArmors(') -or
-        -not $bodyKeywordQuery.Contains('BuildDisplaySet(a_actor, true, &equipped)') -or
-        -not $bodyKeywordQuery.Contains('BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped)')) {
+        -not $bodyKeywordQuery.Contains('BuildDisplaySet(a_actor, true, &equipped, &visibleActual)') -or
+        -not $bodyKeywordQuery.Contains('BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped, &visibleActual)') -or
+        -not $displayBuilder.Contains('PrepareOutfitValue(a_actor, displaySet, equippedArmors, a_visibleActual)')) {
         throw "Final body queries must reuse one request-local worn snapshot, without changing runtime scan coverage"
     }
     $dyePerformanceSource = Get-Content -LiteralPath (

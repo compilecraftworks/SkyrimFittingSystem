@@ -1,0 +1,19 @@
+Skyrim Fitting System v1.7.2 SE-AE
+
+- Fixed premature loss of registered HH_OFFSET attachment records before grafting or during temporary reparenting. Preserved bounded expiry, unload cleanup, actual equipment and named mod transforms. Verified with production-source regressions, not the reporter's in-game setup.
+- Reduced duplicate worn-equipment collection in hide/skinning queries and visible-list construction in body/final-state queries, removed UI metadata copying from executable condition reads, and reduced Papyrus type-cache collision rescans within the existing 128-type cap. Preserved nudity/strip policy and first-call, late-bind and P+ recovery. The reported SkyUI delay is not yet verified resolved in game; cross-query display caching is not included.
+- Gear, Outfits and Kits now remember Favorites Only independently. Existing shared settings migrate once; changes affect list focus without clearing previews.
+- Grouped related Community Kit Hub color, length and numbered versions as candidates under one kit. Original compositions and plugin boundaries stay intact. Birth Lingerie's 32-record example becomes one group with 16 matching candidates. Rescan ESPs to update results; existing saved kit files are untouched.
+- Added checkboxes and Select/Clear All to generated results, including single-candidate kits. Create, Merge and Delete use checked kits only. Ctrl/Shift highlight rows for batch checking; checkbox clicks do not interfere with row double-click navigation.
+- Added list-only body-family filters before the results preview checkbox and in ESP selection. Checks and previews are retained. Result Select All checks visible rows; Clear All also clears hidden checks, with a hidden-check counter.
+- Prevented SFS list-navigation keys from reaching downstream mod hotkey event sinks. New presses work normally after the UI closes.
+- Added Ctrl+click individual ESP selection, Shift+click visible-range selection, an optional worn-model plugin list filter, and explanatory red-warning tooltips in Kit Generator. Hidden ESP selections are retained; ESP Select/Clear All affect visible rows only.
+- Integrated the cumulative Community Kit Grouping Custom Patch 4 into the full mod.
+- Added a saved body-family filter shared by the Equipment, Outfits and Kits lists. It only filters visible list entries; it does not change registered appearances, clear previews or restrict workbench application.
+- After a filter change, keyboard/gamepad focus and scrolling move to the first result without automatically applying or previewing it.
+- Prioritized community, ADD screenshot and spreadsheet references before generic inference, retaining all 542 ADD kit names and reviewed exceptions.
+- Improved grouping of translated/separately named outfit parts while preserving accessories and preventing unrelated outfit merges.
+- Improved coordinated color/style candidates with no actual-slot overlap, preserving choice axes and representative styles within the 256-profile budget.
+- Disable older Community Kit Grouping Custom Patches 1–4. Keep settings, kits, saves and the separate compatibility patches.
+
+Classification is metadata-based, not a guarantee of mesh compatibility or exact photo reproduction. In-game UI, preview, application and saving remain unverified.

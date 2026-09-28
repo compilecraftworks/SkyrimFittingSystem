@@ -93,6 +93,7 @@ public:
   void HandleToggleKeyCapture(std::uint32_t a_scanCode,
                               std::uint32_t a_modifierScanCode);
   [[nodiscard]] bool QueueKitListMove(int a_delta);
+  [[nodiscard]] bool IsKeyboardListNavigationActive() const;
   [[nodiscard]] bool QueueKitListApply();
   [[nodiscard]] bool QueueKitListPreview();
   [[nodiscard]] bool QueueKitListBack();
@@ -317,13 +318,13 @@ private:
 
   [[nodiscard]] bool MatchesGearFilters(
       const GearEntry &a_entry,
-      body_family::Mask a_actorBodyFamily) const;
+      ui::catalog::BodyFamilyFilter a_bodyFamilyFilter) const;
   [[nodiscard]] bool MatchesOutfitFilters(
       const OutfitEntry &a_entry,
-      body_family::Mask a_actorBodyFamily) const;
+      ui::catalog::BodyFamilyFilter a_bodyFamilyFilter) const;
   [[nodiscard]] bool MatchesKitFilters(
       const KitEntry &a_entry,
-      body_family::Mask a_actorBodyFamily) const;
+      ui::catalog::BodyFamilyFilter a_bodyFamilyFilter) const;
   [[nodiscard]] std::optional<KitEntry::Layout>
   BuildSlotFallbackLayoutFromArmorForms(
       const std::vector<RE::FormID> &a_formIDs) const;
@@ -388,12 +389,12 @@ private:
   [[nodiscard]] bool IsWorkbenchSelectableCondition(
       const ui::conditions::Definition &a_condition) const;
   [[nodiscard]] std::vector<const GearEntry *>
-  BuildFilteredGear(body_family::Mask a_actorBodyFamily) const;
+  BuildFilteredGear(ui::catalog::BodyFamilyFilter a_bodyFamilyFilter) const;
   [[nodiscard]] std::vector<const OutfitEntry *>
-  BuildFilteredOutfits(body_family::Mask a_actorBodyFamily) const;
+  BuildFilteredOutfits(ui::catalog::BodyFamilyFilter a_bodyFamilyFilter) const;
   [[nodiscard]] std::vector<const KitEntry *>
-  BuildFilteredKits(body_family::Mask a_actorBodyFamily) const;
-  [[nodiscard]] body_family::Mask SyncCatalogActorContext();
+  BuildFilteredKits(ui::catalog::BodyFamilyFilter a_bodyFamilyFilter) const;
+  void SyncCatalogActorContext();
   void SortGearRows(std::vector<const GearEntry *> &a_rows,
                     ImGuiTableSortSpecs *a_sortSpecs) const;
   void SortOutfitRows(std::vector<const OutfitEntry *> &a_rows,
@@ -482,7 +483,6 @@ private:
   bool pauseGameWhenOpen_{false};
   bool smoothScroll_{true};
   bool addCrosshairNpcToActorList_{false};
-  bool catalogBodyFamilyFilterEnabled_{true};
   bool hideRealEquipmentWithFitting_{false};
   mutable std::recursive_mutex actorVisibilityMutex_;
   std::unordered_map<RE::FormID, bool> hideRealEquipmentByActor_;

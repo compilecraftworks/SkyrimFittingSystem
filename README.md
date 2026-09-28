@@ -7,6 +7,33 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.2 integrates the community kit grouping work and a shared body-family
+filter for the Equipment, Outfits and Kits lists. This filter changes only
+which rows are shown; it does not clear previews or restrict workbench use.
+Curated community, ADD and spreadsheet references take precedence over generic
+grouping, while candidate selection keeps real slots disjoint and coordinates
+available color/style variants. See the [English](docs/RELEASE-NOTES-v1.7.2.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.2-ko.md) release notes and
+[integration notes](docs/V1.7.2-KIT-INTEGRATION.md).
+
+Related community versions share one kit group while retaining their original
+compositions as separate candidates. Numbered families such as Birth Lingerie
+keep matching numbered pieces together. Rescan ESPs to refresh generated results;
+existing saved kit files are not automatically rewritten.
+
+The v1.7.2 working source also removes repeated worn-gear collection within
+individual hide/skinning queries, avoids UI metadata copies during condition
+execution, and reduces Papyrus inspection-cache collision rescans while retaining
+the 128-type ownership cap. Nudity decisions do not read BCNG or an external API.
+See the [query-cost verification](docs/SKYUI-QUERY-COST-FIX-2026-09-29.md).
+These are verified reductions in host-test work, not an in-game timing claim or
+a completed cross-query appearance cache.
+
+Registered HH_OFFSET sources now survive the bounded pre-graft/reparenting
+completion window, with observation-safe recapture and normal expiry/unload
+cleanup. The new regression exercises actual source capture rather than an
+injected selected height. See the [heel fix and limits](docs/HH-PENDING-ATTACHMENT-FIX-2026-09-29.md).
+
 v1.7.1 reduces redundant Papyrus type inspection and unused caller tracing
 for ordinary Form keyword reads, while preserving final-rendered nudity,
 strip/redress observation, first-call installation, late binding and P+ retries.

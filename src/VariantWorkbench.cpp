@@ -265,13 +265,9 @@ IsConditionActiveForActor(const std::optional<std::string> &a_conditionId,
     return false;
   }
 
-  auto materialized =
-      sfs::conditions::MaterializeConditionById(*a_conditionId, conditions);
-  if (!materialized || !materialized->condition) {
-    return false;
-  }
-
-  return materialized->condition->IsTrue(a_actor, a_actor);
+  auto condition =
+      sfs::conditions::AcquireExecutableConditionById(*a_conditionId, conditions);
+  return condition && condition->IsTrue(a_actor, a_actor);
 }
 
 [[nodiscard]] bool IsRowActiveForActor(const VariantWorkbenchRow &a_row,

@@ -184,7 +184,7 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
 #include "callback.production.inc"
 struct RegisteredHighHeelState {
   std::optional<float> offset;
-  bool staleAttachmentStillPresent{}, previouslyActive{};
+  bool staleAttachmentStillPresent{}, previouslyActive{}, awaitingAttachment{};
 };
 std::mutex g_nodeMutex, g_highHeelQueueMutex;
 sfs::native::resource_work::ActorBuilds g_sceneObservations;

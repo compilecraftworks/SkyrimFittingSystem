@@ -69,7 +69,7 @@ std::string NormalizeKitCollection(std::string_view a_collection) {
 namespace sfs {
 bool Menu::DrawKitTab() {
   auto *localization = ui::Localization::GetSingleton();
-  const auto &browser = CatalogBrowserState();
+  auto &browser = CatalogBrowserState();
   const auto &rows = GetFilteredKitRows();
   const auto resultCount = rows.size();
   const auto resultsLabel = sfs::strings::SafeVFormat(
@@ -104,12 +104,21 @@ bool Menu::DrawKitTab() {
     ImGui::TableHeadersRow();
 
     const auto &sortedRows = GetSortedKitRows(ImGui::TableGetSortSpecs());
+    const auto filterFocus = browser.filterFocus.Consume(
+        sortedRows, browser.selectedKey, browser.selectedGearKeys, false);
     int selectedRowIndex = FindKitRowIndex(sortedRows, browser.selectedKey);
-    int requestedScrollRowIndex = -1;
+    int requestedScrollRowIndex = filterFocus.row;
     int moveDelta = 0;
     bool applySelected = false;
     bool previewSelected = false;
     ConsumeKitListCommands(moveDelta, applySelected, previewSelected);
+    if (filterFocus.consumed) {
+      moveDelta = 0;
+      applySelected = previewSelected = false;
+      ImGui::SetScrollY(0.0f);
+    } else if (moveDelta != 0 || applySelected || previewSelected) {
+      browser.filterFocus.AcceptSelection();
+    }
 
     // InputManager owns keyboard/gamepad list commands. Reading ImGui's
     // physical key state here as well made one arrow press move two rows.
@@ -166,6 +175,7 @@ bool Menu::DrawKitTab() {
         ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(0, 0, 0, 0));
         ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(0, 0, 0, 0));
         const bool selected = browser.selectedKey == kit.id;
+        if (rowIndex == filterFocus.row) ImGui::SetKeyboardFocusHere();
         const bool rowPressed = ImGui::Selectable(
             ("##kit-row-hit-" + std::to_string(rowIndex)).c_str(), selected,
             ImGuiSelectableFlags_SpanAllColumns |
@@ -232,7 +242,7 @@ bool Menu::DrawKitTab() {
           AddKitEntryToWorkbench(kit);
         } else if (releasedOnRow) {
           rowClicked = true;
-          if (selected) {
+          if (selected && !browser.filterFocus.IsFocusOnly(kit.id)) {
             ClearCatalogSelection();
           } else {
             CatalogBrowserState().selectedKey = kit.id;
@@ -243,6 +253,7 @@ bool Menu::DrawKitTab() {
             }
           }
         }
+        if (doubleClicked || releasedOnRow) browser.filterFocus.AcceptSelection();
         if (!ImGui::IsDragDropActive() &&
             ui::components::ShouldDrawPinnableTooltip("kit:" + kit.id,
                                                       rowHovered)) {

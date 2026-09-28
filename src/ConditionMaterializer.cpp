@@ -116,35 +116,30 @@ void InvalidateConditionMaterializationCachesFrom(
   }
 }
 
-std::optional<MaterializedCondition>
-MaterializeConditionById(std::string_view a_conditionId,
-                         std::vector<Definition> &a_conditions) {
-  std::lock_guard lock(g_conditionMaterializationMutex);
+namespace {
+// Caller holds g_conditionMaterializationMutex until the owning result has
+// been copied. Never expose a runtime-map entry beyond that lock.
+MaterializationState *EnsureMaterializedCondition(
+    std::string_view a_conditionId, std::vector<Definition> &a_conditions) {
   auto *definition = FindDefinitionById(a_conditions, a_conditionId);
   if (!definition) {
-    return std::nullopt;
+    return nullptr;
   }
 
   auto &runtime = GetConditionRuntimeMap();
   if (auto runtimeIt = runtime.find(definition->id);
       runtimeIt != runtime.end() && runtimeIt->second.attempted) {
     if (!runtimeIt->second.valid || !runtimeIt->second.condition) {
-      return std::nullopt;
+      return nullptr;
     }
-    return MaterializedCondition{
-        .condition = runtimeIt->second.condition,
-        .signature = runtimeIt->second.signature,
-        .displayCnf = runtimeIt->second.displayCnf,
-        .refreshTargets =
-            RefreshTargets{runtimeIt->second.refreshActorFormIDs,
-                           runtimeIt->second.refreshUseNearbyFallback}};
+    return &runtimeIt->second;
   }
 
   const auto lowered = LowerAndEmitCondition(*definition, a_conditions);
   if (!lowered) {
     logger::warn("Failed to materialize SFS condition {}", definition->id);
     runtime[definition->id].MarkFailure();
-    return std::nullopt;
+    return nullptr;
   }
 
   const auto refreshTargets = BuildRefreshTargets(lowered->condition);
@@ -158,9 +153,31 @@ MaterializeConditionById(std::string_view a_conditionId,
                                           refreshTargets.actorFormIDs.end());
   runtimeState.refreshUseNearbyFallback = refreshTargets.useNearbyFallback;
 
-  return MaterializedCondition{.condition = runtimeState.condition,
-                               .signature = runtimeState.signature,
-                               .displayCnf = runtimeState.displayCnf,
-                               .refreshTargets = refreshTargets};
+  return &runtimeState;
+}
+} // namespace
+
+std::optional<MaterializedCondition>
+MaterializeConditionById(std::string_view a_conditionId,
+                         std::vector<Definition> &a_conditions) {
+  std::lock_guard lock(g_conditionMaterializationMutex);
+  const auto *state = EnsureMaterializedCondition(a_conditionId, a_conditions);
+  if (!state) {
+    return std::nullopt;
+  }
+  return MaterializedCondition{
+      .condition = state->condition,
+      .signature = state->signature,
+      .displayCnf = state->displayCnf,
+      .refreshTargets = RefreshTargets{state->refreshActorFormIDs,
+                                       state->refreshUseNearbyFallback}};
+}
+
+std::shared_ptr<RE::TESCondition>
+AcquireExecutableConditionById(std::string_view a_conditionId,
+                               std::vector<Definition> &a_conditions) {
+  std::lock_guard lock(g_conditionMaterializationMutex);
+  const auto *state = EnsureMaterializedCondition(a_conditionId, a_conditions);
+  return state ? state->condition : nullptr;
 }
 } // namespace sfs::conditions

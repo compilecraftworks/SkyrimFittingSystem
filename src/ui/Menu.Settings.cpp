@@ -252,8 +252,6 @@ void Menu::LoadUserSettings() {
             : ui::MenuCharacterSide::Left;
     addCrosshairNpcToActorList_ =
         json.value("addCrosshairNpcToActorList", addCrosshairNpcToActorList_);
-    catalogBodyFamilyFilterEnabled_ = json.value(
-        "catalogBodyFamilyFilterEnabled", catalogBodyFamilyFilterEnabled_);
     workbench::SetSpecialEffectProtectedSlotMask(
         ParseSpecialEffectProtectedSlots(json));
     workbench::SetShieldAppearanceSlotEnabled(
@@ -344,10 +342,13 @@ void Menu::LoadUserSettings() {
       catalogPane_.hostMode = ui::catalog::HostMode::Docked;
       catalogPane_.popoutOpen = false;
     }
+    // The explicit list selection supersedes the old actor-compatibility
+    // switch. Missing/out-of-range saved selections start at All.
+    browser.bodyFamilyFilter = ui::catalog::BodyFamilyFilterFromIndex(
+        json.value("catalogBodyFamilySelection", 0));
     browser.previewSelected =
         json.value("catalogPreviewSelected", browser.previewSelected);
-    browser.favoritesOnly =
-        json.value("catalogFavoritesOnly", browser.favoritesOnly);
+    browser.favoriteFilters.Load(json);
     browser.inventoryOnly =
         json.value("catalogInventoryOnly", browser.inventoryOnly);
     browser.hideUnnamedGear =
@@ -384,7 +385,8 @@ void Menu::SaveUserSettings() const {
       {"smoothScroll", smoothScroll_},
       {"menuCharacterSide", static_cast<std::uint8_t>(menuCharacterSide_)},
       {"addCrosshairNpcToActorList", addCrosshairNpcToActorList_},
-      {"catalogBodyFamilyFilterEnabled", catalogBodyFamilyFilterEnabled_},
+      {"catalogBodyFamilySelection",
+       static_cast<int>(CatalogBrowserState().bodyFamilyFilter)},
       {"specialEffectProtectedSlots",
        BuildSpecialEffectProtectedSlotNumbers(
            workbench::GetSpecialEffectProtectedSlotMask())},
@@ -411,12 +413,12 @@ void Menu::SaveUserSettings() const {
       {"toggleModifier", toggleModifier_},
       {"theme", themeName_},
       {"catalogPreviewSelected", CatalogBrowserState().previewSelected},
-      {"catalogFavoritesOnly", CatalogBrowserState().favoritesOnly},
       {"catalogInventoryOnly", CatalogBrowserState().inventoryOnly},
       {"catalogHideUnnamedGear", CatalogBrowserState().hideUnnamedGear},
       {"catalogHostMode", catalogPane_.hostMode == ui::catalog::HostMode::Popout
                               ? "popout"
                               : "docked"}};
+  CatalogBrowserState().favoriteFilters.Save(json);
   output << json.dump(2) << '\n';
 }
 

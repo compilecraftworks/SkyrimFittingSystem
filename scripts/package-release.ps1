@@ -118,6 +118,15 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
+    'RELEASE-NOTES-v1.7.2.md', 'RELEASE-NOTES-v1.7.2-ko.md',
+    'V1.7.2-KIT-INTEGRATION.md',
+    'GITHUB-RELEASE-v1.7.2.md',
+    'HH-OFFSET-AND-INVENTORY-FOLLOWUP-2026-09-28.md',
+    'HH-PENDING-ATTACHMENT-FIX-2026-09-29.md',
+    'SKYUI-PERFORMANCE-COVERAGE-2026-09-29.md',
+    'SKYUI-QUERY-ALTERNATIVE-PLAN-2026-09-29.md',
+    'SKYUI-QUERY-COST-FIX-2026-09-29.md',
+    'nexus-changelog-v1.7.2-en.txt', 'nexus-changelog-v1.7.2-ko.txt',
     'RELEASE-NOTES-v1.7.1.md', 'RELEASE-NOTES-v1.7.1-ko.md',
     'NPC-DIALOGUE-PERFORMANCE-2026-09-24.md', 'GITHUB-RELEASE-v1.7.1.md',
     'nexus-changelog-v1.7.1-en.txt', 'nexus-changelog-v1.7.1-ko.txt',

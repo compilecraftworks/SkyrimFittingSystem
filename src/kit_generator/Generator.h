@@ -1,5 +1,7 @@
 #pragma once
 
+#include "catalog/BodyFamily.h"
+
 #include <atomic>
 #include <cstdint>
 #include <memory>
@@ -27,6 +29,7 @@ struct ArmorRecord {
   bool enchanted{false};
   bool adultVariant{false};
   bool nsfw{false};
+  body_family::Mask bodyFamilyMask{0};
 
   [[nodiscard]] std::string_view DisplayName() const;
   [[nodiscard]] std::string Identifier() const;
@@ -42,6 +45,8 @@ struct PluginSource {
   std::string name;
   std::vector<ArmorRecord> armors;
   bool selected{false};
+  bool hasWornArmorModel{false};
+  unsigned bodyFilters{1U};
   std::shared_ptr<std::atomic<OriginalGroupingAssessment>> groupingAssessment{
       std::make_shared<std::atomic<OriginalGroupingAssessment>>(
           OriginalGroupingAssessment::Pending)};
@@ -93,7 +98,6 @@ public:
   [[nodiscard]] const std::vector<PluginSource> &PluginSources() const;
   [[nodiscard]] bool SetPluginSourceSelected(std::size_t a_index,
                                              bool a_selected);
-  void SetAllPluginSourcesSelected(bool a_selected);
   [[nodiscard]] const std::vector<GeneratedKit> &GeneratedKits() const;
   [[nodiscard]] bool RenameGeneratedKit(std::size_t a_kitIndex,
                                         std::string a_name);
@@ -117,7 +121,8 @@ public:
       std::string &a_error);
   [[nodiscard]] std::size_t DeleteGeneratedKits(
       const std::vector<std::size_t> &a_indices);
-  [[nodiscard]] std::size_t CreateKitFiles(std::string &a_error);
+  [[nodiscard]] std::size_t CreateKitFiles(
+      const std::vector<std::size_t> &a_indices, std::string &a_error);
   [[nodiscard]] bool IncludeSafetyPrefix() const;
 
 private:

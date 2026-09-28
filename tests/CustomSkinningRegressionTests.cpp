@@ -67,8 +67,10 @@ struct ConcreteVisitor : RE::InventoryChanges::IItemChangeVisitor {
   }
 };
 struct DisplaySet { bool active; };
-DisplaySet BuildDisplaySet(RE::Actor* actor) { return {actor && actor->active}; }
-std::uint32_t CollectHiddenWornSlotMask(RE::TESObjectREFR* ref, const DisplaySet&) {
+std::unordered_set<const RE::TESObjectARMO*> CollectEquippedArmors(RE::Actor*) { return {}; }
+#include "WornSnapshot.production.inc"
+DisplaySet BuildDisplaySet(RE::Actor* actor, bool, EquippedArmorSnapshot*) { return {actor && actor->active}; }
+std::uint32_t CollectHiddenWornSlotMask(RE::TESObjectREFR* ref, const DisplaySet&, EquippedArmorSnapshot&) {
   return ref && ref->As<RE::Actor>()->hideActual ? 4 : 0;
 }
 struct HiddenRealEquipmentFilterVisitor : RE::InventoryChanges::IItemChangeVisitor {

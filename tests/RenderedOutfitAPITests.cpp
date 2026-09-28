@@ -482,7 +482,10 @@ int main() {
   display.armors = {&fittingBody, &accessory, &dynamic};
   display.armorSlotMasks = {4, 1u << 26, 1u << 16};
   std::unordered_set<const RE::TESObjectARMO*> equipped{&realBody, &cover};
-  PrepareOutfitValue(&producerActor, display, equipped);
+  std::optional<std::vector<const RE::TESObjectARMO*>> visibleActual;
+  PrepareOutfitValue(&producerActor, display, equipped, &visibleActual);
+  Check(visibleActual && visibleActual->empty(),
+        "producer hands off a valid empty list, distinct from no current display decision");
   Query(producerActor.id, out); ro::QueuePump(); SKSE::tasks.Run();
   Check(Query(producerActor.id, out, item, 4) == abi::Status::Ready &&
         out.requiredCount == 3 && item[0].formID == fittingBody.id &&
@@ -497,7 +500,9 @@ int main() {
         out.revision == noChangeRevision && SKSE::tasks.queued == noChangeTasks,
         "real producer: unchanged builds do not schedule publication");
   realBody.protectedSlot = true;
-  PrepareOutfitValue(&producerActor, display, equipped); ro::QueuePump(); SKSE::tasks.Run();
+  PrepareOutfitValue(&producerActor, display, equipped, &visibleActual); ro::QueuePump(); SKSE::tasks.Run();
+  Check(visibleActual && *visibleActual == std::vector<const RE::TESObjectARMO*>{&realBody},
+        "current-query handoff shares the producer's protected/visible-actual decision");
   Check(Query(producerActor.id, out, item, 4) == abi::Status::Ready &&
         out.requiredCount == 4 && item[0].source == abi::Actual &&
         out.bodyFlags == (abi::ArmorCuirass | abi::ClothingBody), "real producer: protected actual slots remain visible");
@@ -516,7 +521,8 @@ int main() {
   Check(Query(producerActor.id, out, item, 4) == abi::Status::Ready && !out.requiredCount,
         "real producer: managed empty remains distinct from fallback");
   display.active = false;
-  PrepareOutfitValue(&producerActor, display, equipped); ro::QueuePump(); SKSE::tasks.Run();
+  PrepareOutfitValue(&producerActor, display, equipped, &visibleActual); ro::QueuePump(); SKSE::tasks.Run();
+  Check(!visibleActual, "inactive producer cannot hand off a previous query's visible list");
   Check(Query(producerActor.id, out, item, 4) == abi::Status::NotManaged,
         "real producer: inactive SFS permits actual-equipment fallback");
 

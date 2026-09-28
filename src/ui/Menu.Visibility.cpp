@@ -229,7 +229,7 @@ void Menu::OnMenuShow() {
 
 void Menu::OnMenuHide() {
   ui::MenuCharacterPresentation::GetSingleton()->Restore();
-  hooks::ResetInputFilterState();
+  hooks::ResetInputFilterState(true);
   InputManager::GetSingleton()->SetShortcutSuppressionActive(false);
   if (!initialized_ || !enabled_) {
     return;
@@ -332,18 +332,23 @@ void Menu::HandleCancel() {
   Close();
 }
 
-bool Menu::QueueKitListCommand(const KitListCommand a_command) {
-  if (!enabled_ || wantTextInput_) {
+bool Menu::IsKeyboardListNavigationActive() const {
+  if (!enabled_ || wantTextInput_ || IsCapturingToggleKey()) {
     return false;
   }
-
   const auto activeTab = CatalogBrowserState().activeTab;
-  const auto listTab = activeTab == ui::catalog::BrowserTab::Gear ||
-                       activeTab == ui::catalog::BrowserTab::Outfits ||
-                       activeTab == ui::catalog::BrowserTab::Kits ||
-                       activeTab == ui::catalog::BrowserTab::KitGenerator;
-  if (!listTab ||
-      (a_command == KitListCommand::Back &&
+  return activeTab == ui::catalog::BrowserTab::Gear ||
+         activeTab == ui::catalog::BrowserTab::Outfits ||
+         activeTab == ui::catalog::BrowserTab::Kits ||
+         activeTab == ui::catalog::BrowserTab::KitGenerator;
+}
+
+bool Menu::QueueKitListCommand(const KitListCommand a_command) {
+  if (!IsKeyboardListNavigationActive()) {
+    return false;
+  }
+  const auto activeTab = CatalogBrowserState().activeTab;
+  if ((a_command == KitListCommand::Back &&
        activeTab != ui::catalog::BrowserTab::KitGenerator) ||
       (a_command == KitListCommand::NextPane &&
        activeTab != ui::catalog::BrowserTab::KitGenerator)) {
@@ -438,11 +443,7 @@ bool Menu::HandleMenuUserEvent(const std::string_view a_eventName) {
     return true;
   }
 
-  if (!enabled_ || wantTextInput_ ||
-      (CatalogBrowserState().activeTab != ui::catalog::BrowserTab::Gear &&
-       CatalogBrowserState().activeTab != ui::catalog::BrowserTab::Outfits &&
-       CatalogBrowserState().activeTab != ui::catalog::BrowserTab::Kits &&
-       CatalogBrowserState().activeTab != ui::catalog::BrowserTab::KitGenerator)) {
+  if (!IsKeyboardListNavigationActive()) {
     return false;
   }
 

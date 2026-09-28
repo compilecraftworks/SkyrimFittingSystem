@@ -1,8 +1,13 @@
 #include "UI.h"
 
 #include "Generator.h"
+#include "BodyFilter.h"
 #include "Localization.h"
+#include "PluginSelection.h"
+#include "ResultRow.h"
 #include "ui/Menu.h"
+#include "ui/Localization.h"
+#include "ui/components/WrappedTooltip.h"
 #if defined(SFS_PERSONAL_KIT_COMPLETION)
 #include "../../private/personal_kit_completion/PersonalKitCompletion.h"
 #endif
@@ -191,6 +196,36 @@ void UI::Draw() {
   }
 }
 
+bool UI::DrawBodyFilter(const char* a_id,
+                        ui::catalog::BodyFamilyFilter& a_filter) {
+  auto* localization = ui::Localization::GetSingleton();
+  const std::array<std::string_view, 7> labels{
+      localization->Get("catalog.body_family.all"), "CBBE/3BA", "UNP/BHUNP",
+      "UBE", "HIMBO", "SAM", localization->Get("catalog.body_family.vanilla")};
+  float width = 0;
+  for (const auto label : labels)
+    width = (std::max)(width, ImGui::CalcTextSize(label.data()).x);
+  ImGui::SetNextItemWidth((std::min)(ImGui::GetContentRegionAvail().x,
+      width + ImGui::GetFrameHeight() + ImGui::GetStyle().FramePadding.x * 2));
+  bool changed = false;
+  if (ImGui::BeginCombo(a_id, labels[static_cast<std::size_t>(a_filter)].data())) {
+    for (std::size_t index = 0; index < labels.size(); ++index) {
+      const bool selected = a_filter == ui::catalog::kBodyFamilyFilters[index];
+      if (ImGui::Selectable(labels[index].data(), selected) && !selected) {
+        a_filter = ui::catalog::kBodyFamilyFilters[index];
+        changed = true;
+      }
+      if (selected) ImGui::SetItemDefaultFocus();
+    }
+    ImGui::EndCombo();
+  }
+  if (ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort)) {
+    ui::components::DrawWrappedTooltip(
+        Localization::Get().Text("body_filter_hint").c_str());
+  }
+  return changed;
+}
+
 void UI::DrawPluginSelection() {
   int moveDelta = 0;
   bool applySelected = false;
@@ -216,19 +251,20 @@ void UI::DrawPluginSelection() {
   const auto scan = localization.Text("plugins.scan");
 
   ImGui::TextUnformatted(title.c_str());
-  if (ImGui::Button(selectAll.c_str())) {
-    generator.SetAllPluginSourcesSelected(true);
-  }
+  const bool selectVisible = ImGui::Button(selectAll.c_str());
   ImGui::SameLine();
-  if (ImGui::Button(clearAll.c_str())) {
-    generator.SetAllPluginSourcesSelected(false);
-  }
+  const bool clearVisible = ImGui::Button(clearAll.c_str());
   const auto selectedCount = static_cast<std::size_t>(std::ranges::count_if(
       sources, [](const auto &source) { return source.selected; }));
   DrawRightAlignedButton(
       scan.c_str(),
       [&]() {
         if (generator.StartScan(includeSafetyPrefix_)) {
+          resultSelection_.Reset(0);
+          focusedKitIndex_.reset();
+          detailKitIndex_.reset();
+          renamingKitIndex_.reset();
+          ClearCandidatePreview();
           SetCreationStatus({}, false);
           view_ = View::ScanProgress;
         }
@@ -237,9 +273,23 @@ void UI::DrawPluginSelection() {
 
   const auto pluginSearchHint = localization.Text("search.plugins_hint");
   ImGui::SetNextItemWidth(-1.0F);
-  ImGui::InputTextWithHint("##plugin-search", pluginSearchHint.c_str(),
-                           pluginSearchBuffer_.data(),
-                           pluginSearchBuffer_.size());
+  bool filterChanged = ImGui::InputTextWithHint(
+      "##plugin-search", pluginSearchHint.c_str(), pluginSearchBuffer_.data(),
+      pluginSearchBuffer_.size());
+  const auto modelFilter = localization.Text("plugins.worn_models_only");
+  filterChanged |= DrawBodyFilter("##plugin-body-family", pluginBodyFilter_);
+  ImGui::SameLine();
+  filterChanged |= ImGui::Checkbox(modelFilter.c_str(), &wornModelPluginsOnly_);
+  if (ImGui::IsItemHovered()) {
+    ImGui::SetTooltip("%s", localization.Text("plugins.worn_models_hint").c_str());
+  }
+  ImGui::TextDisabled("%s", localization.Text("plugins.selection_hint").c_str());
+  if (filterChanged) {
+    focusedPluginIndex_.reset();
+    pluginSelectionAnchor_.reset();
+    moveDelta = 0;
+    applySelected = false;
+  }
   ImGui::Separator();
   const auto armorCount = std::accumulate(
       sources.begin(), sources.end(), std::size_t{},
@@ -277,7 +327,9 @@ void UI::DrawPluginSelection() {
     std::vector<std::size_t> visibleSourceIndices;
     visibleSourceIndices.reserve(sources.size());
     for (std::size_t index = 0; index < sources.size(); ++index) {
-      if (MatchesSearch(sources[index].name, pluginSearchBuffer_.data())) {
+      if ((!wornModelPluginsOnly_ || sources[index].hasWornArmorModel) &&
+          (sources[index].bodyFilters & (1U << static_cast<unsigned>(pluginBodyFilter_))) != 0 &&
+          MatchesSearch(sources[index].name, pluginSearchBuffer_.data())) {
         visibleSourceIndices.push_back(index);
       }
     }
@@ -307,6 +359,22 @@ void UI::DrawPluginSelection() {
       sortSpecs->SpecsDirty = false;
     }
 
+    const auto setSelected = [&](const std::size_t index, const bool selected) {
+      static_cast<void>(generator.SetPluginSourceSelected(index, selected));
+    };
+    if (selectVisible || clearVisible) {
+      for (const auto index : visibleSourceIndices) setSelected(index, selectVisible);
+      pluginSelectionAnchor_.reset();
+    }
+    const auto selectSource = [&](const std::size_t index, const bool selected) {
+      // Ctrl explicitly toggles one row; Shift applies the same state to the
+      // anchor-to-clicked visible range. Existing checkbox multi-select stays.
+      const auto& io = ImGui::GetIO();
+      SelectPluginRows(visibleSourceIndices, index, selected,
+                       io.KeyShift, pluginSelectionAnchor_,
+                       setSelected);
+      focusedPluginIndex_ = index;
+    };
     moveDelta = std::clamp(moveDelta, -1, 1);
     int focusedRowIndex = -1;
     for (std::size_t rowIndex = 0; rowIndex < visibleSourceIndices.size();
@@ -328,15 +396,14 @@ void UI::DrawPluginSelection() {
       focusedPluginIndex_ =
           visibleSourceIndices[static_cast<std::size_t>(focusedRowIndex)];
     }
-    if (applySelected && focusedPluginIndex_.has_value() &&
+    if (applySelected && focusedRowIndex >= 0 && focusedPluginIndex_.has_value() &&
         *focusedPluginIndex_ < sources.size()) {
       const auto &focused = sources[*focusedPluginIndex_];
-      static_cast<void>(generator.SetPluginSourceSelected(
-          *focusedPluginIndex_, !focused.selected));
+      selectSource(*focusedPluginIndex_, !focused.selected);
     }
     static_cast<void>(previewSelected);
 
-    int requestedScrollRowIndex = moveDelta != 0 ? focusedRowIndex : -1;
+    int requestedScrollRowIndex = (moveDelta != 0 || filterChanged) ? focusedRowIndex : -1;
 
     for (std::size_t rowIndex = 0; rowIndex < visibleSourceIndices.size();
          ++rowIndex) {
@@ -355,15 +422,20 @@ void UI::DrawPluginSelection() {
       ImGui::TableSetColumnIndex(0);
       auto selected = source.selected;
       if (ImGui::Checkbox("##selected", &selected)) {
-        static_cast<void>(
-            generator.SetPluginSourceSelected(sourceIndex, selected));
+        selectSource(sourceIndex, selected);
       }
       ImGui::SameLine();
       if (unsuitable) {
         ImGui::PushStyleColor(ImGuiCol_Text,
                               ImVec4(1.0F, 0.25F, 0.25F, 1.0F));
       }
-      ImGui::TextUnformatted(source.name.c_str());
+      if (ImGui::Selectable(source.name.c_str(), source.selected)) {
+        selectSource(sourceIndex, !source.selected);
+      }
+      if (unsuitable && ImGui::IsItemHovered()) {
+        ui::components::DrawWrappedTooltip(
+            localization.Text("plugins.grouping_warning").c_str());
+      }
       if (unsuitable) {
         ImGui::PopStyleColor();
       }
@@ -482,18 +554,22 @@ void UI::DrawCandidateList() {
   const auto cancelCreation =
       localization.Text("candidates.cancel_creation");
   const auto create = localization.Text("candidates.create");
-  if (candidateGroupSelections_.size() != kits.size()) {
-    candidateGroupSelections_.assign(kits.size(), false);
+  if (resultSelection_.checked.size() != kits.size()) {
+    resultSelection_.Reset(kits.size());
   }
+  auto& checked = resultSelection_.checked;
   const auto mergeSelectionCount = static_cast<std::size_t>(
-      std::ranges::count(candidateGroupSelections_, true));
+      std::ranges::count(checked, true));
+  // Rename remains a single highlighted-row operation; checks are batch
+  // targets for Create/Merge/Delete, not a restriction on row editing.
+  const auto renameSelectionCount = std::ranges::count(resultSelection_.highlighted, true);
   ImGui::TextUnformatted(title.c_str());
-  ImGui::BeginDisabled(mergeSelectionCount != 1);
-  if (ImGui::Button(rename.c_str()) && mergeSelectionCount == 1) {
-    const auto selected = std::ranges::find(candidateGroupSelections_, true);
-    if (selected != candidateGroupSelections_.end()) {
+  ImGui::BeginDisabled(renameSelectionCount != 1);
+  if (ImGui::Button(rename.c_str()) && renameSelectionCount == 1) {
+    const auto selected = std::ranges::find(resultSelection_.highlighted, true);
+    if (selected != resultSelection_.highlighted.end()) {
       const auto index = static_cast<std::size_t>(
-          std::distance(candidateGroupSelections_.begin(), selected));
+          std::distance(resultSelection_.highlighted.begin(), selected));
       renamingKitIndex_ = index;
       renameBuffer_.fill('\0');
       const auto copySize =
@@ -506,12 +582,12 @@ void UI::DrawCandidateList() {
   ImGui::EndDisabled();
 #if defined(SFS_PERSONAL_KIT_COMPLETION)
   ImGui::SameLine();
-  ImGui::BeginDisabled(mergeSelectionCount != 1);
-  if (ImGui::Button("접두사") && mergeSelectionCount == 1) {
-    const auto selected = std::ranges::find(candidateGroupSelections_, true);
-    if (selected != candidateGroupSelections_.end()) {
+  ImGui::BeginDisabled(renameSelectionCount != 1);
+  if (ImGui::Button("접두사") && renameSelectionCount == 1) {
+    const auto selected = std::ranges::find(resultSelection_.highlighted, true);
+    if (selected != resultSelection_.highlighted.end()) {
       const auto index = static_cast<std::size_t>(
-          std::distance(candidateGroupSelections_.begin(), selected));
+          std::distance(resultSelection_.highlighted.begin(), selected));
       prefixKitIndex_ = index;
       const auto candidateIndex =
           (std::min)(kits[index].selectedCandidate,
@@ -535,18 +611,12 @@ void UI::DrawCandidateList() {
   ImGui::SameLine();
   ImGui::BeginDisabled(mergeSelectionCount < 2);
   if (ImGui::Button(merge.c_str()) && mergeSelectionCount >= 2) {
-    std::vector<std::size_t> selectedIndices;
-    for (std::size_t index = 0; index < candidateGroupSelections_.size();
-         ++index) {
-      if (candidateGroupSelections_[index]) {
-        selectedIndices.push_back(index);
-      }
-    }
+    const auto selectedIndices = resultSelection_.CheckedIndices();
     std::string error;
     if (generator.MergeGeneratedKits(selectedIndices, error)) {
       focusedKitIndex_.reset();
       ClearCandidatePreview();
-      candidateGroupSelections_.assign(kits.size(), false);
+      resultSelection_.Reset(kits.size());
       SetCreationStatus(localization.Text("candidates.merge_success"), false);
     } else {
       SetCreationStatus(std::move(error), true);
@@ -556,49 +626,51 @@ void UI::DrawCandidateList() {
   ImGui::SameLine();
   ImGui::BeginDisabled(mergeSelectionCount == 0);
   if (ImGui::Button(deleteItems.c_str()) && mergeSelectionCount > 0) {
-    std::vector<std::size_t> selectedIndices;
-    for (std::size_t index = 0; index < candidateGroupSelections_.size();
-         ++index) {
-      if (candidateGroupSelections_[index]) {
-        selectedIndices.push_back(index);
-      }
-    }
+    const auto selectedIndices = resultSelection_.CheckedIndices();
     const auto deleted = generator.DeleteGeneratedKits(selectedIndices);
     focusedKitIndex_.reset();
     ClearCandidatePreview();
-    candidateGroupSelections_.assign(kits.size(), false);
+    resultSelection_.Reset(kits.size());
     SetCreationStatus(
         localization.Format("candidates.delete_success", deleted), false);
   }
   ImGui::EndDisabled();
+  ImGui::SameLine();
+  const bool selectVisible = ImGui::Button(localization.Text("common.select_all").c_str());
+  if (ImGui::IsItemHovered())
+    ui::components::DrawWrappedTooltip(localization.Text("candidates.select_all_hint").c_str());
+  ImGui::SameLine();
+  if (ImGui::Button(localization.Text("common.clear_all").c_str())) {
+    resultSelection_.ClearChecks();
+  }
+  // Keep the action row usable in narrow workbench layouts.
   const auto &style = ImGui::GetStyle();
   const auto cancelWidth = ImGui::CalcTextSize(cancelCreation.c_str()).x +
                            style.FramePadding.x * 2.0F;
   const auto createWidth = ImGui::CalcTextSize(create.c_str()).x +
                            style.FramePadding.x * 2.0F;
-  ImGui::SameLine();
   const auto right = ImGui::GetWindowContentRegionMax().x;
   ImGui::SetCursorPosX((std::max)(
       ImGui::GetCursorPosX(),
       right - cancelWidth - style.ItemSpacing.x - createWidth));
   auto creationCancelled = false;
-  ImGui::BeginDisabled(kits.empty());
+  ImGui::BeginDisabled(std::ranges::none_of(checked, [](bool value) { return value; }));
   if (ImGui::Button(create.c_str())) {
     std::string error;
-    const auto written = generator.CreateKitFiles(error);
+    const auto written = generator.CreateKitFiles(resultSelection_.CheckedIndices(), error);
+    if (written > 0) Menu::GetSingleton()->RefreshExternalGeneratedKits();
     if (!error.empty()) {
       SetCreationStatus(
           localization.Format("create.partial_error", written, error), true);
     } else {
       SetCreationStatus(localization.Format("create.success", written), false);
-      Menu::GetSingleton()->RefreshExternalGeneratedKits();
     }
   }
   ImGui::EndDisabled();
   ImGui::SameLine();
   if (ImGui::Button(cancelCreation.c_str())) {
     generator.DiscardScanResults();
-    candidateGroupSelections_.clear();
+    resultSelection_.Reset(0);
     renamingKitIndex_.reset();
 #if defined(SFS_PERSONAL_KIT_COMPLETION)
     prefixKitIndex_.reset();
@@ -616,8 +688,14 @@ void UI::DrawCandidateList() {
 
   const auto kitSearchHint = localization.Text("search.kits_hint");
   ImGui::SetNextItemWidth(-1.0F);
-  ImGui::InputTextWithHint("##kit-search", kitSearchHint.c_str(),
+  bool filterChanged = ImGui::InputTextWithHint("##kit-search", kitSearchHint.c_str(),
                            kitSearchBuffer_.data(), kitSearchBuffer_.size());
+  filterChanged |= DrawBodyFilter("##result-body-family", resultBodyFilter_);
+  if (filterChanged) {
+    resultSelection_.ClearHighlights();
+    focusedKitIndex_.reset();
+  }
+  ImGui::SameLine();
   const auto previewSelectedLabel =
       localization.Text("preview.selected");
   if (ImGui::Checkbox(previewSelectedLabel.c_str(), &previewSelected_)) {
@@ -629,14 +707,6 @@ void UI::DrawCandidateList() {
                        kits[*focusedKitIndex_].selectedCandidate);
     }
   }
-  const auto multiSelectGuide = localization.Text("candidates.multi_select_guide");
-  ImGui::SameLine();
-  const auto multiSelectGuideWidth =
-      ImGui::CalcTextSize(multiSelectGuide.c_str()).x;
-  ImGui::SetCursorPosX((std::max)(ImGui::GetCursorPosX(),
-                                  ImGui::GetWindowContentRegionMax().x -
-                                      multiSelectGuideWidth));
-  ImGui::TextDisabled("%s", multiSelectGuide.c_str());
 
   if (renamingKitIndex_.has_value() && *renamingKitIndex_ < kits.size()) {
     const auto renameTitle = localization.Text("candidates.rename_title");
@@ -644,8 +714,8 @@ void UI::DrawCandidateList() {
     const auto apply = localization.Text("candidates.rename_apply");
     const auto cancel = localization.Text("candidates.rename_cancel");
     // The rename dialog is intentionally modal without washing out the
-    // workbench behind it. Input is still gated explicitly below because the
-    // row hit-testing helper is not constrained by ImGui's popup hover rules.
+    // workbench behind it. Queued game input is explicitly gated below, while
+    // the row widgets obey ImGui's popup/active-item capture rules.
     ImGui::PushStyleColor(ImGuiCol_ModalWindowDimBg,
                           ImVec4(0.0F, 0.0F, 0.0F, 0.0F));
     if (ImGui::BeginPopupModal("##rename-kit-popup", nullptr,
@@ -770,14 +840,11 @@ void UI::DrawCandidateList() {
     std::string displayName;
     std::string pluginDisplay;
   };
-  const auto hasAmbiguous = std::ranges::any_of(kits, [](const auto &kit) {
-    return kit.candidates.size() > 1;
-  });
   std::vector<CandidateListRow> candidateRows;
   candidateRows.reserve(kits.size());
   for (std::size_t kitIndex = 0; kitIndex < kits.size(); ++kitIndex) {
     auto &kit = kits[kitIndex];
-    if (kit.candidates.size() <= 1) {
+    if (kit.candidates.empty() || !MatchesKitBodyFilter(kit, resultBodyFilter_)) {
       continue;
     }
     std::vector<std::string> pluginNames;
@@ -831,6 +898,12 @@ void UI::DrawCandidateList() {
         {kitIndex, std::move(displayName), std::move(pluginDisplay)});
   }
 
+  const auto checkedCount = resultSelection_.CheckedIndices().size();
+  const auto visibleChecked = std::ranges::count_if(candidateRows,
+      [&](const auto& row) { return checked[row.kitIndex]; });
+  ImGui::TextDisabled("%s", localization.Format("candidates.checked_summary",
+      checkedCount, checkedCount - static_cast<std::size_t>(visibleChecked)).c_str());
+
   const auto nameColumn = localization.Text("candidates.column.kit_name");
   const auto espColumn = localization.Text("candidates.column.esp");
   const auto countColumn =
@@ -858,7 +931,7 @@ void UI::DrawCandidateList() {
   moveDelta = std::clamp(moveDelta, -1, 1);
   auto backRequested = Menu::GetSingleton()->ConsumeKitListBack();
   static_cast<void>(Menu::GetSingleton()->ConsumeKitListNextPane());
-  if (modalPopupOpen) {
+  if (modalPopupOpen || filterChanged) {
     // Do not let global list navigation, preview, or Back leak through the
     // modal while the text field owns keyboard input.
     moveDelta = 0;
@@ -871,13 +944,16 @@ void UI::DrawCandidateList() {
   bool focusChanged = false;
   bool openDetailRequested = false;
 
-  if (ImGui::BeginTable("##kit-candidate-groups-v2", 3,
+  if (ImGui::BeginTable("##kit-candidate-groups-v3", 4,
                         ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg |
                             ImGuiTableFlags_ScrollY |
                             ImGuiTableFlags_SizingStretchProp |
                             ImGuiTableFlags_Resizable |
                             ImGuiTableFlags_Sortable,
                         ImVec2(0.0F, 0.0F))) {
+    ImGui::TableSetupColumn("##checks", ImGuiTableColumnFlags_WidthFixed |
+        ImGuiTableColumnFlags_NoSort | ImGuiTableColumnFlags_NoResize,
+        ImGui::GetFrameHeight(), 3);
     ImGui::TableSetupColumn(nameColumn.c_str(),
                             ImGuiTableColumnFlags_WidthStretch |
                                 ImGuiTableColumnFlags_DefaultSort,
@@ -890,11 +966,11 @@ void UI::DrawCandidateList() {
                             countColumnWidth, 2);
     ImGui::TableSetupScrollFreeze(0, 1);
     ImGui::TableNextRow(ImGuiTableRowFlags_Headers);
-    ImGui::TableSetColumnIndex(0);
-    ImGui::TableHeader(nameColumn.c_str());
     ImGui::TableSetColumnIndex(1);
-    ImGui::TableHeader(espColumn.c_str());
+    ImGui::TableHeader(nameColumn.c_str());
     ImGui::TableSetColumnIndex(2);
+    ImGui::TableHeader(espColumn.c_str());
+    ImGui::TableSetColumnIndex(3);
     ImGui::TableHeader("##candidate-count-header");
     const auto countHeaderMin = ImGui::GetItemRectMin();
     const auto countHeaderMax = ImGui::GetItemRectMax();
@@ -935,6 +1011,11 @@ void UI::DrawCandidateList() {
       sortSpecs->SpecsDirty = false;
     }
 
+    std::vector<std::size_t> visibleKitIndices;
+    visibleKitIndices.reserve(candidateRows.size());
+    for (const auto& row : candidateRows) visibleKitIndices.push_back(row.kitIndex);
+    if (selectVisible) resultSelection_.CheckVisible(visibleKitIndices);
+
     // Navigation must run after the same local row order used for drawing.
     // Previously this ran before ImGui's sortable table reordered
     // candidateRows, so an Up/Down press advanced the preview in one order
@@ -951,7 +1032,7 @@ void UI::DrawCandidateList() {
     if (focusedRowIndex < 0) {
       for (std::size_t rowIndex = 0; rowIndex < candidateRows.size();
            ++rowIndex) {
-        if (candidateGroupSelections_[candidateRows[rowIndex].kitIndex]) {
+        if (resultSelection_.highlighted[candidateRows[rowIndex].kitIndex]) {
           focusedRowIndex = static_cast<int>(rowIndex);
           break;
         }
@@ -973,8 +1054,7 @@ void UI::DrawCandidateList() {
         // prevents a prior mouse selection from looking like a second focus
         // row while leaving Ctrl+left-click multi-selection intact until the
         // user starts a new traversal.
-        candidateGroupSelections_.assign(kits.size(), false);
-        candidateGroupSelections_[*focusedKitIndex_] = true;
+        resultSelection_.SelectRow(visibleKitIndices, *focusedKitIndex_, false, false);
         focusChanged = true;
       } else if (applySelected) {
         openDetailRequested = true;
@@ -991,116 +1071,46 @@ void UI::DrawCandidateList() {
       }
     } else {
       focusedKitIndex_.reset();
-      ClearCandidatePreview();
+      // An empty filtered list has no input target, but is not a request to
+      // remove the existing workbench preview (including subsequent frames).
     }
 
     for (const auto &row : candidateRows) {
       const auto kitIndex = row.kitIndex;
       const auto &kit = kits[kitIndex];
-      ImGui::TableNextRow();
-      ImGui::TableSetColumnIndex(0);
-      // Keep the result list on the same scroll-safe row input path as the
-      // main Gear/Outfits/Kits tables.  The old manual IsMouseHoveringRect()
-      // check used table coordinates directly; after a long vertical scroll
-      // it could resolve a click to the wrong generated-kit index.
-      const auto rowContentPos = ImGui::GetCursorScreenPos();
-      const auto rowHeight = ImGui::GetTextLineHeightWithSpacing();
-      ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(0, 0, 0, 0));
-      ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(0, 0, 0, 0));
-      ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(0, 0, 0, 0));
       const bool focused = focusedKitIndex_.has_value() &&
                            *focusedKitIndex_ == kitIndex;
-      const bool selectedForMerge =
-          kitIndex < candidateGroupSelections_.size() &&
-          candidateGroupSelections_[kitIndex];
       ImGui::PushID(static_cast<int>(kitIndex));
-      ImGui::Selectable("##candidate-group-row", selectedForMerge,
-                        ImGuiSelectableFlags_SpanAllColumns |
-                            ImGuiSelectableFlags_AllowOverlap |
-                            ImGuiSelectableFlags_AllowDoubleClick,
-                        ImVec2(0.0F, rowHeight));
-      const bool rowHovered = !modalPopupOpen && ImGui::IsItemHovered();
-      ImGui::PopStyleColor(3);
-      ImGui::SetCursorScreenPos(rowContentPos);
-      if (focused || selectedForMerge) {
-        ImGui::TableSetBgColor(ImGuiTableBgTarget_RowBg0,
-                               focused ? IM_COL32(72, 115, 176, 86)
-                                       : IM_COL32(72, 115, 176, 42));
+      auto rowChecked = static_cast<bool>(checked[kitIndex]);
+      const auto countLabel = std::format("{}  >",
+          localization.Format("candidates.count", kit.candidates.size()));
+      const auto action = DrawResultRow(rowChecked,
+          resultSelection_.highlighted[kitIndex], focused,
+          row.displayName.c_str(), row.pluginDisplay.c_str(), countLabel.c_str());
+      if (!modalPopupOpen && action.checkChanged) {
+        resultSelection_.CheckRow(visibleKitIndices, kitIndex, rowChecked);
       }
-      const auto openCandidateDetail = [&]() {
+      if (!modalPopupOpen && action.openDetail) {
         focusedKitIndex_ = kitIndex;
         static_cast<void>(
             generator.ResetGeneratedKitDraftCandidate(kitIndex));
         detailKitIndex_ = kitIndex;
         view_ = View::CandidateDetail;
         PreviewCandidate(kitIndex, kit.selectedCandidate);
-      };
-      const auto updateCandidateGroupSelection = [&](const bool a_multiple) {
-        if (a_multiple) {
-          candidateGroupSelections_[kitIndex] =
-              !candidateGroupSelections_[kitIndex];
-        } else {
-          candidateGroupSelections_.assign(kits.size(), false);
-          candidateGroupSelections_[kitIndex] = true;
-        }
-        if (candidateGroupSelections_[kitIndex]) {
-          focusedKitIndex_ = kitIndex;
-          PreviewCandidate(kitIndex, kit.selectedCandidate);
-          return;
-        }
-
-        const auto nextSelection =
-            std::ranges::find(candidateGroupSelections_, true);
-        if (nextSelection == candidateGroupSelections_.end()) {
-          focusedKitIndex_.reset();
-          ClearCandidatePreview();
-          return;
-        }
-        const auto nextKitIndex = static_cast<std::size_t>(std::distance(
-            candidateGroupSelections_.begin(), nextSelection));
-        focusedKitIndex_ = nextKitIndex;
-        PreviewCandidate(nextKitIndex,
-                         kits[nextKitIndex].selectedCandidate);
-      };
-      // One click anywhere on a result selects it and previews its current
-      // candidate. Double-click, Enter, or the game's Activate action is the
-      // deliberate transition into the candidate list. Ctrl+left-click is
-      // the deliberate multi-select gesture for rename/merge/delete.
-      ImGui::TextUnformatted(row.displayName.c_str());
-      if (focused && focusChanged) {
+      } else if (!modalPopupOpen && action.clicked) {
+        const auto& io = ImGui::GetIO();
+        resultSelection_.SelectRow(visibleKitIndices, kitIndex, io.KeyCtrl, io.KeyShift);
+        PreviewCandidate(kitIndex, kit.selectedCandidate);
+      }
+      if (focused && (focusChanged || filterChanged)) {
         ScrollCurrentTableRowIntoView();
-      }
-      ImGui::TableSetColumnIndex(1);
-      ImGui::TextUnformatted(row.pluginDisplay.c_str());
-      ImGui::TableSetColumnIndex(2);
-      const auto candidateCount = localization.Format(
-          "candidates.count", kit.candidates.size());
-      const auto openLabel = std::format("{}  >", candidateCount);
-      const auto textSize = ImGui::CalcTextSize(openLabel.c_str());
-      const auto cursorX = ImGui::GetCursorPosX();
-      const auto availableWidth = ImGui::GetContentRegionAvail().x;
-      ImGui::SetCursorPosX(
-          cursorX + (std::max)(0.0F, availableWidth - textSize.x));
-      ImGui::TextUnformatted(openLabel.c_str());
-      const auto doubleClicked =
-          rowHovered && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left);
-      const auto releasedOnRow =
-          rowHovered && ImGui::IsMouseReleased(ImGuiMouseButton_Left);
-      if (doubleClicked) {
-        openCandidateDetail();
-      } else if (releasedOnRow) {
-        updateCandidateGroupSelection(ImGui::GetIO().KeyCtrl);
-      }
-      if (rowHovered) {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
       }
       ImGui::PopID();
     }
     if (candidateRows.empty()) {
       ImGui::TableNextRow();
       ImGui::TableSetColumnIndex(0);
-      const auto none = localization.Text(
-          hasAmbiguous ? "search.none" : "candidates.none_ambiguous");
+      const auto none = localization.Text("search.none");
       ImGui::TextDisabled("%s", none.c_str());
     }
     ImGui::EndTable();

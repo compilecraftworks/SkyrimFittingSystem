@@ -1,6 +1,9 @@
 #pragma once
 
 #include "imgui.h"
+#include "ui/catalog/BodyFamilyFilter.h"
+#include "ui/catalog/FilterFocus.h"
+#include "ui/catalog/FavoriteFilters.h"
 
 #include <string>
 #include <unordered_set>
@@ -28,7 +31,9 @@ struct BrowserState {
   int kitCollectionIndex{0};
   std::vector<bool> selectedSlotFilters;
   bool previewSelected{true};
-  bool favoritesOnly{false};
+  BodyFamilyFilter bodyFamilyFilter{BodyFamilyFilter::All};
+  FilterFocus filterFocus;
+  FavoriteFilters favoriteFilters;
   bool inventoryOnly{false};
   bool hideUnnamedGear{true};
   std::string selectedKey;
@@ -41,5 +46,17 @@ struct BrowserState {
   ImGuiTextFilter gearPluginFilter;
   ImGuiTextFilter outfitPluginFilter;
   ImGuiTextFilter kitCollectionFilter;
+
+  bool FavoritesOnlyFor(BrowserTab tab) const {
+    if (tab == BrowserTab::Gear) return favoriteFilters.gear;
+    if (tab == BrowserTab::Outfits) return favoriteFilters.outfits;
+    return tab == BrowserTab::Kits && favoriteFilters.kits;
+  }
+
+  bool &ActiveFavoritesOnly() {
+    if (activeTab == BrowserTab::Gear) return favoriteFilters.gear;
+    if (activeTab == BrowserTab::Outfits) return favoriteFilters.outfits;
+    return favoriteFilters.kits; // Used only by the three catalog tabs.
+  }
 };
 } // namespace sfs::ui::catalog

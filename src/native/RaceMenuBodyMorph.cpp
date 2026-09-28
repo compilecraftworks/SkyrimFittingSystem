@@ -58,6 +58,8 @@ struct RegisteredAppearanceAttachmentRoot {
   RE::NiPointer<RE::NiAVObject> object;
   RE::FormID armorFormID{0};
   bool firstPerson{false};
+  std::uint8_t detachedChecks{0};
+  std::uint64_t observation{0};
 
   [[nodiscard]] bool
   operator==(const RegisteredAppearanceAttachmentRoot &a_other) const {
@@ -599,8 +601,13 @@ FindNewAttachmentRoots(
     RegisteredAppearanceAttachmentRoot entry{.object = node,
                                               .armorFormID = a_armorFormID,
                                               .firstPerson = false};
-    if (std::ranges::find(registered, entry) == registered.end()) {
+    entry.observation = ++g_nodeObservation;
+    const auto existing = std::ranges::find(registered, entry);
+    if (existing == registered.end()) {
       registered.push_back(std::move(entry));
+    } else {
+      existing->detachedChecks = 0;
+      existing->observation = entry.observation;
     }
   }
   if (registered.empty()) {
@@ -613,6 +620,7 @@ struct RegisteredHighHeelState {
   std::optional<float> offset;
   bool staleAttachmentStillPresent{false};
   bool previouslyActive{false};
+  bool awaitingAttachment{false};
 };
 
 [[nodiscard]] RegisteredHighHeelState
@@ -635,36 +643,49 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
     }
   }
 
-  std::erase_if(roots, [&](const RegisteredAppearanceAttachmentRoot &a_entry) {
-    return !a_entry.object ||
-           !IsAttachedToActorRoot(a_actor, a_entry.object.get(),
-                                  a_entry.firstPerson);
-  });
-  for (const auto &entry : roots) {
+  // OnAttach can precede grafting, and a rebuild can temporarily reparent the
+  // same branch. Give displayed roots the existing two completion retries,
+  // without using detached metadata as an active offset or retaining it forever.
+  // Query display state outside g_nodeMutex (workbench -> node is the other order).
+  for (auto &entry : roots) {
     const auto *armor =
         RE::TESForm::LookupByID<RE::TESObjectARMO>(entry.armorFormID);
-    if (armor && sfs::native::IsDisplayedFittingArmor(a_actor, armor)) {
+    const bool displayed =
+        armor && sfs::native::IsDisplayedFittingArmor(a_actor, armor);
+    const bool attached = IsAttachedToActorRoot(
+        a_actor, entry.object.get(), entry.firstPerson);
+    entry.detachedChecks = attached ? 0 : entry.detachedChecks + 1;
+    const bool expired = !entry.object ||
+        (!attached && (!displayed || entry.detachedChecks > 2));
+    if (!expired && !attached) {
+      state.awaitingAttachment = true;
+    } else if (!expired && displayed) {
       if (const auto offset = FindLastHighHeelOffset(entry.object.get())) {
         state.offset = offset;
       }
-    } else {
+    } else if (!expired) {
       // DAVE may finish rebuilding on a later task. Do not lower the actor
       // while its old high-heel branch is still visibly attached.
       state.staleAttachmentStillPresent = true;
     }
-  }
-  {
     std::lock_guard lock(g_nodeMutex);
     const auto rootsIt =
         g_registeredAppearanceAttachmentRoots.find(actorFormID);
     if (rootsIt != g_registeredAppearanceAttachmentRoots.end()) {
-      std::erase_if(rootsIt->second,
-                    [&](const RegisteredAppearanceAttachmentRoot &a_entry) {
-                      return !a_entry.object ||
-                             !IsAttachedToActorRoot(a_actor,
-                                                    a_entry.object.get(),
-                                                    a_entry.firstPerson);
-                    });
+      const auto current = std::ranges::find(rootsIt->second, entry);
+      if (current != rootsIt->second.end() &&
+          current->observation == entry.observation) {
+        if (expired) {
+          // roots still owns this node until after the lock is released.
+          rootsIt->second.erase(current);
+        } else {
+          current->detachedChecks = entry.detachedChecks;
+        }
+      } else if (current != rootsIt->second.end()) {
+        // A fresh callback renewed this root during the display query. This
+        // older pass must neither expire it nor clear height on its behalf.
+        state.awaitingAttachment = true;
+      }
       if (rootsIt->second.empty()) {
         g_registeredAppearanceAttachmentRoots.erase(rootsIt);
       }
@@ -933,6 +954,12 @@ void DispatchLegacyUpdateAll(
   }
 
   const auto state = ResolveRegisteredHighHeelState(a_actor);
+  if (!IsCurrentHighHeelSync(a_actor->GetFormID(), a_generation)) {
+    return HighHeelSyncAttempt::Complete;
+  }
+  if (state.awaitingAttachment) {
+    return HighHeelSyncAttempt::Retry;
+  }
   if (!state.offset.has_value() && !state.previouslyActive) {
     return HighHeelSyncAttempt::Complete;
   }

@@ -3,6 +3,7 @@
 #include "InputManager.h"
 #include "Keycode.h"
 #include "input/MenuCancel.h"
+#include "input/KitListNavigation.h"
 #include "api/SkyrimFittingSystemAPI.h"
 #include "native/FittingDye.h"
 #include "runtime/RuntimeLayouts.h"
@@ -46,11 +47,13 @@ std::unordered_set<std::uint32_t> g_downGamepadButtons;
 std::unordered_set<std::uint32_t> g_swallowedGamepadUntilReleaseButtons;
 bool g_shortcutSuppressionWasActive{false};
 
-void ResetShortcutFilterState() {
+void ResetShortcutFilterState(bool a_finishKeyboardPresses = false) {
   std::scoped_lock lock(g_shortcutFilterMutex);
-  g_downKeyboardButtons.clear();
   g_preSuppressionButtons.clear();
-  g_swallowedUntilReleaseButtons.clear();
+  if (!a_finishKeyboardPresses) {
+    g_downKeyboardButtons.clear();
+    g_swallowedUntilReleaseButtons.clear();
+  }
   g_downGamepadButtons.clear();
   g_swallowedGamepadUntilReleaseButtons.clear();
   g_shortcutSuppressionWasActive = false;
@@ -85,9 +88,11 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
       menuEnabled &&
       (sfs::InputManager::GetSingleton()->IsShortcutSuppressionActive() ||
        toggleCaptureActive);
-  // Merely having the SFS menu open must not consume Tab or another mod's
-  // shortcuts. Suppress keyboard events only for an active editable text
-  // cursor (reported by InputManager) or the explicit hotkey-capture dialog.
+  // Reserve only SFS list keys while a list tab owns navigation. Unrelated
+  // shortcuts remain available; text/capture retain their existing suppression.
+  // InputManager already queued the original events before this shared dispatch
+  // filter, so SFS receives the keys but downstream mod hotkey sinks do not.
+  const bool listNavigationActive = menu->IsKeyboardListNavigationActive();
   const auto toggleKey = menu->GetToggleKey();
   const auto toggleModifier = menu->GetToggleModifier();
   const bool gamepadBinding = sfs::keycode::IsGamepadKey(toggleKey);
@@ -122,6 +127,12 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
         const auto scanCode = buttonEvent->GetIDCode();
         const bool isRelease = buttonEvent->IsUp();
 
+        // A fresh down is a new press, not a held SFS-owned press. Recover even
+        // if an intervening release was lost, without blocking closed-UI keys.
+        if (!menuEnabled && buttonEvent->IsDown()) {
+          g_swallowedUntilReleaseButtons.erase(scanCode);
+        }
+
         if (menuEnabled && sfs::input::IsMenuCancel(*buttonEvent)) {
           blockEvent = true;
           if (isRelease) { g_swallowedUntilReleaseButtons.erase(scanCode); }
@@ -142,6 +153,21 @@ void FilterBlockedInputEvents(RE::InputEvent **a_events) {
             if (!isRelease && buttonEvent->IsPressed()) {
               g_swallowedUntilReleaseButtons.insert(scanCode);
             }
+          }
+        } else if (listNavigationActive &&
+                   sfs::input::kit_list::FromScanCode(scanCode) !=
+                       sfs::input::kit_list::KeyboardCommand::None) {
+          // Consume down/hold/up of a press owned by SFS, including its final
+          // release after SFS closes. If another sink saw the initial down
+          // BEFORE SFS opened, let its release through to avoid a stuck key.
+          blockEvent = !isRelease ||
+                       g_swallowedUntilReleaseButtons.contains(scanCode);
+          if (isRelease) {
+            g_swallowedUntilReleaseButtons.erase(scanCode);
+          } else if (buttonEvent->IsPressed() &&
+                     (buttonEvent->IsDown() ||
+                      !g_downKeyboardButtons.contains(scanCode))) {
+            g_swallowedUntilReleaseButtons.insert(scanCode);
           }
         } else if (g_swallowedUntilReleaseButtons.contains(scanCode)) {
           blockEvent = true;
@@ -300,8 +326,8 @@ struct RegisterClassAHook {
 } // namespace
 
 namespace sfs::hooks {
-void ResetInputFilterState() {
-  ResetShortcutFilterState();
+void ResetInputFilterState(bool a_finishKeyboardPresses) {
+  ResetShortcutFilterState(a_finishKeyboardPresses);
   sfs::InputManager::GetSingleton()->SetShortcutSuppressionActive(false);
 }
 

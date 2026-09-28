@@ -1,4 +1,9 @@
 #include "Generator.h"
+#include "BodyFilter.h"
+#include "PluginSelection.h"
+#include "CommunityGrouping.h"
+#include "SheetGrouping.h"
+#include "AddScreenshotGrouping.h"
 
 #include "Localization.h"
 #include "Utf8Path.h"
@@ -22,6 +27,10 @@
 #include <unordered_set>
 
 #include <nlohmann/json.hpp>
+
+#ifndef EXCLUSIVE_SKYRIM_FLAT
+#error SFS kit generation requires the SE/AE-exclusive CommonLib layout.
+#endif
 
 namespace {
 using sfs::kit_generator::ArmorRecord;
@@ -90,7 +99,7 @@ constexpr std::array<KnownCatalogFamily, 2344> kKnownCatalogFamilies{
 const std::unordered_set<std::string> kPartTokens{
     "armor", "armour", "cuirass", "body", "main", "top", "upper", "lower",
     "head", "torso", "chest", "shoulder", "shoulders", "waist",
-    "feet", "foot", "thigh", "tasset", "tassets",
+    "feet", "foot", "neck", "thigh", "tasset", "tassets", "tops", "shirts",
     "pants", "jean", "jeans", "denim", "skirt", "dress", "robe", "outfit", "suit", "clothes",
     "clothing", "cloth", "bikini", "bra", "panty", "pantie", "panties",
     "lingerie", "underwear", "swimsuit", "thong", "g-string", "gstring",
@@ -117,7 +126,7 @@ const std::unordered_set<std::string> kPartTokens{
     "tatoo", "ribbon", "headband", "hairribbon", "shield", "buckler",
     "weapon", "sword", "dagger", "axe", "bow", "crossbow", "quiver",
 
-    "상의", "하의", "갑옷", "아머", "몸통", "의상", "옷", "복장",
+    "상의", "하의", "갑옷", "아머", "몸통", "의상", "옷", "복장", "톱", "발", "목", "손",
     "드레스", "비키니", "팬티", "브라", "속옷", "란제리", "수영복",
     "원피스", "부츠", "신발", "구두", "샌들", "힐", "바디",
     "바디슈트", "코르셋", "슈트", "셔츠", "블라우스", "튜닉", "펌프스",
@@ -468,13 +477,26 @@ bool IsComponentPartToken(const std::string_view a_token) {
     if (normalized.size() <= part.size() || !normalized.starts_with(part)) {
       continue;
     }
-    const auto suffix = normalized.substr(part.size());
+    auto suffix = normalized.substr(part.size());
+    // A component may carry a number/letter and a physics suffix together:
+    // Top1SMP, Skirt2aSMP, 톱1smp. These are still component variants.
+    for (const std::string_view physics : {"smp", "hdt"}) {
+      if (suffix.size() > physics.size() && suffix.ends_with(physics))
+        suffix.resize(suffix.size() - physics.size());
+    }
+    auto numericLength = std::size_t{0};
+    while (numericLength < suffix.size() && std::isdigit(static_cast<unsigned char>(suffix[numericLength])))
+      ++numericLength;
+    const auto numberedSuffix = numericLength > 0 && suffix.size() - numericLength <= 2 &&
+        std::ranges::all_of(suffix | std::views::drop(numericLength), [](const unsigned char ch) {
+          return ch < 128 && std::isalpha(ch);
+        });
     const auto shortAsciiVariant =
         suffix.size() <= 2 &&
         std::ranges::all_of(suffix, [](const unsigned char ch) {
           return ch < 128 && std::isalpha(ch);
         });
-    if (IsNumeric(suffix) || shortAsciiVariant ||
+    if (numberedSuffix || IsNumeric(suffix) || shortAsciiVariant ||
         kVariantTokens.contains(suffix) ||
         kColorAndTypeTokens.contains(suffix)) {
       return true;
@@ -499,6 +521,7 @@ bool IsStructuralComponentPrefix(const std::string_view a_token) {
 }
 
 bool IsNumberedVariantToken(std::string_view a_value);
+std::string CanonicalVariantToken(std::string a_token);
 
 bool IsContextualVariantToken(const std::string_view a_token) {
   return kContextualVariantTokens.contains(NormalizeKey(a_token));
@@ -509,7 +532,7 @@ bool IsMaterialIdentityToken(const std::string_view a_token) {
 }
 
 bool IsVariantMetadataToken(const std::string_view a_token) {
-  const auto normalized = NormalizeKey(a_token);
+  const auto normalized = CanonicalVariantToken(std::string(a_token));
   return !normalized.empty() &&
          (IsNumeric(normalized) || IsNumberedVariantToken(normalized) ||
           kVariantTokens.contains(normalized) ||
@@ -876,13 +899,32 @@ bool SameAppearance(const ArmorRecord &a_left, const ArmorRecord &a_right) {
   if (a_left.sourceSlotMask != a_right.sourceSlotMask) {
     return false;
   }
-  if (!a_left.armorAddonFormIDs.empty() &&
-      !a_right.armorAddonFormIDs.empty()) {
-    return a_left.armorAddonFormIDs == a_right.armorAddonFormIDs;
+  const bool sameAppearance =
+      !a_left.armorAddonFormIDs.empty() && !a_right.armorAddonFormIDs.empty()
+          ? a_left.armorAddonFormIDs == a_right.armorAddonFormIDs
+          : NormalizeKey(a_left.DisplayName()) == NormalizeKey(a_right.DisplayName()) &&
+                LowerAscii(a_left.editorID) == LowerAscii(a_right.editorID);
+  if (!sameAppearance) {
+    return false;
   }
-  return NormalizeKey(a_left.DisplayName()) ==
-             NormalizeKey(a_right.DisplayName()) &&
-         LowerAscii(a_left.editorID) == LowerAscii(a_right.editorID);
+  // Reference membership is keyed by the defining plugin and EditorID. Two
+  // variants can share an ARMA and still belong to different curated outfits;
+  // do not erase that identity before grouping.
+  namespace community = sfs::kit_generator::community;
+  if (community::Key(a_left.pluginName, a_left.editorID) !=
+          community::Key(a_right.pluginName, a_right.editorID) &&
+      (community::IsReferenced(a_left.pluginName, a_left.editorID) ||
+       community::IsReferenced(a_right.pluginName, a_right.editorID))) {
+    return false;
+  }
+  if (sfs::kit_generator::sheet::Resolve(a_left.pluginName, a_left.DisplayName(), a_left.editorID) !=
+      sfs::kit_generator::sheet::Resolve(a_right.pluginName, a_right.DisplayName(), a_right.editorID)) {
+    return false;
+  }
+  if (a_left.Identifier() != a_right.Identifier() &&
+      (sfs::kit_generator::screenshot::IsReferenced(a_left) ||
+       sfs::kit_generator::screenshot::IsReferenced(a_right))) return false;
+  return true;
 }
 
 std::vector<ArmorRecord>
@@ -923,6 +965,9 @@ struct OutfitGroup {
   // absorbs otherwise unclassifiable sibling labels.  Candidate construction
   // then retains those labels as profiles instead of mixing their slots.
   bool rootFamilyExpanded{false};
+  // One level only: explicit versions keep their own item pools. Joining a
+  // family must never create cross-color/number combinations between them.
+  std::vector<OutfitGroup> variants;
 };
 
 std::string BuildGroupName(const std::vector<ArmorRecord> &a_items) {
@@ -933,9 +978,9 @@ std::string BuildGroupName(const std::vector<ArmorRecord> &a_items) {
     return "Unnamed";
   }
 
-  auto prefix = std::string(firstNamed->DisplayName());
+  auto prefix = RemoveBracketedText(firstNamed->DisplayName());
   for (auto item = std::next(firstNamed); item != a_items.end(); ++item) {
-    const auto name = std::string(item->DisplayName());
+    const auto name = RemoveBracketedText(item->DisplayName());
     if (TrimSpaces(name).empty()) {
       continue;
     }
@@ -964,7 +1009,7 @@ std::string BuildGroupName(const std::vector<ArmorRecord> &a_items) {
 
   auto trimmed = TrimDisplayName(std::move(prefix));
   if (trimmed.empty()) {
-    const auto tokens = Tokenize(firstNamed->DisplayName());
+    const auto tokens = Tokenize(RemoveBracketedText(firstNamed->DisplayName()));
     return tokens.empty() ? "Unnamed" : tokens.front();
   }
   return trimmed;
@@ -1010,7 +1055,7 @@ std::vector<TokenRun> RunsAtDepth(const std::vector<ArmorRecord> &a_items,
   std::vector<TokenRun> runs;
   for (const auto &item : a_items) {
     ThrowIfScanCancelled(a_stopToken);
-    const auto tokens = Tokenize(item.DisplayName());
+    const auto tokens = Tokenize(RemoveBracketedText(item.DisplayName()));
     const auto token =
         tokens.size() > a_depth ? NormalizeKey(tokens[a_depth]) : std::string{};
     if (runs.empty() || runs.back().token != token) {
@@ -1035,13 +1080,13 @@ BuildGroupsAtDepth(const std::vector<ArmorRecord> &a_items,
   }
   const auto allShort = std::ranges::all_of(a_items, [&](const auto &item) {
     ThrowIfScanCancelled(a_stopToken);
-    return Tokenize(item.DisplayName()).size() <= a_depth;
+    return Tokenize(RemoveBracketedText(item.DisplayName())).size() <= a_depth;
   });
   if (allShort) {
     return {{BuildGroupName(a_items), a_items}};
   }
   if (a_depth != 0) {
-    return SplitRun(a_items, a_depth);
+    return SplitRun(a_items, a_depth, a_stopToken);
   }
   std::vector<OutfitGroup> result;
   for (const auto &run : RunsAtDepth(a_items, a_depth, a_stopToken)) {
@@ -1114,7 +1159,7 @@ std::string NormalizeKitName(const std::string &a_name) {
   // set name ("Black Rose"), so we only discard short/numbered variants.
   const auto hasFollowingSemanticToken = [&](const std::size_t a_index) {
     for (std::size_t index = a_index + 1; index < tokens.size(); ++index) {
-      const auto normalized = NormalizeKey(tokens[index]);
+      const auto normalized = CanonicalVariantToken(tokens[index]);
       if (normalized.empty() || IsStructuralComponentPrefix(normalized) ||
           IsComponentPartToken(normalized) || IsNumeric(normalized) ||
           IsNumberedVariantToken(normalized) ||
@@ -1130,7 +1175,7 @@ std::string NormalizeKitName(const std::string &a_name) {
   std::vector<std::string> kept;
   for (std::size_t index = 0; index < tokens.size(); ++index) {
     const auto &token = tokens[index];
-    const auto normalized = NormalizeKey(token);
+    const auto normalized = CanonicalVariantToken(token);
     if (!kept.empty() && normalized == "one" && index + 1 < tokens.size() &&
         NormalizeKey(tokens[index + 1]) == "piece" &&
         index + 2 == tokens.size()) {
@@ -1629,18 +1674,54 @@ bool IsSiblingVariantTail(const std::vector<std::string> &a_tokens,
 // "Cavaro Ranger Hands".  After ordinary normalization these become sibling
 // groups rather than prefix groups.  Join only a substantial shared identity
 // and metadata-only tails, keeping genuinely different named sets separate.
+bool HaveMatchingFamilyModels(const OutfitGroup &a_left,
+                              const OutfitGroup &a_right) {
+  const auto modelKeys = [](const ArmorRecord &a_item) {
+    std::set<std::string> result;
+    for (auto path : a_item.armorModelPaths) {
+      path = LowerAscii(TrimSpaces(std::move(path)));
+      std::ranges::replace(path, '/', '\\');
+      if (path.starts_with("meshes\\")) path.erase(0, 7);
+      if (!path.empty()) result.insert(std::move(path));
+    }
+    return result;
+  };
+  std::uint32_t leftCoverage = 0, rightCoverage = 0, matched = 0;
+  for (const auto &left : a_left.items) {
+    leftCoverage |= left.layoutSlotMask;
+    const auto paths = modelKeys(left);
+    if (paths.empty()) continue;
+    for (const auto &right : a_right.items) {
+      if (LowerAscii(left.pluginName) == LowerAscii(right.pluginName) &&
+          left.sourceSlotMask == right.sourceSlotMask && paths == modelKeys(right))
+        matched |= left.layoutSlotMask;
+    }
+  }
+  for (const auto &right : a_right.items) rightCoverage |= right.layoutSlotMask;
+  const auto coverage = leftCoverage | rightCoverage;
+  // Matching only a shared shoe, author tag or male fallback model is not
+  // enough. Compare the complete model sets, including the body when present.
+  return std::popcount(matched) >= 2 &&
+         std::popcount(matched) * 4 >= std::popcount(coverage) * 3 &&
+         (!(coverage & SlotMask(32)) || (matched & SlotMask(32)));
+}
+
 bool ShouldMergeSiblingVariantGroups(const OutfitGroup &a_left,
                                      const OutfitGroup &a_right) {
   const auto leftTokens = Tokenize(a_left.name);
   const auto rightTokens = Tokenize(a_right.name);
   const auto prefix = CommonGroupTokenPrefix(leftTokens, rightTokens);
-  if (prefix < 2 || HasDistinctNumberedFamilyTail(leftTokens, rightTokens,
-                                                   prefix) ||
-      !IsSiblingVariantTail(leftTokens, prefix) ||
-      !IsSiblingVariantTail(rightTokens, prefix)) {
+  if (prefix == 0 || HasDistinctNumberedFamilyTail(leftTokens, rightTokens, prefix)) {
     return false;
   }
-  return true;
+  if (prefix >= 2 && IsSiblingVariantTail(leftTokens, prefix) &&
+      IsSiblingVariantTail(rightTokens, prefix)) return true;
+  const auto root = CanonicalVariantToken(leftTokens.front());
+  const auto substantialRoot = prefix >= 2 ||
+      (root.size() >= 5 && !IsVariantMetadataToken(root) && !IsComponentPartToken(root));
+  return substantialRoot && prefix < leftTokens.size() && prefix < rightTokens.size() &&
+         leftTokens.size() - prefix <= 2 && rightTokens.size() - prefix <= 2 &&
+         HaveMatchingFamilyModels(a_left, a_right);
 }
 
 bool ShouldMergeComplementaryRootGroups(const OutfitGroup &a_left,
@@ -1743,9 +1824,7 @@ MergeRelatedSiblingGroups(
         }
         a_groups[leftIndex].name = CommonGroupDisplayRoot(
             a_groups[leftIndex].name, a_groups[rightIndex].name);
-        a_groups[leftIndex].rootFamilyExpanded =
-            a_groups[leftIndex].rootFamilyExpanded ||
-            a_groups[rightIndex].rootFamilyExpanded;
+        a_groups[leftIndex].rootFamilyExpanded = true;
         AppendUniqueGroupItems(a_groups[leftIndex], a_groups[rightIndex],
                                a_stopToken);
         a_groups.erase(a_groups.begin() +
@@ -1805,6 +1884,92 @@ bool IsReliableOutfitIdentity(const std::string_view a_name) {
 // cloak or accessory placed later in the file still joins the same outfit.
 // The older token-tree parser remains as a conservative fallback for records
 // without a reliable shared identity.
+std::string EditorOutfitFamily(const std::string_view a_editorID) {
+  std::string separated;
+  const auto lower = [](unsigned char c) { return c < 128 && std::islower(c); };
+  const auto upper = [](unsigned char c) { return c < 128 && std::isupper(c); };
+  const auto digit = [](unsigned char c) { return c < 128 && std::isdigit(c); };
+  for (std::size_t i = 0; i < a_editorID.size(); ++i) {
+    const auto c = static_cast<unsigned char>(a_editorID[i]);
+    const unsigned char previous = i ? static_cast<unsigned char>(a_editorID[i - 1]) : 0;
+    const unsigned char next = i + 1 < a_editorID.size() ? static_cast<unsigned char>(a_editorID[i + 1]) : 0;
+    if (i && ((lower(previous) && upper(c)) || (upper(previous) && upper(c) && lower(next)) ||
+              (std::isalnum(previous) && std::isalnum(c) && digit(previous) != digit(c))))
+      separated.push_back(' ');
+    separated.push_back(static_cast<char>(c));
+  }
+  const auto tokens = Tokenize(separated);
+  std::string family;
+  bool component = false;
+  for (const auto &raw : tokens) {
+    auto token = CanonicalVariantToken(raw);
+    if (IsComponentPartToken(token)) {
+      component = true;
+      continue;
+    }
+    if (!component) {
+      family += token;
+      continue;
+    }
+    if (token.ends_with("smp") && token.size() > 3) token.resize(token.size() - 3);
+    if (!IsVariantMetadataToken(token) && token != "duplicate" &&
+        !(token.size() <= 2 && std::ranges::all_of(token, [](unsigned char c) { return c < 128 && std::isalpha(c); })))
+      return {}; // e.g. Torso Brigandin: the identity follows the part.
+  }
+  if (!component || family.size() < 5 || IsNumeric(family)) return {};
+  const auto meaningful = std::ranges::any_of(family, [&](const auto c) {
+    return !std::isdigit(static_cast<unsigned char>(c)) && c != family.front();
+  });
+  return meaningful ? family : std::string{};
+}
+
+// A translated top and a separately named glove may share no display prefix.
+// Join parts only with BOTH an unambiguous EDID family and a common model
+// directory used by complementary real slots. One author folder is not proof.
+std::vector<OutfitGroup> BuildAssetPartGroups(
+    const std::vector<ArmorRecord> &a_items, const std::stop_token &a_stopToken) {
+  std::map<std::string, std::vector<ArmorRecord>> buckets;
+  for (const auto &item : a_items) {
+    ThrowIfScanCancelled(a_stopToken);
+    const auto family = EditorOutfitFamily(item.editorID);
+    if (!family.empty()) buckets[LowerAscii(item.pluginName) + "|" + family].push_back(item);
+  }
+  std::vector<OutfitGroup> result;
+  for (auto &[key, items] : buckets) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (items.size() < kMinimumGroupSize) continue;
+    std::set<std::string> catalogRoots;
+    std::map<std::string, std::vector<std::uint32_t>> directorySlots;
+    bool supported = false;
+    for (const auto &item : items) {
+      if (const auto root = FindKnownCatalogFamilyRoot(item)) catalogRoots.insert(NormalizeKey(*root));
+      for (auto path : item.armorModelPaths) {
+        path = LowerAscii(std::move(path));
+        std::ranges::replace(path, '/', '\\');
+        if (path.starts_with("meshes\\")) path.erase(0, 7);
+        const auto end = path.find_last_of('\\');
+        if (end == std::string::npos || end == 0 || item.sourceSlotMask == 0) continue;
+        auto &slots = directorySlots[path.substr(0, end)];
+        supported |= std::ranges::any_of(slots, [&](const auto mask) {
+          return (mask & item.sourceSlotMask) == 0;
+        });
+        slots.push_back(item.sourceSlotMask);
+      }
+    }
+    if (!supported || catalogRoots.size() > 1) continue;
+    auto name = NormalizeKitName(BuildGroupName(items));
+    if (catalogRoots.size() == 1) {
+      for (const auto &item : items)
+        if (const auto root = FindKnownCatalogFamilyRoot(item)) { name = *root; break; }
+    }
+    result.push_back({std::move(name), std::move(items)});
+  }
+  return result;
+}
+
+std::vector<OutfitGroup> GroupLeadingNumberVariants(
+    std::vector<OutfitGroup> a_groups, const std::stop_token &a_stopToken);
+
 std::vector<OutfitGroup>
 BuildStableOutfitGroups(const std::vector<ArmorRecord> &a_items,
                         const std::stop_token &a_stopToken = {}) {
@@ -1855,6 +2020,292 @@ BuildStableOutfitGroups(const std::vector<ArmorRecord> &a_items,
   auto fallback = BuildGroupsAtDepth(residual, 0, a_stopToken);
   result.insert(result.end(), std::make_move_iterator(fallback.begin()),
                 std::make_move_iterator(fallback.end()));
+  // Establish numbered versions before a shared mesh directory can erase
+  // their names/compositions. Asset bridging still handles all other pieces.
+  result = GroupLeadingNumberVariants(std::move(result), a_stopToken);
+  std::unordered_set<std::string> variantMembers;
+  for (const auto& group : result) {
+    if (!group.variants.empty())
+      for (const auto& item : group.items) variantMembers.insert(item.Identifier());
+  }
+  std::vector<ArmorRecord> assetItems;
+  for (const auto& item : a_items) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (!variantMembers.contains(item.Identifier())) assetItems.push_back(item);
+  }
+  // Asset evidence bridges existing named groups instead of removing their
+  // records up front: a remaining single earring/hood must not disappear when
+  // the body and boots were recognized through their internal identifiers.
+  for (auto &assetGroup : BuildAssetPartGroups(assetItems, a_stopToken)) {
+    ThrowIfScanCancelled(a_stopToken);
+    std::unordered_set<std::string> identifiers;
+    for (const auto &item : assetGroup.items) identifiers.insert(item.Identifier());
+    for (std::size_t i = 0; i < result.size();) {
+      if (std::ranges::none_of(result[i].items, [&](const auto &item) {
+            return identifiers.contains(item.Identifier());
+          })) { ++i; continue; }
+      AppendUniqueGroupItems(assetGroup, result[i], a_stopToken);
+      result.erase(result.begin() + static_cast<std::ptrdiff_t>(i));
+    }
+    result.push_back(std::move(assetGroup));
+  }
+  return result;
+}
+
+OutfitGroup MakeVariantFamily(std::string a_name,
+                              std::vector<OutfitGroup> a_variants,
+                              const std::stop_token &a_stopToken) {
+  OutfitGroup result{std::move(a_name), {}};
+  std::unordered_set<std::string> seen;
+  for (const auto& variant : a_variants) {
+    for (const auto& item : variant.items) {
+      ThrowIfScanCancelled(a_stopToken);
+      if (seen.insert(item.Identifier()).second) result.items.push_back(item);
+    }
+  }
+  result.variants = std::move(a_variants);
+  return result;
+}
+
+std::vector<OutfitGroup> GroupCommunityFamilies(
+    std::vector<OutfitGroup> a_groups, const std::stop_token &a_stopToken) {
+  struct Family { std::string name; std::vector<OutfitGroup> variants; };
+  std::vector<Family> families;
+  std::unordered_map<std::string, std::size_t> lookup;
+  for (auto& group : a_groups) {
+    ThrowIfScanCancelled(a_stopToken);
+    auto name = sfs::kit_generator::community::FamilyName(group.name);
+    const auto key = sfs::kit_generator::community::Key(group.items.front().pluginName, name);
+    const auto [it, inserted] = lookup.emplace(key, families.size());
+    if (inserted) families.push_back({std::move(name), {}});
+    families[it->second].variants.push_back(std::move(group));
+  }
+  std::vector<OutfitGroup> result;
+  for (auto& family : families) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (family.variants.size() < 2 || family.variants.size() > kMaximumGeneratedCandidateProfiles) {
+      for (auto& variant : family.variants) result.push_back(std::move(variant));
+    } else {
+      result.push_back(MakeVariantFamily(std::move(family.name), std::move(family.variants), a_stopToken));
+    }
+  }
+  return result;
+}
+
+// A leading 01/02 is not universally a variant (numbered collections exist).
+// Require complete sibling groups with the same EDID outfit identity and
+// complementary, identical real-slot coverage before wrapping them as versions.
+std::vector<OutfitGroup> GroupLeadingNumberVariants(
+    std::vector<OutfitGroup> a_groups, const std::stop_token &a_stopToken) {
+  const auto withoutNumber = [](const std::string_view name) -> std::optional<std::string> {
+    const auto space = name.find(' ');
+    if (space == std::string_view::npos || space == 0 || space > 2 ||
+        !IsNumeric(name.substr(0, space))) return {};
+    return TrimSpaces(std::string(name.substr(space + 1)));
+  };
+  struct Family { std::string name; std::vector<std::size_t> indices; };
+  std::map<std::string, Family> families;
+  for (std::size_t i = 0; i < a_groups.size(); ++i) {
+    ThrowIfScanCancelled(a_stopToken);
+    const auto& group = a_groups[i];
+    const auto name = withoutNumber(group.name);
+    if (!name || !IsReliableOutfitIdentity(*name) || group.items.empty() || !group.variants.empty()) continue;
+    std::string editorFamily;
+    const auto plugin = LowerAscii(group.items.front().pluginName);
+    std::uint32_t slots = 0;
+    bool valid = true;
+    for (const auto& item : group.items) {
+      ThrowIfScanCancelled(a_stopToken);
+      const auto identity = EditorOutfitFamily(item.editorID);
+      if (identity.empty() || LowerAscii(item.pluginName) != plugin ||
+          (!editorFamily.empty() && editorFamily != identity)) { valid = false; break; }
+      editorFamily = identity;
+      slots |= item.sourceSlotMask;
+    }
+    if (!valid || std::popcount(slots) < 2) continue;
+    const auto key = std::format("{}|{}|{}|{}", plugin, NormalizeKey(*name), editorFamily, slots);
+    auto& family = families[key];
+    family.name = *name;
+    family.indices.push_back(i);
+  }
+  std::unordered_set<std::size_t> consumed;
+  std::vector<OutfitGroup> result;
+  for (auto& [key, family] : families) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (family.indices.size() < 2 || family.indices.size() > kMaximumGeneratedCandidateProfiles) continue;
+    // Recover the fuller shared title ("Birth Lingerie") instead of the
+    // part-normalized "Birth". This is display-only, never the matching key.
+    std::vector<std::string> titleTokens;
+    bool first = true;
+    for (const auto index : family.indices) {
+      for (const auto& item : a_groups[index].items) {
+        const auto title = withoutNumber(item.DisplayName());
+        if (!title) { titleTokens.clear(); first = false; break; }
+        const auto tokens = Tokenize(*title);
+        if (first) { titleTokens = tokens; first = false; }
+        else {
+          std::size_t common = 0;
+          while (common < tokens.size() && common < titleTokens.size() &&
+                 NormalizeKey(tokens[common]) == NormalizeKey(titleTokens[common])) ++common;
+          titleTokens.resize(common);
+        }
+      }
+    }
+    if (!titleTokens.empty()) {
+      family.name.clear();
+      for (const auto& token : titleTokens) {
+        if (!family.name.empty()) family.name += ' ';
+        family.name += token;
+      }
+    }
+    std::vector<OutfitGroup> variants;
+    for (const auto index : family.indices) {
+      consumed.insert(index);
+      variants.push_back(std::move(a_groups[index]));
+    }
+    result.push_back(MakeVariantFamily(std::move(family.name), std::move(variants), a_stopToken));
+  }
+  for (std::size_t i = 0; i < a_groups.size(); ++i)
+    if (!consumed.contains(i)) result.push_back(std::move(a_groups[i]));
+  return result;
+}
+
+std::vector<OutfitGroup>
+BuildHeuristicOutfitGroups(const std::vector<ArmorRecord> &a_items,
+                          const std::stop_token &a_stopToken = {}) {
+  std::vector<OutfitGroup> groups, families;
+  for (auto& group : BuildStableOutfitGroups(a_items, a_stopToken)) {
+    if (group.variants.empty()) groups.push_back(std::move(group));
+    else families.push_back(std::move(group));
+  }
+  if (groups.empty() && families.empty() && a_items.size() >= kMinimumGroupSize) {
+    std::unordered_set<std::string> identities;
+    for (const auto &item : a_items) {
+      ThrowIfScanCancelled(a_stopToken);
+      const auto name = NormalizeKitName(std::string(item.DisplayName()));
+      if (IsReliableOutfitIdentity(name)) identities.insert(NormalizeKey(name));
+    }
+    // A minimum item count is not evidence that unrelated singleton outfits
+    // belong together. Keep the nameless fallback only without that conflict.
+    if (identities.size() <= 1)
+      groups.push_back({BuildGroupName(a_items), a_items});
+  }
+  groups = MergeGroups(groups, a_stopToken);
+  auto merged = GroupLeadingNumberVariants(
+      MergeRelatedSiblingGroups(std::move(groups), a_stopToken), a_stopToken);
+  merged.insert(merged.end(), std::make_move_iterator(families.begin()),
+                std::make_move_iterator(families.end()));
+  return merged;
+}
+
+std::vector<OutfitGroup>
+BuildFinalOutfitGroups(const std::vector<ArmorRecord> &a_items,
+                      const std::stop_token &a_stopToken = {}) {
+  namespace community = sfs::kit_generator::community;
+  const auto matches = community::MatchGroups(a_items, [&] {
+    ThrowIfScanCancelled(a_stopToken);
+  });
+  std::vector<OutfitGroup> result;
+  std::unordered_map<std::string, std::size_t> useCounts;
+  for (const auto &match : matches) {
+    ThrowIfScanCancelled(a_stopToken);
+    OutfitGroup group{std::string(community::kCommunityReferences[match.reference].name), {}};
+    for (const auto index : match.items) {
+      group.items.push_back(a_items[index]);
+      ++useCounts[a_items[index].Identifier()];
+    }
+    result.push_back(std::move(group));
+  }
+  result = GroupCommunityFamilies(std::move(result), a_stopToken);
+  // Keep ordinary inference for unmatched pieces. A heuristic family with
+  // an unknown variant may still reuse its shared reference gloves/boots;
+  // exclusive reference pieces cannot leak into that variant. Entirely
+  // covered families are omitted instead of duplicating every curated kit.
+  if (useCounts.size() == a_items.size()) {
+    return result;
+  }
+  namespace screenshot = sfs::kit_generator::screenshot;
+  std::vector<ArmorRecord> screenshotEligible;
+  for (const auto &item : a_items) {
+    ThrowIfScanCancelled(a_stopToken);
+    const auto used = useCounts.find(item.Identifier());
+    if (used == useCounts.end() || used->second > 1) screenshotEligible.push_back(item);
+  }
+  std::unordered_set<std::string> screenshotClaimed;
+  for (const auto &match : screenshot::MatchGroups(screenshotEligible, [&] { ThrowIfScanCancelled(a_stopToken); })) {
+    OutfitGroup group{std::string(screenshot::kScreenshotReferences[match.reference].name), {}, true};
+    bool hasUnmatched = false;
+    for (auto i : match.items) {
+      const auto &item = screenshotEligible[i];
+      group.items.push_back(item);
+      hasUnmatched |= !useCounts.contains(item.Identifier());
+    }
+    if (!hasUnmatched) continue;
+    for (const auto &item : group.items) screenshotClaimed.insert(item.Identifier());
+    result.push_back(std::move(group));
+  }
+  // The worksheet's merged B/C cells connect translated set names and
+  // BodySlide aliases. They are a second source of explicit family boundaries;
+  // no sheet alias may replace or merge an already matched community kit.
+  namespace sheet = sfs::kit_generator::sheet;
+  std::map<std::size_t, std::vector<ArmorRecord>> sheetItems;
+  for (const auto &item : a_items) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (screenshotClaimed.contains(item.Identifier())) continue;
+    const auto used = useCounts.find(item.Identifier());
+    if (used != useCounts.end() && used->second == 1) continue;
+    if (const auto family = sheet::Resolve(item.pluginName, item.DisplayName(), item.editorID))
+      sheetItems[*family].push_back(item);
+  }
+  std::unordered_set<std::string> sheetClaimed;
+  for (auto &[family, items] : sheetItems) {
+    ThrowIfScanCancelled(a_stopToken);
+    const bool hasUnmatched = std::ranges::any_of(items, [&](const auto &item) {
+      return !useCounts.contains(item.Identifier());
+    });
+    if (!hasUnmatched) continue;
+    for (const auto &item : items) sheetClaimed.insert(item.Identifier());
+    if (items.size() >= kMinimumGroupSize)
+      result.push_back({std::string(sheet::kSheetFamilies[family].name), std::move(items), true});
+  }
+  // Infer only the remaining records, so a long shared prefix cannot pull a
+  // separately labelled sheet family back into a neighboring set. A sheet
+  // singleton stays a singleton instead of being merged across that boundary.
+  std::vector<ArmorRecord> residual;
+  for (const auto &item : a_items) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (!sheetClaimed.contains(item.Identifier()) && !screenshotClaimed.contains(item.Identifier())) residual.push_back(item);
+  }
+  auto fallback = BuildHeuristicOutfitGroups(residual, a_stopToken);
+  for (auto &group : fallback) {
+    ThrowIfScanCancelled(a_stopToken);
+    const bool hasUnmatched = std::ranges::any_of(group.items, [&](const auto &item) {
+      return !useCounts.contains(item.Identifier());
+    });
+    if (!hasUnmatched) {
+      continue;
+    }
+    std::erase_if(group.items, [&](const auto &item) {
+      const auto found = useCounts.find(item.Identifier());
+      return found != useCounts.end() && found->second == 1;
+    });
+    if (!group.variants.empty()) {
+      for (auto& variant : group.variants) {
+        std::erase_if(variant.items, [&](const auto& item) {
+          const auto found = useCounts.find(item.Identifier());
+          return found != useCounts.end() && found->second == 1;
+        });
+      }
+      std::erase_if(group.variants, [](const auto& variant) { return variant.items.size() < kMinimumGroupSize; });
+      if (group.variants.empty()) continue;
+      group = MakeVariantFamily(group.name, std::move(group.variants), a_stopToken);
+    }
+    if (group.items.size() >= kMinimumGroupSize) {
+      result.push_back(std::move(group));
+    }
+  }
+  // Only the community pass wraps curated versions as candidate families.
+  // Do not flatten/recombine them with screenshot/sheet/residual item pools.
   return result;
 }
 
@@ -1893,12 +2344,7 @@ bool IsOriginalGroupingSuitable(const std::vector<ArmorRecord> &a_items,
     return false;
   }
 
-  auto groups = BuildStableOutfitGroups(usable, a_stopToken);
-  if (groups.empty()) {
-    groups.push_back({BuildGroupName(usable), usable});
-  }
-  groups = MergeGroups(groups, a_stopToken);
-  groups = MergeRelatedSiblingGroups(std::move(groups), a_stopToken);
+  auto groups = BuildFinalOutfitGroups(usable, a_stopToken);
   return !groups.empty() &&
          !HasDominantHighCandidateGroup(groups, usable.size(), a_stopToken);
 }
@@ -2038,7 +2484,7 @@ std::string ExtractProfile(const std::string &a_groupName,
   }
   const auto hasExactGroupPrefix = prefix == groupTokens.size();
   for (std::size_t index = prefix; index < itemTokens.size(); ++index) {
-    const auto token = NormalizeKey(itemTokens[index]);
+    const auto token = CanonicalVariantToken(itemTokens[index]);
     AppendAttachedVariantTokens(itemTokens[index], profiles);
     if (token.empty() || kPartTokens.contains(token)) {
       continue;
@@ -2208,12 +2654,44 @@ int ProfileTokenRank(const std::string_view a_token) {
   return 3;
 }
 
+std::string CanonicalVariantToken(std::string a_token) {
+  a_token = NormalizeKey(a_token);
+  static const std::unordered_map<std::string, std::string> aliases{
+      {"alternative", "alt"}, {"grey", "gray"},
+      {"블랙", "black"}, {"검정", "black"}, {"검은색", "black"},
+      {"화이트", "white"}, {"흰색", "white"},
+      {"레드", "red"}, {"빨강", "red"}, {"빨간색", "red"},
+      {"블루", "blue"}, {"파랑", "blue"}, {"파란색", "blue"},
+      {"그린", "green"}, {"녹색", "green"},
+      {"노랑", "yellow"}, {"노란색", "yellow"},
+      {"핑크", "pink"}, {"분홍", "pink"},
+      {"보라", "purple"}, {"보라색", "purple"},
+      {"주황", "orange"}, {"오렌지", "orange"},
+      {"갈색", "brown"}, {"브라운", "brown"}, {"회색", "gray"}, {"그레이", "gray"},
+      {"옐로", "yellow"}, {"옐로우", "yellow"}, {"퍼플", "purple"},
+      {"골드", "gold"}, {"실버", "silver"},
+      {"다크", "dark"}, {"라이트", "light"},
+      {"루비", "ruby"}, {"사파이어", "sapphire"}, {"아쿠아", "aqua"},
+      {"에메랄드", "emerald"}, {"시안", "cyan"}, {"마젠타", "magenta"},
+      {"아이보리", "ivory"}, {"베이지", "beige"}, {"네이비", "navy"},
+      {"틸", "teal"}, {"터키석", "turquoise"}, {"바이올렛", "violet"},
+      {"라벤더", "lavender"}, {"버건디", "burgundy"},
+      {"黑", "black"}, {"黑色", "black"}, {"白", "white"}, {"白色", "white"},
+      {"红", "red"}, {"红色", "red"}, {"蓝", "blue"}, {"蓝色", "blue"},
+      {"绿", "green"}, {"绿色", "green"}, {"黄", "yellow"}, {"黄色", "yellow"},
+      {"粉", "pink"}, {"粉色", "pink"}, {"粉红", "pink"},
+      {"紫", "purple"}, {"紫色", "purple"}, {"橙", "orange"}, {"橙色", "orange"},
+      {"棕", "brown"}, {"棕色", "brown"}, {"灰", "gray"}, {"灰色", "gray"},
+      {"金", "gold"}, {"金色", "gold"}, {"银", "silver"}, {"银色", "silver"}};
+  if (const auto found = aliases.find(a_token); found != aliases.end()) {
+    return found->second;
+  }
+  return a_token;
+}
+
 std::string CanonicalProfile(std::vector<std::string> a_tokens) {
   for (auto &token : a_tokens) {
-    token = NormalizeKey(token);
-    if (token == "alternative") {
-      token = "alt";
-    }
+    token = CanonicalVariantToken(std::move(token));
   }
   std::erase_if(a_tokens,
                 [](const auto &token) { return token.empty(); });
@@ -2234,10 +2712,58 @@ std::string CanonicalProfile(std::vector<std::string> a_tokens) {
   return result;
 }
 
-void NormalizeOutfitWideProfiles(std::vector<SlotCandidate> &a_candidates) {
+// A translated reference title need not be a prefix of its equipment names.
+// Learn named styles only when mutually exclusive labels compete across at
+// least two real components. Single-component labels stay local choices.
+std::unordered_set<std::string>
+PromoteCoordinatedStyles(std::vector<SlotCandidate> &a_candidates,
+                        const std::stop_token &a_stopToken) {
+  std::vector<std::unordered_set<std::string>> names;
+  std::unordered_map<std::string, std::uint32_t> slots;
+  for (const auto &candidate : a_candidates) {
+    ThrowIfScanCancelled(a_stopToken);
+    std::unordered_set<std::string> tokens;
+    for (const auto &raw : Tokenize(candidate.item.DisplayName())) {
+      auto token = CanonicalVariantToken(StripAttachedComponentVariants(raw));
+      if (token.empty() || kPartTokens.contains(token) ||
+          (kLocalProfileTokens.contains(token) && token.size() != 1)) {
+        continue;
+      }
+      tokens.insert(token);
+      slots[token] |= candidate.item.layoutSlotMask;
+    }
+    names.push_back(std::move(tokens));
+  }
+  std::unordered_set<std::string> coordinated;
+  for (const auto &[left, leftSlots] : slots) {
+    ThrowIfScanCancelled(a_stopToken);
+    for (const auto &[right, rightSlots] : slots) {
+      if (left >= right || std::popcount(leftSlots & rightSlots) < 2) continue;
+      if (std::ranges::any_of(names, [&](const auto &tokens) {
+            return tokens.contains(left) && tokens.contains(right);
+          })) continue;
+      coordinated.insert(left);
+      coordinated.insert(right);
+    }
+  }
+  for (std::size_t i = 0; i < a_candidates.size(); ++i) {
+    ThrowIfScanCancelled(a_stopToken);
+    auto tokens = Tokenize(a_candidates[i].profile);
+    for (const auto &token : names[i]) {
+      if (coordinated.contains(token)) tokens.push_back(token);
+    }
+    a_candidates[i].profile = CanonicalProfile(std::move(tokens));
+  }
+  return coordinated;
+}
+
+void NormalizeOutfitWideProfiles(std::vector<SlotCandidate> &a_candidates,
+                                const std::stop_token &a_stopToken = {}) {
+  const auto coordinated = PromoteCoordinatedStyles(a_candidates, a_stopToken);
   std::uint32_t allSlots = 0;
   std::unordered_map<std::string, std::uint32_t> tokenSlots;
   for (const auto &candidate : a_candidates) {
+    ThrowIfScanCancelled(a_stopToken);
     allSlots |= candidate.item.visualSlotMask;
     for (auto token : ProfileTokens(candidate.profile)) {
       if (token == "alternative") {
@@ -2249,6 +2775,7 @@ void NormalizeOutfitWideProfiles(std::vector<SlotCandidate> &a_candidates) {
 
   const auto totalSlotCount = std::popcount(allSlots);
   for (auto &candidate : a_candidates) {
+    ThrowIfScanCancelled(a_stopToken);
     std::vector<std::string> profileTokens;
     for (auto token : ProfileTokens(candidate.profile)) {
       if (token == "alternative") {
@@ -2260,7 +2787,7 @@ void NormalizeOutfitWideProfiles(std::vector<SlotCandidate> &a_candidates) {
           (coveredSlotCount >= 2 &&
            coveredSlotCount * 5 >= totalSlotCount * 2);
       if (token == "smp" || kStandaloneProfileTokens.contains(token) ||
-          token == "alt" || IsStrongOutfitProfileToken(token) ||
+          token == "alt" || coordinated.contains(token) || IsStrongOutfitProfileToken(token) ||
           repeatsAcrossOutfit) {
         profileTokens.push_back(std::move(token));
       }
@@ -2462,7 +2989,7 @@ AssignLocalChoiceProfiles(std::vector<SlotCandidate> &a_candidates) {
       if (optionCount == 0) {
         optionCount = indices.size();
       }
-      if (indices.size() != optionCount || optionCount > 4) {
+      if (indices.size() != optionCount) {
         optionCount = 0;
         repeatedBuckets.clear();
         break;
@@ -3325,12 +3852,93 @@ SlotSelection SelectSlots(const std::vector<SlotCandidate> &a_candidates,
   return best;
 }
 
+std::vector<std::vector<std::string>> BoundedLocalCombinations(
+    const std::vector<LocalChoiceDimension> &a_dimensions,
+    const std::stop_token &a_stopToken) {
+  ThrowIfScanCancelled(a_stopToken);
+  if (a_dimensions.empty()) return {{}};
+  if (std::ranges::any_of(a_dimensions, [](const auto &axis) { return axis.empty(); }))
+    return {};
+  std::size_t product = 1;
+  bool capped = false;
+  for (const auto &axis : a_dimensions) {
+    if (product > kMaximumGeneratedCandidateProfiles / axis.size()) {
+      capped = true;
+      break;
+    }
+    product *= axis.size();
+  }
+  std::vector<std::vector<std::string>> result;
+  std::set<std::vector<std::string>> seen;
+  const auto append = [&](const std::vector<std::size_t> &a_indices) {
+    std::vector<std::string> combination;
+    for (std::size_t axis = 0; axis < a_dimensions.size(); ++axis)
+      combination.push_back(a_dimensions[axis][a_indices[axis]]);
+    if (seen.insert(combination).second) result.push_back(std::move(combination));
+  };
+  std::vector<std::size_t> indices(a_dimensions.size());
+  if (capped) {
+    // First cover each individual choice, always carrying every axis. Then
+    // spend the remaining budget on complete Cartesian combinations.
+    append(indices);
+    for (std::size_t option = 1; result.size() < kMaximumGeneratedCandidateProfiles; ++option) {
+      ThrowIfScanCancelled(a_stopToken);
+      bool any = false;
+      for (std::size_t axis = 0; axis < a_dimensions.size(); ++axis) {
+        if (option >= a_dimensions[axis].size()) continue;
+        any = true;
+        indices[axis] = option;
+        append(indices);
+        indices[axis] = 0;
+        if (result.size() == kMaximumGeneratedCandidateProfiles) break;
+      }
+      if (!any) break;
+    }
+  }
+  while (result.size() < kMaximumGeneratedCandidateProfiles) {
+    ThrowIfScanCancelled(a_stopToken);
+    append(indices);
+    auto axis = indices.size();
+    while (axis > 0) {
+      --axis;
+      if (++indices[axis] < a_dimensions[axis].size()) break;
+      indices[axis] = 0;
+    }
+    if (axis == 0 && indices[0] == 0) break;
+  }
+  return result;
+}
+
 std::vector<std::string>
 ChooseProfiles(const std::vector<SlotCandidate> &a_candidates,
                const std::vector<LocalChoiceDimension> &a_localDimensions,
                const std::stop_token &a_stopToken) {
+  ThrowIfScanCancelled(a_stopToken);
   std::vector<std::string> structuralOptions{std::string{}};
   std::vector<std::string> colorOptions{std::string{}};
+  // Colors and named styles are not always independent axes. If two labels
+  // compete on at least two components and never coexist on any source part,
+  // do not invent their cross-product (e.g. Black + a named Grey palette).
+  std::map<std::string, std::uint32_t> coordinatedSlots;
+  std::vector<std::unordered_set<std::string>> sourceProfiles;
+  for (const auto &candidate : a_candidates) {
+    auto tokens = HardProfileTokens(candidate.profile);
+    for (const auto &token : tokens) {
+      if (!IsLocalChoiceProfileToken(token))
+        coordinatedSlots[token] |= candidate.item.layoutSlotMask;
+    }
+    sourceProfiles.push_back(std::move(tokens));
+  }
+  std::vector<std::pair<std::string, std::string>> incompatible;
+  for (const auto &[left, leftSlots] : coordinatedSlots) {
+    ThrowIfScanCancelled(a_stopToken);
+    for (const auto &[right, rightSlots] : coordinatedSlots) {
+      if (left >= right || std::popcount(leftSlots & rightSlots) < 2) continue;
+      if (std::ranges::none_of(sourceProfiles, [&](const auto &tokens) {
+            return tokens.contains(left) && tokens.contains(right);
+          })) incompatible.emplace_back(left, right);
+    }
+  }
   bool hasSmp = false;
   for (const auto &candidate : a_candidates) {
     ThrowIfScanCancelled(a_stopToken);
@@ -3360,22 +3968,7 @@ ChooseProfiles(const std::vector<SlotCandidate> &a_candidates,
     }
   }
 
-  std::vector<std::vector<std::string>> localCombinations{{}};
-  for (const auto &dimension : a_localDimensions) {
-    std::vector<std::vector<std::string>> next;
-    for (const auto &combination : localCombinations) {
-      for (const auto &option : dimension) {
-        auto expanded = combination;
-        expanded.push_back(option);
-        next.push_back(std::move(expanded));
-      }
-    }
-    localCombinations = std::move(next);
-    if (localCombinations.size() >= kMaximumGeneratedCandidateProfiles) {
-      localCombinations.resize(kMaximumGeneratedCandidateProfiles);
-      break;
-    }
-  }
+  const auto localCombinations = BoundedLocalCombinations(a_localDimensions, a_stopToken);
 
   std::vector<std::string> result;
   std::unordered_set<std::string> seen;
@@ -3384,25 +3977,54 @@ ChooseProfiles(const std::vector<SlotCandidate> &a_candidates,
       return;
     }
     auto profile = CanonicalProfile(std::move(a_tokens));
+    const auto tokens = ProfileTokens(profile);
+    if (std::ranges::any_of(incompatible, [&](const auto &pair) {
+          return tokens.contains(pair.first) && tokens.contains(pair.second);
+        })) return;
     if (seen.insert(profile).second) {
       result.push_back(std::move(profile));
     }
   };
-  for (const auto &structural : structuralOptions) {
-    const auto structuralTokens = Tokenize(structural);
-    const auto standalone = std::ranges::any_of(
-        structuralTokens, [](const auto &token) {
-          return kStandaloneProfileTokens.contains(NormalizeKey(token));
-        });
-    const std::vector<std::vector<std::string>> noLocal{{}};
-    const auto &combinations = standalone ? noLocal : localCombinations;
-    for (const auto &color : colorOptions) {
-      for (const auto &local : combinations) {
+  // Reserve representation for actual body styles before accessory choices
+  // consume the cap. For accessory-only groups, seed their observed profiles.
+  const auto hasBody = std::ranges::any_of(a_candidates, [](const auto &candidate) {
+    return (candidate.item.sourceSlotMask & SlotMask(32)) != 0;
+  });
+  for (const auto &candidate : a_candidates) {
+    ThrowIfScanCancelled(a_stopToken);
+    if (hasBody && !(candidate.item.sourceSlotMask & SlotMask(32))) continue;
+    auto tokens = Tokenize(candidate.profile);
+    const auto sourceTokens = ProfileTokens(candidate.profile);
+    const auto standalone = std::ranges::any_of(sourceTokens, [](const auto &token) {
+      return kStandaloneProfileTokens.contains(token);
+    });
+    if (!standalone) {
+      for (const auto &dimension : a_localDimensions) {
+        if (!dimension.empty() && std::ranges::none_of(dimension, [&](const auto &option) {
+              return sourceTokens.contains(option);
+            })) tokens.push_back(dimension.front());
+      }
+    }
+    append(std::move(tokens));
+    if (result.size() == kMaximumGeneratedCandidateProfiles) return result;
+  }
+  // Round-robin the local combinations across all style/color profiles so
+  // later styles can acquire alternatives before the first style takes all.
+  for (const auto &local : localCombinations) {
+    for (const auto &structural : structuralOptions) {
+      const auto structuralTokens = Tokenize(structural);
+      const auto standalone = std::ranges::any_of(
+          structuralTokens, [](const auto &token) {
+            return kStandaloneProfileTokens.contains(NormalizeKey(token));
+          });
+      for (const auto &color : colorOptions) {
         for (int smp = 0; smp <= (hasSmp ? 1 : 0); ++smp) {
+          ThrowIfScanCancelled(a_stopToken);
+          if (result.size() == kMaximumGeneratedCandidateProfiles) return result;
           std::vector<std::string> tokens = structuralTokens;
           const auto colorTokens = Tokenize(color);
           tokens.insert(tokens.end(), colorTokens.begin(), colorTokens.end());
-          tokens.insert(tokens.end(), local.begin(), local.end());
+          if (!standalone) tokens.insert(tokens.end(), local.begin(), local.end());
           if (smp != 0) {
             tokens.push_back("smp");
           }
@@ -3422,6 +4044,33 @@ std::vector<KitCandidate> BuildCandidates(
     const std::stop_token &a_stopToken,
     const std::size_t a_profileWorkerBudget) {
   ThrowIfScanCancelled(a_stopToken);
+  if (!a_group.variants.empty()) {
+    std::vector<KitCandidate> result;
+    for (std::size_t i = 0; i < a_group.variants.size(); ++i) {
+      ThrowIfScanCancelled(a_stopToken);
+      const auto& variant = a_group.variants[i];
+      auto candidates = BuildCandidates(variant,
+          [&](float progress, std::string detail) {
+            if (a_progress) a_progress((static_cast<float>(i) + progress) /
+                static_cast<float>(a_group.variants.size()), std::move(detail));
+          }, a_stopToken, a_profileWorkerBudget);
+      // Reserve one place for every remaining explicit version. Keep the
+      // existing 256-profile budget without exhausting it on the first color.
+      const auto remaining = a_group.variants.size() - i - 1;
+      const auto capacity = kMaximumGeneratedCandidateProfiles - result.size() - remaining;
+      const auto count = (std::min)(capacity, candidates.size());
+      auto label = variant.name;
+      if (label.starts_with(a_group.name)) label = TrimSpaces(label.substr(a_group.name.size()));
+      if (label.empty()) label = "base";
+      for (std::size_t c = 0; c < count; ++c) {
+        auto& candidate = candidates[c];
+        candidate.profile = candidate.profile == "base" ? label :
+            (label == "base" ? candidate.profile : label + " / " + candidate.profile);
+        result.push_back(std::move(candidate));
+      }
+    }
+    return result;
+  }
   if (a_progress) {
     a_progress(0.0F, Localization::Get().Format(
                          "progress.preparing_slot_resolve", a_group.name));
@@ -3438,7 +4087,7 @@ std::vector<KitCandidate> BuildCandidates(
   if (candidates.empty()) {
     return {};
   }
-  NormalizeOutfitWideProfiles(candidates);
+  NormalizeOutfitWideProfiles(candidates, a_stopToken);
   const auto localChoiceDimensions = AssignLocalChoiceProfiles(candidates);
   bool conflicts = false;
   for (const auto slot : kVisualSlots) {
@@ -3928,6 +4577,7 @@ void Generator::SnapshotLoadedArmorForms() {
       continue;
     }
 
+    record.bodyFamilyMask = body_family::ClassifyCatalogArmor(armor);
     auto [sourceIt, _] = sources.try_emplace(
         pluginName, PluginSource{.name = pluginName, .selected = false});
     sourceIt->second.armors.push_back(std::move(record));
@@ -3937,6 +4587,8 @@ void Generator::SnapshotLoadedArmorForms() {
   pluginSources_.reserve(sources.size());
   for (auto &[_, source] : sources) {
     if (!source.armors.empty()) {
+      source.hasWornArmorModel = HasWornArmorModel(source.armors);
+      source.bodyFilters = PluginBodyFilters(source.armors);
       pluginSources_.push_back(std::move(source));
     }
   }
@@ -3983,15 +4635,6 @@ bool Generator::SetPluginSourceSelected(const std::size_t a_index,
   }
   pluginSources_[a_index].selected = a_selected;
   return true;
-}
-void Generator::SetAllPluginSourcesSelected(const bool a_selected) {
-  const auto state = state_.load(std::memory_order_acquire);
-  if (state == ScanState::Scanning || state == ScanState::Cancelling) {
-    return;
-  }
-  for (auto &source : pluginSources_) {
-    source.selected = a_selected;
-  }
 }
 const std::vector<GeneratedKit> &Generator::GeneratedKits() const {
   return generatedKits_;
@@ -4302,17 +4945,11 @@ void Generator::RunScan(const std::stop_token a_stopToken,
                                     usable.size(), excludedAdult));
 
       reportProgress(0.42F, localization.Text("progress.building_tree"), true);
-      auto groups = BuildStableOutfitGroups(usable, a_stopToken);
+      auto groups = BuildFinalOutfitGroups(usable, a_stopToken);
       ThrowIfScanCancelled(a_stopToken);
-      if (groups.empty() && usable.size() >= kMinimumGroupSize) {
-        groups.push_back({BuildGroupName(usable), usable});
-      }
       const auto treeGroupCount = groups.size();
 
       reportProgress(0.55F, localization.Text("progress.merging"), true);
-      groups = MergeGroups(groups, a_stopToken);
-      groups =
-          MergeRelatedSiblingGroups(std::move(groups), a_stopToken);
       ThrowIfScanCancelled(a_stopToken);
       AppendLog(localization.Format("log.merge", treeGroupCount,
                                     groups.size()));
@@ -4844,10 +5481,21 @@ std::size_t Generator::DeleteGeneratedKits(
   return EraseGeneratedKitsAtIndices(generatedKits_, a_indices);
 }
 
-std::size_t Generator::CreateKitFiles(std::string &a_error) {
+std::size_t Generator::CreateKitFiles(
+    const std::vector<std::size_t> &a_indices, std::string &a_error) {
   a_error.clear();
   if (state_.load(std::memory_order_acquire) != ScanState::Complete) {
     a_error = Localization::Get().Text("error.scan_incomplete");
+    return 0;
+  }
+  // Resolve explicit checks before touching the filesystem. Empty never means
+  // "all", and stale indices cannot partially publish the wrong selection.
+  auto indices = a_indices;
+  std::ranges::sort(indices);
+  indices.erase(std::unique(indices.begin(), indices.end()), indices.end());
+  if (indices.empty()) return 0;
+  if (indices.back() >= generatedKits_.size()) {
+    a_error = Localization::Get().Text("error.invalid_selection");
     return 0;
   }
   const auto outputRoot = std::filesystem::path("Data") / "Interface" /
@@ -4863,7 +5511,8 @@ std::size_t Generator::CreateKitFiles(std::string &a_error) {
   std::size_t written = 0;
   std::size_t failed = 0;
   std::string firstError;
-  for (const auto &kit : generatedKits_) {
+  for (const auto index : indices) {
+    const auto &kit = generatedKits_[index];
     try {
       if (kit.candidates.empty()) {
         continue;

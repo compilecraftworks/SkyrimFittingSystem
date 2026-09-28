@@ -1,11 +1,14 @@
 #include "input/CharacterRotation.h"
 #include "ui/MenuCharacterRotationRules.h"
 #include "ui/components/TitleBarHint.h"
+#include "ui/components/WrappedTooltip.h"
 #include <imgui_internal.h>
 #include <cstdio>
 #include <cstdlib>
 #include <cstdint>
 #include <limits>
+#include "kit_generator/ResultRow.h"
+#include "ui/catalog/BrowserState.h"
 #include <string_view>
 
 // Same production mapping helper, with a replaceable game control-map boundary.
@@ -112,6 +115,141 @@ int main() {
   io.AddMousePosEvent(closePos.x, closePos.y); io.AddMouseButtonEvent(0, true); frame(950);
   io.AddMouseButtonEvent(0, false); frame(950);
   Check(!open, "X close remains clickable beside the hint");
+  for (const float viewportWidth : {1600.0f, 240.0f}) {
+    io.DisplaySize = {viewportWidth, 1000};
+    for (int n = 0; n < 3; ++n) {
+      ImGui::NewFrame();
+      ImGui::Begin("Tooltip layout test");
+      const auto cursor = ImGui::GetCursorPos();
+      const auto wrapBefore = ImGui::GetCurrentWindow()->DC.TextWrapPos;
+      sfs::ui::components::DrawWrappedTooltip(
+          "Review automatic grouping\n\n"
+          "A group containing at least half the usable armor items has over 30 candidates. "
+          "Many valid variants can also trigger this warning. Selection and generation remain available.");
+      Check(ImGui::GetCursorPos().x == cursor.x && ImGui::GetCursorPos().y == cursor.y &&
+            ImGui::GetCurrentWindow()->DC.TextWrapPos == wrapBefore,
+            "tooltip must not change the source list layout/wrapping");
+      if (n == 2) {
+        bool found = false;
+        for (auto* tooltip : GImGui->Windows) {
+          if (!tooltip->Active || !(tooltip->Flags & ImGuiWindowFlags_Tooltip)) continue;
+          found = true;
+          const auto fontSize = ImGui::GetFontSize();
+          Check(tooltip->Size.x <= fontSize * 24 + 2 * ImGui::GetStyle().WindowPadding.x + 2 &&
+                tooltip->Size.x <= viewportWidth,
+                "tooltip width must be compact and remain within a narrow viewport");
+          Check(tooltip->ContentSize.y > fontSize * 5,
+                "long tooltip text must wrap, not remain on one long line");
+          Check(tooltip->Size.y >= tooltip->ContentSize.y,
+                "tooltip height must grow to show the complete text");
+        }
+        Check(found, "production wrapped tooltip must render");
+      }
+      ImGui::End(); ImGui::Render();
+    }
+  }
+  // Exercise the production generated-kit row, not an imitation of its hit
+  // tests. Checkbox press/release, double-click, columns, scrolling and popups.
+  io.DisplaySize = {1600, 1000};
+  bool rowChecks[64]{};
+  ImVec2 checkboxPositions[64]{}, namePositions[64]{}, espPositions[64]{};
+  int changed = 0, clicked = 0, entered = 0;
+  bool showModal = false;
+  const auto resultFrame = [&](bool scrollBottom = false) {
+    ImGui::NewFrame();
+    ImGui::SetNextWindowPos({50, 50});
+    ImGui::SetNextWindowSize({540, 350});
+    ImGui::Begin("Generated-kit results");
+    if (showModal && !ImGui::IsPopupOpen("##result-modal")) ImGui::OpenPopup("##result-modal");
+    if (ImGui::BeginTable("##test-results", 4, ImGuiTableFlags_ScrollY |
+          ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg, {0, 230})) {
+      ImGui::TableSetupColumn("check", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFrameHeight());
+      ImGui::TableSetupColumn("name");
+      ImGui::TableSetupColumn("esp");
+      ImGui::TableSetupColumn("count");
+      ImGui::TableSetupScrollFreeze(0, 1);
+      ImGui::TableHeadersRow();
+      for (int row = 0; row < 64; ++row) {
+        ImGui::PushID(row);
+        const auto action = sfs::kit_generator::DrawResultRow(rowChecks[row], false,
+            row == 0, "Kit", "Outfit.esp", "Candidates - 2 >");
+        changed += action.checkChanged;
+        clicked += action.clicked;
+        entered += action.openDetail;
+        const auto* table = ImGui::GetCurrentTable();
+        const float y = table->RowPosY1 + ImGui::GetStyle().CellPadding.y + ImGui::GetFrameHeight() / 2;
+        checkboxPositions[row] = {table->Columns[0].WorkMinX + ImGui::GetFrameHeight() / 2, y};
+        namePositions[row] = {table->Columns[1].WorkMinX + 30, y};
+        espPositions[row] = {table->Columns[2].WorkMinX + 30, y};
+        ImGui::PopID();
+      }
+      if (scrollBottom) ImGui::SetScrollY(ImGui::GetCurrentTable()->InnerWindow, 100000);
+      ImGui::EndTable();
+    }
+    if (ImGui::BeginPopupModal("##result-modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+      ImGui::TextUnformatted("Rename modal owns input");
+      if (!showModal) ImGui::CloseCurrentPopup();
+      ImGui::EndPopup();
+    }
+    ImGui::End();
+    ImGui::Render();
+  };
+  const auto resultClick = [&](ImVec2 pos) {
+    io.AddMousePosEvent(pos.x, pos.y);
+    io.AddMouseButtonEvent(0, true); resultFrame();
+    io.AddMouseButtonEvent(0, false); resultFrame();
+  };
+  const auto idle = [&]() { for (int i = 0; i < 25; ++i) resultFrame(); };
+  resultFrame(); resultFrame(); resultFrame();
+  resultClick(checkboxPositions[0]);
+  Check(rowChecks[0] && changed == 1 && clicked == 0 && entered == 0,
+        "first checkbox release must check without selecting/previewing/opening the row");
+  resultClick(checkboxPositions[0]);
+  Check(!rowChecks[0] && changed == 2 && clicked == 0 && entered == 0,
+        "checkbox double-click must never enter candidate detail");
+  idle();
+  resultClick(namePositions[0]);
+  Check(clicked == 1 && entered == 0 && changed == 2,
+        "single row click retains preview/highlight without changing checks");
+  resultClick(namePositions[0]);
+  Check(entered == 1 && changed == 2, "row double-click opens detail without checking");
+  idle();
+  const int clicksBefore = clicked;
+  resultClick(espPositions[0]);
+  Check(clicked == clicksBefore + 1 && entered == 1, "ESP cell is also a row selection target");
+  idle();
+  io.AddMousePosEvent(20, 20); io.AddMouseButtonEvent(0, true); resultFrame();
+  io.AddMousePosEvent(namePositions[0].x, namePositions[0].y);
+  io.AddMouseButtonEvent(0, false); resultFrame();
+  Check(clicked == clicksBefore + 1, "release from an outside press cannot select a result row");
+  resultFrame(true); resultFrame(); resultFrame();
+  idle();
+  resultClick(checkboxPositions[63]);
+  Check(rowChecks[63] && !rowChecks[0] && changed == 3 && entered == 1,
+        "scrolled checkbox must target its source row, never an earlier row");
+  showModal = true; resultFrame(); resultFrame();
+  resultClick(checkboxPositions[63]);
+  Check(changed == 3 && rowChecks[63], "modal must block result checkbox input");
+  showModal = false; resultFrame();
+  sfs::ui::catalog::BrowserState browser;
+  for (int cycle = 0; cycle < 128; ++cycle) {
+    using Tab = sfs::ui::catalog::BrowserTab;
+    browser.favoriteFilters = {};
+    browser.activeTab = Tab::Gear;
+    browser.ActiveFavoritesOnly() = true;
+    browser.activeTab = Tab::Kits;
+    Check(!browser.ActiveFavoritesOnly(), "Gear favorite checkbox must not check Kits");
+    browser.ActiveFavoritesOnly() = true;
+    browser.activeTab = Tab::Outfits;
+    Check(browser.FavoritesOnlyFor(Tab::Gear) && browser.FavoritesOnlyFor(Tab::Kits) &&
+              !browser.FavoritesOnlyFor(Tab::Conditions) && !browser.FavoritesOnlyFor(Tab::KitGenerator),
+          "Only catalog tabs have a favorite-only filter; other tabs must not borrow Kits state");
+    Check(!browser.ActiveFavoritesOnly(), "Each catalog tab must bind its own favorite setting");
+    browser.activeTab = Tab::Gear;
+    browser.ActiveFavoritesOnly() = false;
+    Check(browser.favoriteFilters.kits && !browser.favoriteFilters.outfits,
+          "Returning to Gear and toggling it must leave the other tabs unchanged");
+  }
   ImGui::DestroyContext();
-  std::puts("Menu gamepad/cancel rules and real-ImGui title/close tests passed.");
+  std::puts("Menu gamepad/cancel rules and real-ImGui title/close/tooltip/result-row tests passed.");
 }

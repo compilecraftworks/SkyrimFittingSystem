@@ -78,11 +78,10 @@ Mask DetectText(const std::string_view a_text, const Sex a_sex) {
       detected |= Bit(Family::Ube);
     }
 
-    // 3BBB exists in both the CBBE and BHUNP ecosystems. It only reinforces a
-    // family already established by an unambiguous signal and never decides a
-    // family by itself.
+    // An otherwise unqualified 3BBB label belongs to the CBBE filter.
+    // An explicit BHUNP/UBE conversion remains authoritative.
     const bool threeBbb = HasDistinctiveFragment(tokens, "3bbb");
-    if (threeBbb && (cbbe || threeBa)) {
+    if (threeBbb && (cbbe || threeBa || (!unp && !ube))) {
       detected |= Bit(Family::Cbbe);
     }
     if (threeBbb && unp) {

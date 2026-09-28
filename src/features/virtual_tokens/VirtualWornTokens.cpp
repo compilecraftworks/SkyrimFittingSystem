@@ -19,6 +19,7 @@
 #include <RE/S/ScriptFunction.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <chrono>
@@ -3656,7 +3657,8 @@ bool PatchSelectedNativesInType(RE::BSScript::ObjectTypeInfo *a_type,
 
 // Bounded installation memo, NOT an actor/appearance/condition-result cache.
 // Retaining each cached type prevents pointer reuse from masquerading as an
-// already inspected type. Collisions evict entries and merely cause a rescan.
+// already inspected type. Four-way buckets keep colliding hot types resident;
+// ownership remains bounded to 128 entries, with LRU eviction inside a bucket.
 struct ScriptTypeInspectionStamp {
   RE::BSScript::IVirtualMachine *vm{};
   RE::BSScript::ObjectTypeInfo *type{};
@@ -3673,6 +3675,8 @@ struct ScriptTypeInspectionEntry {
 };
 
 constexpr std::size_t kScriptTypeInspectionCacheSize = 128;
+constexpr std::size_t kScriptTypeInspectionWays = 4;
+static_assert(kScriptTypeInspectionCacheSize % kScriptTypeInspectionWays == 0);
 std::array<ScriptTypeInspectionEntry, kScriptTypeInspectionCacheSize>
     g_scriptTypeInspections;
 std::mutex g_scriptTypeMemoMutex;
@@ -3681,7 +3685,28 @@ std::atomic<std::uint64_t> g_scriptTypeInspectionRevision{1};
 [[nodiscard]] std::size_t ScriptTypeInspectionIndex(
     const RE::BSScript::ObjectTypeInfo *a_type) {
   const auto address = reinterpret_cast<std::uintptr_t>(a_type);
-  return ((address >> 4) ^ (address >> 12)) % kScriptTypeInspectionCacheSize;
+  return (((address >> 4) ^ (address >> 12)) %
+          (kScriptTypeInspectionCacheSize / kScriptTypeInspectionWays)) *
+         kScriptTypeInspectionWays;
+}
+
+// These helpers only run under g_scriptTypeMemoMutex. Entries are ordered MRU
+// first; promotion moves ownership without retaining or releasing another type.
+[[nodiscard]] ScriptTypeInspectionEntry *FindScriptTypeInspection(
+    const RE::BSScript::ObjectTypeInfo *a_type) {
+  const auto start = ScriptTypeInspectionIndex(a_type);
+  for (std::size_t i = start; i < start + kScriptTypeInspectionWays; ++i) {
+    if (g_scriptTypeInspections[i].owner.get() == a_type) {
+      return &g_scriptTypeInspections[i];
+    }
+  }
+  return nullptr;
+}
+
+void PromoteScriptTypeInspection(ScriptTypeInspectionEntry *a_entry) {
+  auto *first = g_scriptTypeInspections.data() +
+                ScriptTypeInspectionIndex(a_entry->owner.get());
+  std::rotate(first, a_entry, a_entry + 1);
 }
 
 [[nodiscard]] ScriptTypeInspectionStamp CaptureScriptTypeInspectionStamp(
@@ -3715,16 +3740,17 @@ struct ScriptTypeInspectionResult {
   const auto index = ScriptTypeInspectionIndex(a_type.get());
   {
     std::lock_guard lock(g_scriptTypeMemoMutex);
-    auto &entry = g_scriptTypeInspections[index];
+    auto *entry = FindScriptTypeInspection(a_type.get());
     if (!result.stamp.type) {
-      if (entry.owner.get() == a_type.get()) {
-        retired = std::move(entry);
-        entry = {};
+      if (entry) {
+        retired = std::move(*entry);
+        *entry = {};
       }
       return result;
     }
-    if (!a_postLink && entry.stamp == result.stamp) {
-      result.needsPostLink = !entry.postLinkComplete;
+    if (!a_postLink && entry && entry->stamp == result.stamp) {
+      result.needsPostLink = !entry->postLinkComplete;
+      PromoteScriptTypeInspection(entry);
       return result;
     }
   }
@@ -3736,10 +3762,9 @@ struct ScriptTypeInspectionResult {
     // A null entry or unsuccessful selected hook is not an inspected type.
     // Do not turn a transient publication/patch failure into a permanent skip.
     std::lock_guard lock(g_scriptTypeMemoMutex);
-    auto &entry = g_scriptTypeInspections[index];
-    if (entry.owner.get() == a_type.get()) {
-      retired = std::move(entry);
-      entry = {};
+    if (auto *entry = FindScriptTypeInspection(a_type.get())) {
+      retired = std::move(*entry);
+      *entry = {};
     }
     result.stamp = {};
     return result;
@@ -3748,9 +3773,19 @@ struct ScriptTypeInspectionResult {
     std::lock_guard lock(g_scriptTypeMemoMutex);
     if (g_scriptTypeInspectionRevision.load(std::memory_order_acquire) ==
         result.stamp.revision) {
-      auto &entry = g_scriptTypeInspections[index];
-      retired = std::move(entry);
-      entry = {a_type, result.stamp, false};
+      auto *entry = FindScriptTypeInspection(a_type.get());
+      if (!entry) {
+        entry = &g_scriptTypeInspections[index + kScriptTypeInspectionWays - 1];
+        for (std::size_t i = index; i < index + kScriptTypeInspectionWays; ++i) {
+          if (!g_scriptTypeInspections[i].owner) {
+            entry = &g_scriptTypeInspections[i];
+            break;
+          }
+        }
+      }
+      retired = std::move(*entry);
+      *entry = {a_type, result.stamp, false};
+      PromoteScriptTypeInspection(entry);
     }
   }
   // Evicted type references are released outside the memo lock.
@@ -3762,11 +3797,11 @@ void CompleteScriptTypeInspection(const ScriptTypeInspectionStamp &a_stamp) {
     return;
   }
   std::lock_guard lock(g_scriptTypeMemoMutex);
-  auto &entry = g_scriptTypeInspections[ScriptTypeInspectionIndex(a_stamp.type)];
-  if (entry.stamp == a_stamp &&
+  auto *entry = FindScriptTypeInspection(a_stamp.type);
+  if (entry && entry->stamp == a_stamp &&
       g_scriptTypeInspectionRevision.load(std::memory_order_acquire) ==
           a_stamp.revision) {
-    entry.postLinkComplete = true;
+    entry->postLinkComplete = true;
   }
 }
 

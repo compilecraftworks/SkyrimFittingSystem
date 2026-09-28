@@ -1,0 +1,528 @@
+{
+  "aliases": {
+    "ADD 02.esp|LB Lady Alina SSE": [
+      "레이디 알리나"
+    ],
+    "ADD 02.esp|[Melodic] Combat Gear MK2": [
+      "컴뱃기어 MK2",
+      "CGMK2"
+    ],
+    "ADD 02.esp|888_ParagonFey": [
+      "페이"
+    ],
+    "ADD 02.esp|[Christine] Nocturnal's Embrace": [
+      "Nocturnal Embrace",
+      "녹터널의 포옹"
+    ],
+    "ADD 02.esp|[Christine] Torn": [
+      "립 다크 진",
+      "토른 다크 진",
+      "Torn",
+      "00Torn",
+      "00Torn"
+    ],
+    "ADD 02.esp|[Melodic] Alextrasza": [
+      "알렉스트라자",
+      "Alexstrasza",
+      "Alextrasza"
+    ],
+    "ADD 02.esp|[Melodic] Skulllchain": [
+      "Skullchain",
+      "스컬체인"
+    ],
+    "ADD 02.esp|[Odd&Sumugi] Mysterious Heroine XX CBBE 3BA": [
+      "MHXX"
+    ],
+    "ADD 02.esp|C5Kev's Leather Bikini": [
+      "C5Kev's 레이스 비키니",
+      "LaceBikini"
+    ],
+    "ADD 02.esp|FGO Musashi swimsuit": [
+      "무사시",
+      "Musashi"
+    ],
+    "ADD 02.esp|fox28 Armor": [
+      "폭스 콜렉션 28"
+    ],
+    "ADD 02.esp|fox37 Armor": [
+      "폭스 콜렉션 37"
+    ],
+    "ADD 02.esp|fox50 Armor": [
+      "폭스 콜렉션 50"
+    ],
+    "ADD 02.esp|fox52 Armor": [
+      "폭스 콜렉션 52"
+    ],
+    "ADD 02.esp|fox53 Armor": [
+      "폭스 콜렉션 53"
+    ],
+    "ADD 02.esp|fox61 Armor": [
+      "폭스 콜렉션 61"
+    ],
+    "ADD 04.esp|[GarudaB]DOA5_Marie_DesingAward": [
+      "마리 로즈 디자인 어워드",
+      "DesingAward"
+    ],
+    "ADD 04.esp|[GIFT]Calyphlox_A": [
+      "Calyphlox"
+    ],
+    "ADD 04.esp|DEMv2-BloodBaroness-SSE": [
+      "DEM Blood Baroness"
+    ],
+    "ADD 04.esp|HS Sister": [
+      "수녀복",
+      "ClothesSister"
+    ],
+    "ADD 04.esp|HwaYang": [
+      "화양연화",
+      "HuaYang"
+    ],
+    "ADD 04.esp|kasumiswimsuit01": [
+      "카스미 수영복"
+    ],
+    "ADD 04.esp|LindsWoodlandAlchemist": [
+      "우드랜드 연금술사",
+      "LindsWAlchemist"
+    ],
+    "ADD 04.esp|Linxuan Hundred Soul FG": [
+      "HundredSoulFG",
+      "헌드레드 소울 Savior FG"
+    ],
+    "ADD 04.esp|OH Jannedaarc by Team TAL": [
+      "Overhit Janne",
+      "OHJanne"
+    ],
+    "ADD 04.esp|TR9DmRxSS_HR": [
+      "테라 서큐버스",
+      "TRS9DMRxSS"
+    ],
+    "ADD 04.esp|WTF Tribal Clothe": [
+      "Tribal Clothe"
+    ],
+    "ADD 04.esp|XIVSummerSwimsuit": [
+      "XIVsummer"
+    ],
+    "ADD 05.esp|[COCO]Student Uniform": [
+      "Student"
+    ],
+    "ADD 05.esp|[em486] Kirax BDO Rosa Le Dessous": [
+      "BDO Rosa Le Dessous",
+      "BDORL"
+    ],
+    "ADD 05.esp|[SE] Melodic - Crux Wild": [
+      "Crux Wild",
+      "크룩스 와일드"
+    ],
+    "ADD 05.esp|[SE] Melodic - Dragon Queen": [
+      "Dragon Queen",
+      "드래곤 퀸"
+    ],
+    "ADD 05.esp|Budoka Goddess [SE]": [
+      "Budoka"
+    ],
+    "ADD 05.esp|Kardia of Rhodes": [
+      "카르디아",
+      "NiseKardia"
+    ],
+    "ADD 05.esp|Schoolgirl Mashup": [
+      "Schoolgirl"
+    ],
+    "ADD 06.esp|BDOR Danharum": [
+      "BDOR 단하룸",
+      "단하룸"
+    ],
+    "ADD 06.esp|BDOR Sacra": [
+      "BDOR 샤크라",
+      "샤크라"
+    ],
+    "ADD 06.esp|Daemon Girl": [
+      "데몬 걸",
+      "Daemon"
+    ],
+    "ADD 06.esp|DOA Marie Rose Christmas": [
+      "DOA 메리 크리스마스"
+    ],
+    "ADD 06.esp|Scandalous": [
+      "스캔달러스"
+    ],
+    "ADD 06.esp|Deliciously Bride": [
+      "신부",
+      "Bride"
+    ],
+    "ADD 06.esp|DM BDOR La Orzeca": [
+      "BDOR 라 오르제카",
+      "BDORLaOr"
+    ],
+    "ADD 06.esp|Harness Kinky": [
+      "킹키",
+      "Kinky"
+    ],
+    "ADD 06.esp|HS2 Xmas Costume": [
+      "HS2 산타걸 코스튬",
+      "XmasSantaGirl"
+    ],
+    "ADD 06.esp|Lace Bunny": [
+      "레이스 버니",
+      "RaceBunny"
+    ],
+    "ADD 06.esp|Latex Teddy": [
+      "라텍스 테디"
+    ],
+    "ADD 06.esp|Mood Outifits": [
+      "무드",
+      "Mood"
+    ],
+    "ADD 06.esp|Nioh Okatsu": [
+      "오카츠",
+      "Okatsu"
+    ],
+    "ADD 06.esp|Oni Fortune Invitation": [
+      "오니 포츈 인비테이션",
+      "OniFortune"
+    ],
+    "ADD 06.esp|Qad": [
+      "큐에이디"
+    ],
+    "ADD 06.esp|Slutty Christmas Mashup": [
+      "슬러티 크리스마스"
+    ],
+    "ADD 06.esp|Sweet Bitter Berry": [
+      "스위트 비터 베리"
+    ],
+    "ADD 06.esp|Transparent Dress Joslin": [
+      "Joslin 투명 드레스",
+      "ClothesTransparentDress"
+    ],
+    "ADD 06.esp|TsunTsun Armor Remastered": [
+      "츤츤",
+      "TsunTsun"
+    ],
+    "ADD 06.esp|Vamp": [
+      "뱀프"
+    ],
+    "ADD 06.esp|VindictusSantaRobes": [
+      "마비노기 영웅전 산타 로브",
+      "VindictusSanta"
+    ],
+    "ADD 08.esp|1등 수영복 콘테스트": [
+      "DOAXVV 1등 수영복 콘테스트"
+    ],
+    "ADD 08.esp|DM BDOR Dobart": [
+      "BDOR 도바르트",
+      "BDORDobart"
+    ],
+    "ADD 08.esp|DOAXVV Holo Holo Days": [
+      "홀로 홀로 데이즈",
+      "HoloDays"
+    ],
+    "ADD 08.esp|Warm Life": [
+      "웜 라이프",
+      "WarmlLife"
+    ],
+    "ADD 08.esp|Yarin Mashup Third": [
+      "야린 매시업 03",
+      "YarinThird"
+    ],
+    "ADD 08.esp|검사 유혈비 의상": [
+      "검사 유혈비"
+    ],
+    "ADD 08.esp|드래곤 크라운 소서리스": [
+      "드래곤즈크라운 소서리스"
+    ],
+    "ADD 08.esp|라이자": [
+      "아텔리에 라이자"
+    ],
+    "ADD 09.esp|실버, 블루, 블랙 플레이트": [
+      "실버 플레이트",
+      "블루 플레이트",
+      "블랙 플레이트",
+      "SilverPlate",
+      "BluePlate",
+      "BlackPlate"
+    ],
+    "ADD 09.esp|아타코 레이싱 코스프레": [
+      "아타고 레이싱 코스프레",
+      "AtagoRacing"
+    ],
+    "ADD 09.esp|코코 서큐버스": [
+      "COCO 서큐버스"
+    ],
+    "ADD 10.esp|샤 누아르": [
+      "샤 누와르",
+      "ChatNoir"
+    ],
+    "ADD 10.esp|세컨드 디자인 콘테스트": [
+      "DOA 세컨드 디자인 콘테스트"
+    ],
+    "ADD 10.esp|아리 할로윈": [
+      "아리 AO",
+      "AHRIall"
+    ],
+    "ADD 12.esp|엘븐 프린세스, 댄서의 팬티": [
+      "엘븐 프린세스",
+      "댄서의 팬티",
+      "ElvenPrincess"
+    ]
+  },
+  "photos": {
+    "ADD 10.esp|스핀드리프트 나이트": {
+      "include": [
+        "^aEula(?!YoRHa)"
+      ],
+      "note": "User requested pooling normal and BodySlide/Lewd variations of the same outfit."
+    },
+    "ADD 10.esp|스핀드리프트 나이트 - 바슬 Lewd Edit": {
+      "include": [
+        "^aEula(?!YoRHa)"
+      ],
+      "note": "User requested pooling normal and BodySlide/Lewd variations of the same outfit."
+    },
+    "ADD 10.esp|요르하 나이트": {
+      "include": [
+        "^aEulaYoRHa"
+      ],
+      "note": "User requested pooling normal and BodySlide/Lewd variations of the same outfit."
+    },
+    "ADD 10.esp|요르하 나이트 - 바슬 Lewd Edit": {
+      "include": [
+        "^aEulaYoRHa"
+      ],
+      "note": "User requested pooling normal and BodySlide/Lewd variations of the same outfit."
+    },
+    "ADD 02.esp|[Christine] Fun Gift 01": {
+      "include": [
+        "^00GiftForestSprite"
+      ],
+      "note": "Reviewed PNG outfit identity; include every color and part of this Gift sub-outfit."
+    },
+    "ADD 02.esp|[Christine] Fun Gift 02": {
+      "include": [
+        "^00GiftMiniTank"
+      ],
+      "note": "Reviewed PNG outfit identity; include every color and part of this Gift sub-outfit."
+    },
+    "ADD 02.esp|[Christine] Fun Gift 03": {
+      "include": [
+        "^00GiftJewelPearl"
+      ],
+      "note": "Reviewed PNG outfit identity; include every color and part of this Gift sub-outfit."
+    },
+    "ADD 03.esp|다크 나이트 01": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*1(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|다크 나이트 02": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*2(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|다크 나이트 03": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*3(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|다크 나이트 04": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*4(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|다크 나이트 05": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*5(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|다크 나이트 06": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*6(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|다크 나이트 07": {
+      "include": [
+        "^_dint_DarkKnight_[^|0-9]*7(?![0-9])",
+        "^_dint_DarkKnight_boots0\\|"
+      ],
+      "note": "Reviewed design number in EDID, retaining all colors and shared shoe."
+    },
+    "ADD 03.esp|말리부 수영복 06": {
+      "include": [
+        "^00MalibuSwimsuit06(?![0-9])"
+      ],
+      "note": "Number identifies a swimsuit design, all color suffixes included."
+    },
+    "ADD 03.esp|말리부 수영복 07": {
+      "include": [
+        "^00MalibuSwimsuit07(?![0-9])"
+      ],
+      "note": "Number identifies a swimsuit design, all color suffixes included."
+    },
+    "ADD 03.esp|말리부 수영복 09": {
+      "include": [
+        "^00MalibuSwimsuit09(?![0-9])"
+      ],
+      "note": "Number identifies a swimsuit design, all color suffixes included."
+    },
+    "ADD 03.esp|코코 비키니 01": {
+      "include": [
+        "^Bikini01(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 02": {
+      "include": [
+        "^Bikini02(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 03": {
+      "include": [
+        "^Bikini03(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 04": {
+      "include": [
+        "^Bikini04(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 05": {
+      "include": [
+        "^Bikini05(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 06": {
+      "include": [
+        "^Bikini06(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 07": {
+      "include": [
+        "^Bikini07(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 08": {
+      "include": [
+        "^Bikini08(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|코코 비키니 09": {
+      "include": [
+        "^Bikini09(?![0-9])"
+      ],
+      "note": "Number identifies a bikini design; letter variants and parts remain together."
+    },
+    "ADD 03.esp|판타지 시리즈 01": {
+      "include": [
+        "^H2135FS1(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 02": {
+      "include": [
+        "^H2135FS2(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 07 [Alteration]": {
+      "include": [
+        "^H2135FS7(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 07 [Conjuration]": {
+      "include": [
+        "^H2135FS7(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 07 [Fire]": {
+      "include": [
+        "^H2135FS7(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 07 [Ice]": {
+      "include": [
+        "^H2135FS7(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 07 [Illusion]": {
+      "include": [
+        "^H2135FS7(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 03.esp|판타지 시리즈 07 [Restoration]": {
+      "include": [
+        "^H2135FS7(?![0-9])"
+      ],
+      "note": "Reviewed design number. All palettes of this design are pooled per user request; PNG label retained."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 01": {
+      "include": [
+        "^aaaMiniBikini"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 02": {
+      "include": [
+        "^aaaMB2(?![0-9])"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 04": {
+      "include": [
+        "^aaaMB4(?![0-9])"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 05": {
+      "include": [
+        "^aaaMB5(?![0-9])"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 07": {
+      "include": [
+        "^aaaMB7(?![0-9])"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 09": {
+      "include": [
+        "^aaaMB9(?![0-9])"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 08.esp|Goma's 미니 비키니 10": {
+      "include": [
+        "^aaaMB10(?![0-9])"
+      ],
+      "note": "Reviewed swimsuit design number; every color suffix is included."
+    },
+    "ADD 12.esp|도바키니 Toon": {
+      "include": [
+        "^TBDNiseDova"
+      ],
+      "note": "Same outfit with Toon/normal variations pooled; candidate profiles coordinate their styles."
+    }
+  }
+}

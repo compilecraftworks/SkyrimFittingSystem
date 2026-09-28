@@ -2,6 +2,7 @@
 
 #include "EquipmentCatalog.h"
 #include "imgui.h"
+#include "ui/catalog/BodyFamilyFilter.h"
 
 #include <cstdint>
 #include <string>
@@ -21,8 +22,7 @@ struct SortState {
 struct GearFilterState {
   std::string catalogRevision;
   std::uint64_t favoritesRevision{0};
-  body_family::Mask actorBodyFamily{0};
-  bool bodyFamilyFilterEnabled{true};
+  BodyFamilyFilter bodyFamilyFilter{BodyFamilyFilter::All};
   bool favoritesOnly{false};
   bool inventoryOnly{false};
   bool hideUnnamedGear{true};
@@ -33,8 +33,7 @@ struct GearFilterState {
   [[nodiscard]] bool operator==(const GearFilterState &a_other) const {
     return catalogRevision == a_other.catalogRevision &&
            favoritesRevision == a_other.favoritesRevision &&
-           actorBodyFamily == a_other.actorBodyFamily &&
-           bodyFamilyFilterEnabled == a_other.bodyFamilyFilterEnabled &&
+           bodyFamilyFilter == a_other.bodyFamilyFilter &&
            favoritesOnly == a_other.favoritesOnly &&
            inventoryOnly == a_other.inventoryOnly &&
            hideUnnamedGear == a_other.hideUnnamedGear &&
@@ -47,8 +46,7 @@ struct GearFilterState {
 struct OutfitFilterState {
   std::string catalogRevision;
   std::uint64_t favoritesRevision{0};
-  body_family::Mask actorBodyFamily{0};
-  bool bodyFamilyFilterEnabled{true};
+  BodyFamilyFilter bodyFamilyFilter{BodyFamilyFilter::All};
   bool favoritesOnly{false};
   int pluginIndex{0};
   std::vector<bool> selectedSlotFilters;
@@ -57,8 +55,7 @@ struct OutfitFilterState {
   [[nodiscard]] bool operator==(const OutfitFilterState &a_other) const {
     return catalogRevision == a_other.catalogRevision &&
            favoritesRevision == a_other.favoritesRevision &&
-           actorBodyFamily == a_other.actorBodyFamily &&
-           bodyFamilyFilterEnabled == a_other.bodyFamilyFilterEnabled &&
+           bodyFamilyFilter == a_other.bodyFamilyFilter &&
            favoritesOnly == a_other.favoritesOnly &&
            pluginIndex == a_other.pluginIndex &&
            selectedSlotFilters == a_other.selectedSlotFilters &&
@@ -69,8 +66,7 @@ struct OutfitFilterState {
 struct KitFilterState {
   std::string catalogRevision;
   std::uint64_t favoritesRevision{0};
-  body_family::Mask actorBodyFamily{0};
-  bool bodyFamilyFilterEnabled{true};
+  BodyFamilyFilter bodyFamilyFilter{BodyFamilyFilter::All};
   bool favoritesOnly{false};
   int collectionIndex{0};
   std::vector<bool> selectedSlotFilters;
@@ -79,8 +75,7 @@ struct KitFilterState {
   [[nodiscard]] bool operator==(const KitFilterState &a_other) const {
     return catalogRevision == a_other.catalogRevision &&
            favoritesRevision == a_other.favoritesRevision &&
-           actorBodyFamily == a_other.actorBodyFamily &&
-           bodyFamilyFilterEnabled == a_other.bodyFamilyFilterEnabled &&
+           bodyFamilyFilter == a_other.bodyFamilyFilter &&
            favoritesOnly == a_other.favoritesOnly &&
            collectionIndex == a_other.collectionIndex &&
            selectedSlotFilters == a_other.selectedSlotFilters &&
