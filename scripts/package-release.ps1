@@ -118,6 +118,11 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
+    'RELEASE-NOTES-v1.7.3.md', 'RELEASE-NOTES-v1.7.3-ko.md',
+    'GITHUB-RELEASE-v1.7.3.md',
+    'nexus-changelog-v1.7.3-en.txt', 'nexus-changelog-v1.7.3-ko.txt',
+    'OCF-SOS-CLASSIFICATION-FIX-2026-10-01.md',
+    'DAV-HT2-HEAD-MASK-FIX-2026-10-01.md',
     'RELEASE-NOTES-v1.7.2.md', 'RELEASE-NOTES-v1.7.2-ko.md',
     'V1.7.2-KIT-INTEGRATION.md',
     'GITHUB-RELEASE-v1.7.2.md',

@@ -494,24 +494,24 @@ void TestRefreshBackends() {
   constexpr auto genitals = std::uint32_t{1} << 22;
   constexpr auto hands = std::uint32_t{1} << 3;
   const auto ht2ResolvedActualMask = body | hands;
-  Expect(MergeDaveResolvedWornMask(ht2ResolvedActualMask, 0) ==
+  Expect(MergeVariantResolvedWornMask(ht2ResolvedActualMask, 0) ==
              ht2ResolvedActualMask,
          "DAVE/HT2-cleared actual head, hair, and circlet bits must not be reconstructed from raw ARMO slots");
-  Expect(MergeDaveResolvedWornMask(ht2ResolvedActualMask, hair) ==
+  Expect(MergeVariantResolvedWornMask(ht2ResolvedActualMask, hair) ==
              (ht2ResolvedActualMask | hair),
          "A pure registered Hair appearance must remain independent of HT2 actual equipment");
-  Expect(MergeDaveResolvedWornMask(ht2ResolvedActualMask, head | circlet) ==
+  Expect(MergeVariantResolvedWornMask(ht2ResolvedActualMask, head | circlet) ==
              (ht2ResolvedActualMask | head | circlet),
          "Only displayed registered headgear slots may extend DAVE's actual-equipment result");
-  Expect(MergeDaveResolvedWornMask(body, 0) == body,
+  Expect(MergeVariantResolvedWornMask(body, 0) == body,
          "A genital slot removed by SFS's DAVE conceal variant must stay removed");
-  Expect(MergeDaveResolvedWornMask(body, genitals) == (body | genitals),
+  Expect(MergeVariantResolvedWornMask(body, genitals) == (body | genitals),
          "SOS/TNG reveal correction must still add the resolved genital display slot");
   const auto rawShownHelmet = head | hair | circlet;
-  Expect(MergeDaveResolvedWornMask(body | rawShownHelmet, 0,
+  Expect(MergeVariantResolvedWornMask(body | rawShownHelmet, 0,
                                   rawShownHelmet) == body,
          "SFS-hidden actual HT2 headgear must release its head ownership without rebuilding DAVE state");
-  Expect(MergeDaveResolvedWornMask(body | rawShownHelmet, circlet,
+  Expect(MergeVariantResolvedWornMask(body | rawShownHelmet, circlet,
                                   rawShownHelmet) == (body | circlet),
          "A displayed registered Circlet may replace only its own slot after the SFS-hidden real helmet is removed");
   Expect(ResolveSfsHiddenWornSlotMask(head | hair | circlet, hair) ==

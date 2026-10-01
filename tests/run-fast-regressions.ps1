@@ -30,6 +30,7 @@ $targets = @(
     "KitListNavigationTests",
     "KeyboardInputRoutingTests",
     "CoreBehaviorRegressionTests",
+    "ArmorClassificationTests",
     "ManualVisibilityRegressionTests",
     "CustomSkinningRegressionTests",
     "IntegrationInitializationTests",

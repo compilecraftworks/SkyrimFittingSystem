@@ -412,7 +412,7 @@ SFS는 화면에 최종 표시되는 실제 장비와 등록 외형을 함께 �
 
 자동 32·49번 판정은 원본 ARMO 변경을 최소화합니다. 32번 상의로 확정되면 SFS가 붙였던 반대 Concealing/Covering 키워드를 회수하고 Revealing 키워드를 추가합니다. 일반 32번 전신 장비는 기본 SOS/TNG 슬롯 동작만으로 가려지므로, 충돌하는 SFS Revealing 상태만 정리하고 Concealing·Covering·Underwear 키워드는 새로 붙이지 않습니다. 49번 하의는 기본 SOS/TNG가 자동으로 가리지 못할 수 있어 Concealing/Covering과 Underwear 키워드를 함께 추가합니다. ESP·KID 또는 다른 모드가 원래 제공한 키워드는 삭제하지 않습니다.
 
-32번 상의 이름 판정에서는 `ArmorCuirass`, `ArmorHeavy`, `ArmorLight`, `ArmorMaterial*`, `ClothingBody`, `VendorItemArmor` 같은 일반 바닐라 장비 분류 키워드를 제외합니다. 장비 이름·EditorID와 의미가 있는 모드/KID 키워드만 상의 단서로 사용하므로 일반 바닐라 갑옷이 `top`, `bra`, `shirt` 등의 상의로 잘못 분류되지 않습니다.
+32번 상의 자동 판정은 장비 이름·EditorID만 사용하며 키워드 이름은 사용하지 않습니다. OCF/KID 등의 분류 정보가 일반 갑옷을 노출 의상으로 바꾸지 않습니다. `top`, `upper`, `chest` 같은 모호한 단어에는 구체적인 의상 문맥이 필요하며, 브라·셔츠·조끼·비키니 상의 등 명확한 이름은 계속 지원합니다. 메시 분석이 아닌 이름 기반 추정이며 SOS 수동 설정이 우선합니다. 49번 하의 분류는 변경하지 않았습니다.
 
 Papyrus와 Skyrim 엔진 조건의 `WornHasKeyword`는 같은 액터별 최종 바디 표시 상태를 사용합니다. 실제 32번 장비 또는 등록 외형 32번 중 하나라도 표시되면 바디 의상이 있는 상태이며, 둘 다 숨겨진 경우에는 없는 상태로 판정합니다. 직접 인벤토리 목록만 검사하는 외부 DLL의 독자 판정까지 강제로 바꾸지는 않습니다.
 

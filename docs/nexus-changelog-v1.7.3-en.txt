@@ -1,0 +1,5 @@
+Fixed OCF/category keywords causing ordinary armor to be incorrectly classified as revealing; upper-only inference now uses item names/EditorIDs with stricter word matching.
+Preserved genuine upper garments, SOS manual choices, slot-49 lower garments, original third-party keywords and consistent virtual-token classification.
+Unified SOS API requests with the detected environment; SOS and TNG remain independently optional.
+Fixed DAV + Helmet Toggle 2 head/hair masks being overwritten by raw actual-armor slots. DAV now preserves resolved variants like DAVE without changing equipment/inventory.
+No changes to requirements, game support, API ABI, save format, helper ESL or optional patches. SE/AE build and 36 regression executables passed; in-game visual verification remains pending.

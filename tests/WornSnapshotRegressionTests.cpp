@@ -8,8 +8,10 @@
 #include <span>
 #include <string_view>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 #include "native/ArmorRefreshRules.h"
+#include "native/HelmetToggle2Rules.h"
 namespace logger { template<class... T> void debug(T&&...) {} }
 namespace RE {
 struct TESObjectREFR { template<class T> T* As() { return static_cast<T*>(this); } };
@@ -28,7 +30,14 @@ struct Actor : TESObjectREFR {
   std::unordered_set<const TESObjectARMO*> worn;
   std::vector<const TESObjectARMO*> additional;
   unsigned reads{};
-  std::uint32_t GetFormID() const { return 0x14; }
+  std::uint32_t formID{0x14};
+  std::uint32_t GetFormID() const { return formID; }
+};
+struct PlayerCharacter {
+  static Actor* GetSingleton() { static Actor player; return &player; }
+};
+struct BGSBipedObjectForm {
+  enum class BipedObjectSlot : std::uint32_t { kHead=1, kHair=2, kCirclet=0x1000 };
 };
 }
 namespace sfs::armor {
@@ -96,13 +105,96 @@ bool ShouldHideRealArmor(RE::Actor*, const DisplaySet& set, const RE::TESObjectA
   return set.active && a->hidden;
 }
 std::uint32_t GetSkinningSlotMask(const RE::TESObjectARMO* a, bool) { return a->mask; }
-std::uint32_t PreserveUnmanagedHeadgearWornMask(RE::Actor*, const DisplaySet&,
-                                              std::uint32_t, std::uint32_t result) { return result; }
 #include "WornMaskQuery.production.inc"
 void Check(bool ok, const char* message) {
   if (!ok) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
 }
+void TestVariantResolvedHeadMasks() {
+  constexpr unsigned head=1, hair=2, body=4, hands=8, circlet=0x1000;
+  constexpr unsigned genitals=1U<<22, faceJewelry=1U<<25;
+  constexpr unsigned actualHelmetMask=head|hair|circlet;
+  struct VariantResult { unsigned mask; bool ht2Hidden; };
+  // These inputs are resolved provider results, not a DAV engine simulation.
+  constexpr VariantResult variants[] = {
+      {actualHelmetMask, false}, {circlet, true}, {hair|circlet, false},
+      {head|circlet, false}, {0, true}};
+  unsigned cases=0;
+  for (unsigned cycle=0; cycle<128; ++cycle) {
+    for (bool player : {true, false}) {
+      for (unsigned fitting : {0U, body, hair, hair|circlet, head|circlet, genitals, faceJewelry}) {
+        for (bool hiddenActual : {false, true}) {
+          for (bool sharedHair : {false, true}) {
+            RE::Actor actor; actor.formID=player ? 0x14 : 0x20;
+            RE::TESObjectARMO helmet{actualHelmetMask,false,hiddenActual};
+            RE::TESObjectARMO ordinary{body|hands,false};
+            RE::TESObjectARMO wig{hair,false};
+            RE::TESObjectARMO appearance{fitting,false};
+            actor.worn={&helmet,&ordinary};
+            if (sharedHair) actor.worn.insert(&wig);
+            if (fitting) actor.additional={&appearance};
+            for (auto variant : variants) {
+              const unsigned base=body|hands|variant.mask|(sharedHair ? hair : 0);
+              const unsigned exclusiveHidden=hiddenActual
+                  ? actualHelmetMask & ~(sharedHair ? hair : 0) : 0;
+              const unsigned release=sfs::native::helmet_toggle::rules::ComputeActualHairSlotReleaseMask(
+                  variant.ht2Hidden, actualHelmetMask, fitting);
+              const unsigned expected=((base & ~exclusiveHidden)|fitting)&~release;
+              sfs::native::helmet_toggle::release=release;
+              unsigned previous=expected;
+              // Missing API -> ready API -> unavailable again must not change
+              // display ownership. The actual refresh backends remain separate.
+              for (bool ready : {false, true, false}) {
+                sfs::native::dave::loaded=true;
+                sfs::native::dave::ready=ready;
+                actor.reads=0;
+                const unsigned result=GetDisplayWornMask(nullptr,&actor,base);
+                if (result!=expected) {
+                  std::fprintf(stderr,"Head-mask mismatch: player=%d apiReady=%d fitting=%08X hiddenActual=%d sharedHair=%d base=%08X expected=%08X result=%08X\n",
+                      player,ready,fitting,hiddenActual,sharedHair,base,expected,result);
+                }
+                Check(result==expected,
+                      "DAV/DAVE must preserve resolved head visibility, remove only SFS-owned hidden slots, and add registered slots");
+                Check(result==previous && actor.reads==1,
+                      "API readiness transitions retain the same mask and one request-local collection");
+                Check(actor.worn.contains(&helmet) && actor.worn.size()==(sharedHair ? 3U : 2U),
+                      "display-mask composition never equips or removes actual inventory items");
+                previous=result;
+                ++cases;
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // Inactive/unmanaged/null queries preserve the provider answer and the
+  // pre-existing narrowly scoped HT2 Hair release, without eager collection.
+  for (bool ready : {false, true}) {
+    sfs::native::dave::ready=ready;
+    RE::Actor actor; actor.active=false;
+    sfs::native::helmet_toggle::release=hair;
+    Check(GetDisplayWornMask(nullptr,&actor,body|hair)==body && actor.reads==1,
+          "inactive DAV/DAVE query keeps HT2 release without rebuilding head slots");
+    actor.managed=false; actor.reads=0;
+    Check(GetDisplayWornMask(nullptr,&actor,body|hair)==body && actor.reads==0,
+          "unmanaged DAV/DAVE query does not collect equipment");
+    sfs::native::helmet_toggle::release=0;
+    Check(GetDisplayWornMask(nullptr,nullptr,body|head)==(body|head),
+          "null DAV/DAVE query keeps the original mask");
+  }
+  // Native-only behavior still uses the production unmanaged-NPC rule.
+  sfs::native::dave::loaded=false; sfs::native::dave::ready=false;
+  RE::Actor native;
+  RE::TESObjectARMO helmet{actualHelmetMask,false}; native.worn={&helmet};
+  Check(GetDisplayWornMask(nullptr,&native,0)==actualHelmetMask,
+        "native player continues reconstructing actual slots without a variant provider");
+  native.formID=0x20;
+  Check(GetDisplayWornMask(nullptr,&native,circlet)==circlet,
+        "native unmanaged NPC headgear continues preserving the incoming mask");
+  std::printf("DAV/DAVE head-mask parity: %u cases through 128 cycles, plus inactive/native controls (production functions, fake engine).\n",cases);
+}
 int main() {
+  TestVariantResolvedHeadMasks();
   RE::TESObjectARMO real{4, false}, appearance{4, true}, accessory{128, true};
   RE::BGSKeyword clothing{"ClothingBody"}, armor{"ArmorCuirass"}, unrelated{"Other"};
   RE::Actor a; a.worn = {&real}; a.additional = {&appearance};

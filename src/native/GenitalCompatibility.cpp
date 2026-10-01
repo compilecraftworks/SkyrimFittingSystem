@@ -5,7 +5,7 @@
 #include <atomic>
 
 namespace {
-std::atomic_bool g_sosInstalled{false};
+std::atomic<RE::FormID> g_sosApiFormID{0};
 std::atomic_bool g_tngInstalled{false};
 
 [[nodiscard]] RE::TESForm *FindSosApiForm() {
@@ -30,7 +30,8 @@ void InitializeEnvironment() {
   const bool sosInstalled = sosApiForm != nullptr;
   const bool tngInstalled =
       tngCover != nullptr && sfs::armor::IsTngGenitalCoverArmor(tngCover);
-  g_sosInstalled.store(sosInstalled, std::memory_order_release);
+  g_sosApiFormID.store(sosApiForm ? sosApiForm->GetFormID() : 0,
+                      std::memory_order_release);
   g_tngInstalled.store(tngInstalled, std::memory_order_release);
   logger::info("Detected genital compatibility environment: SOS={} "
                "apiForm={:08X}, TNG={} coverForm={:08X}",
@@ -40,7 +41,7 @@ void InitializeEnvironment() {
 
 rules::Environment GetEnvironment() {
   return {.sosInstalled =
-              g_sosInstalled.load(std::memory_order_acquire),
+              g_sosApiFormID.load(std::memory_order_acquire) != 0,
           .tngInstalled =
               g_tngInstalled.load(std::memory_order_acquire)};
 }
@@ -48,5 +49,10 @@ rules::Environment GetEnvironment() {
 bool IsSosInstalled() { return GetEnvironment().sosInstalled; }
 
 bool IsTngInstalled() { return GetEnvironment().tngInstalled; }
+
+RE::TESForm *GetSosApiForm() {
+  const auto formID = g_sosApiFormID.load(std::memory_order_acquire);
+  return formID ? RE::TESForm::LookupByID(formID) : nullptr;
+}
 
 } // namespace sfs::native::genital_compatibility

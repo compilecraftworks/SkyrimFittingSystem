@@ -434,7 +434,8 @@ void AppendSearchText(std::string &a_output, const std::string &a_value) {
 }
 
 [[nodiscard]] bool ContainsSearchTerm(const std::string &a_text,
-                                      const std::string_view a_term) {
+                                      const std::string_view a_term,
+                                      const bool a_requireWholeAsciiTerm = false) {
   if (a_text.empty() || a_term.empty()) {
     return false;
   }
@@ -463,6 +464,12 @@ void AppendSearchText(std::string &a_output, const std::string &a_value) {
     return true;
   }
 
+  if (a_requireWholeAsciiTerm) {
+    // Retain ordinary plural garment names without reopening prefix matches
+    // such as Shirtless, Vestments or BikiniTopology.
+    paddedTerm.insert(paddedTerm.size() - 1, 1, 's');
+    return paddedText.find(paddedTerm) != std::string::npos;
+  }
   if (a_term.size() < 4) {
     return false;
   }
@@ -493,52 +500,34 @@ void AppendSearchText(std::string &a_output, const std::string &a_value) {
 template <std::size_t N>
 [[nodiscard]] bool
 ContainsAnySearchTerm(const std::string &a_text,
-                      const std::array<std::string_view, N> &a_terms) {
+                      const std::array<std::string_view, N> &a_terms,
+                      const bool a_requireWholeAsciiTerm = false) {
   return std::ranges::any_of(a_terms, [&](const auto term) {
-    return ContainsSearchTerm(a_text, term);
+    return ContainsSearchTerm(a_text, term, a_requireWholeAsciiTerm);
   });
 }
 
 [[nodiscard]] std::string
 BuildArmorClassificationText(
     const RE::TESObjectARMO *a_armor,
-    const bool a_ignoreGenericVanillaArmorKeywords = false) {
+    const bool a_includeKeywords = true) {
   std::string text;
   if (!a_armor) {
     return text;
   }
 
   AppendSearchText(text, sfs::armor::GetEditorID(a_armor));
+  if (!a_includeKeywords && !text.empty()) {
+    // Do not manufacture a phrase from an EditorID ending in "Bikini" and
+    // an unrelated display name starting with "Top". Preserve word boundaries.
+    text.append(" |");
+  }
   AppendSearchText(text, sfs::armor::GetDisplayName(a_armor));
+  if (!a_includeKeywords) {
+    return text;
+  }
   for (const auto *keyword : a_armor->GetKeywords()) {
-    const auto keywordEditorID = sfs::armor::GetEditorID(keyword);
-    if (a_ignoreGenericVanillaArmorKeywords) {
-      static constexpr std::array kGenericVanillaArmorKeywords{
-          std::string_view{"ArmorBoots"},
-          std::string_view{"ArmorCuirass"},
-          std::string_view{"ArmorGauntlets"},
-          std::string_view{"ArmorHeavy"},
-          std::string_view{"ArmorHelmet"},
-          std::string_view{"ArmorLight"},
-          std::string_view{"ArmorShield"},
-          std::string_view{"ClothingBody"},
-          std::string_view{"ClothingFeet"},
-          std::string_view{"ClothingHands"},
-          std::string_view{"ClothingHead"},
-          std::string_view{"ClothingNecklace"},
-          std::string_view{"ClothingRing"},
-          std::string_view{"VendorItemArmor"},
-          std::string_view{"VendorItemClothing"},
-          std::string_view{"VendorItemJewelry"}};
-      const bool genericKeyword =
-          std::ranges::find(kGenericVanillaArmorKeywords, keywordEditorID) !=
-              kGenericVanillaArmorKeywords.end() ||
-          keywordEditorID.starts_with("ArmorMaterial");
-      if (genericKeyword) {
-        continue;
-      }
-    }
-    AppendSearchText(text, keywordEditorID);
+    AppendSearchText(text, sfs::armor::GetEditorID(keyword));
   }
   return text;
 }
@@ -929,11 +918,10 @@ IsLikelyUpperOnlyBodyArmor(const RE::TESObjectARMO *a_armor) {
     return false;
   }
 
-  // Generic vanilla equipment taxonomy such as ArmorCuirass, ArmorHeavy,
-  // ArmorMaterial*, ClothingBody, and VendorItemArmor must not turn an
-  // ordinary cuirass into an upper-only garment. Item names, EditorIDs, and
-  // semantic mod/KID keywords remain available to the classifier.
-  const auto text = BuildArmorClassificationText(a_armor, true);
+  // Category keywords (including OCF/KID metadata) describe taxonomy, not
+  // exposed geometry. Only item identity contributes to this upper heuristic;
+  // explicit SOS user policy and the existing lower-slot policy are separate.
+  const auto text = BuildArmorClassificationText(a_armor, false);
   static constexpr std::array kExplicitUpperOnlyTerms{
       std::string_view{"bikini top"},
       std::string_view{"bikini upper"},
@@ -965,7 +953,7 @@ IsLikelyUpperOnlyBodyArmor(const RE::TESObjectARMO *a_armor) {
           "\xE6\xAF\x94\xE5\x9F\xBA\xE5\xB0\xBC\xE4\xB8\x8A\xE8\xA1\xA3"},
       std::string_view{"\xE6\xB3\xB3\xE8\xA3\x85\xE4\xB8\x8A\xE8\xA1\xA3"},
       std::string_view{"\xE6\xB3\xB3\xE8\xA1\xA3\xE4\xB8\x8A\xE8\xA1\xA3"}};
-  if (ContainsAnySearchTerm(text, kExplicitUpperOnlyTerms)) {
+  if (ContainsAnySearchTerm(text, kExplicitUpperOnlyTerms, true)) {
     return true;
   }
 
@@ -1062,20 +1050,19 @@ IsLikelyUpperOnlyBodyArmor(const RE::TESObjectARMO *a_armor) {
       std::string_view{"bra"},
       std::string_view{"bralette"},
       std::string_view{"brassiere"},
-      std::string_view{"breast"},
+      std::string_view{"breast wrap"},
       std::string_view{"bustier"},
       std::string_view{"camisole"},
-      std::string_view{"chest"},
-      std::string_view{"crop"},
+      std::string_view{"chest wrap"},
+      std::string_view{"crop top"},
       std::string_view{"croptop"},
-      std::string_view{"halter"},
+      std::string_view{"halter top"},
       std::string_view{"hoodie"},
       std::string_view{"jacket"},
       std::string_view{"shirt"},
       std::string_view{"sweater"},
-      std::string_view{"top"},
-      std::string_view{"tube"},
-      std::string_view{"upper"},
+      std::string_view{"tank top"},
+      std::string_view{"tube top"},
       std::string_view{"vest"},
       std::string_view{"\xEA\xB0\x80\xEC\x8A\xB4"},
       std::string_view{"\xEB\xB8\x8C\xEB\x9D\xBC"},
@@ -1101,7 +1088,9 @@ IsLikelyUpperOnlyBodyArmor(const RE::TESObjectARMO *a_armor) {
       std::string_view{"\xE8\x83\x8C\xE5\xBF\x83"},
       std::string_view{"\xE8\xA1\xAC\xE8\xA1\xAB"},
       std::string_view{"\xE5\x90\x8A\xE5\xB8\xA6"}};
-  return ContainsAnySearchTerm(text, kUpperBodyTerms);
+  // Keep clear garment nouns (bra, shirt, vest, etc.), but neither generic
+  // Top/Upper labels nor prefixes such as Shirtless/Vestments prove exposure.
+  return ContainsAnySearchTerm(text, kUpperBodyTerms, true);
 }
 
 [[nodiscard]] ArmorGenitalKeywordOverride
@@ -3144,15 +3133,14 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
     return a_baseWornMask & ~releasedActualHairSlotMask;
   }
 
-  if (sfs::native::dave::IsDynamicArmorVariantsLoaded() &&
-      sfs::native::dave::IsApiReady()) {
-    // The chained DAVE GetWornMask result is already resolved through all
-    // active variants. In particular, HT2's overrideHead=showAll removes the
-    // real helmet's Hair bit here. Rebuilding visible actual equipment from
-    // raw ARMO masks during genital correction would put that bit back and
-    // make the actor bald. SFS-owned genital/actual hiding is also represented
-    // by the DAVE variant synchronized before RefreshActor, so only merge the
-    // registered-appearance projection.
+  if (sfs::native::dave::IsDynamicArmorVariantsLoaded()) {
+    // DAV and DAVE both resolve GetWornMask through their active variants.
+    // Preserve that result independently of DAVE API availability: rebuilding
+    // actual slots from ARMO masks would undo HT2's overrideHead=showAll and
+    // hide the face/hair again. Remove only SFS-owned hidden slots, then merge
+    // registered appearances. Refresh/backend selection remains independent.
+    // Retain the existing late API discovery, without using it to choose masks.
+    const bool daveApiReady = sfs::native::dave::IsApiReady();
     const auto hiddenWornSlots =
         CollectHiddenWornSlotMask(actor, displaySet, equipped);
     const auto visibleWornSlots =
@@ -3161,28 +3149,16 @@ std::uint32_t GetDisplayWornMask(RE::InventoryChanges *a_inventory,
         sfs::native::refresh_rules::ResolveSfsHiddenWornSlotMask(
             hiddenWornSlots, visibleWornSlots);
     const auto result =
-        sfs::native::refresh_rules::MergeDaveResolvedWornMask(
+        sfs::native::refresh_rules::MergeVariantResolvedWornMask(
             a_baseWornMask, displaySet.slotMask, sfsHiddenWornSlots);
-    logger::debug("SFS DAVE native: worn-mask actor={:08X} base={:08X} "
+    logger::debug("SFS DAV/DAVE native: worn-mask actor={:08X} base={:08X} "
                   "displaySlot={:08X} hiddenSlot={:08X} result={:08X} "
                   "sfsHiddenWorn={:08X} hairRelease={:08X} "
-                  "genitalCorrection={} apiReady=true",
+                  "genitalCorrection={} apiReady={}",
                   actor ? actor->GetFormID() : 0, a_baseWornMask,
                   displaySet.slotMask, displaySet.hiddenSlotMask, result,
                   sfsHiddenWornSlots, releasedActualHairSlotMask,
-                  displaySet.genitalCorrectionActive);
-    return result & ~releasedActualHairSlotMask;
-  }
-
-  if (sfs::native::dave::IsDynamicArmorVariantsLoaded()) {
-    const auto hiddenWornSlots =
-        CollectHiddenWornSlotMask(actor, displaySet, equipped);
-    const auto visibleWornSlots =
-        CollectVisibleWornSlotMask(actor, displaySet, equipped);
-    const auto result = PreserveUnmanagedHeadgearWornMask(
-        actor, displaySet, a_baseWornMask,
-        (a_baseWornMask & ~hiddenWornSlots) | visibleWornSlots |
-            displaySet.slotMask);
+                  displaySet.genitalCorrectionActive, daveApiReady);
     return result & ~releasedActualHairSlotMask;
   }
 

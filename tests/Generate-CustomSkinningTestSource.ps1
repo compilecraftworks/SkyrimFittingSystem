@@ -17,6 +17,7 @@ $groups = @{
     'WornMaskQuery.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         ('[[nodiscard]] std::uint32_t' + "`n" + 'CollectVisibleWornSlotMask('),
         ('[[nodiscard]] std::uint32_t' + "`n" + 'CollectHiddenWornSlotMask('),
+        '[[nodiscard]] std::uint32_t PreserveUnmanagedHeadgearWornMask(',
         'std::uint32_t GetHiddenRealEquipmentSlotMask(',
         'bool IsRealEquipmentHiddenForActorSlots(',
         'std::uint32_t GetDisplayWornMask('))

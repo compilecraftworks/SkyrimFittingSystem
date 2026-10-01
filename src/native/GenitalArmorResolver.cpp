@@ -171,14 +171,7 @@ void RequestGenitalArmorResolution(RE::Actor *a_actor, const bool a_force) {
     state.attempted = false;
   }
 
-  auto *dataHandler = RE::TESDataHandler::GetSingleton();
-  auto *apiForm =
-      dataHandler
-          ? dataHandler->LookupForm(0x1EDA4, "Schlongs of Skyrim.esp")
-          : nullptr;
-  if (!apiForm) {
-    apiForm = RE::TESForm::LookupByEditorID<RE::TESQuest>("SOS_Misc");
-  }
+  auto *apiForm = sfs::native::genital_compatibility::GetSosApiForm();
   auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
   auto *handlePolicy = vm ? vm->GetObjectHandlePolicy() : nullptr;
   if (!apiForm || !vm || !handlePolicy) {

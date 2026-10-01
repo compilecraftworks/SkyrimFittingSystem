@@ -85,7 +85,11 @@ struct ControlMap {
 namespace sfs::native {
 inline int refreshes = 0;
 void QueueArmorRefreshFor(RE::Actor*) { ++refreshes; }
-namespace genital_compatibility { inline bool installed = true; bool IsSosInstalled() { return installed; } }
+namespace genital_compatibility {
+inline bool installed = true;
+bool IsSosInstalled() { return installed; }
+RE::TESForm* GetSosApiForm() { return installed ? RE::TESForm::LookupByID<RE::TESQuest>(10) : nullptr; }
+}
 }
 #include "Resolver.production.inc"
 
@@ -234,6 +238,14 @@ int main(int argc, char** argv) {
   RequestGenitalArmorResolution(&actor,false);
   check(vm->methods.empty() && g_resolverStates.empty(),"SOS absent does no VM work or cache allocation");
   genital_compatibility::installed=true;
+  RE::TESForm::forms.erase(10);
+  RequestGenitalArmorResolution(&actor,false);
+  check(vm->methods.empty() && !g_resolverStates[actor.id].pending,
+        "missing detected SOS API releases pending state without dispatch");
+  RE::TESForm::forms[10]=&api;
+  RequestGenitalArmorResolution(&actor,true);
+  check(vm->methods.size()==1, "restored API permits explicit retry");
+  reset();
   RequestGenitalArmorResolution(&actor,false);
   std::weak_ptr<RE::BSScript::IStackCallbackFunctor> lifetime=vm->methods.back();
   ClearResolvedGenitalArmors(); vm->methods.clear();

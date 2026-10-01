@@ -7,6 +7,13 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.3 fixes OCF/category keywords being mistaken for exposed upper garments
+by the SOS/TNG classifier, and preserves DAV/HT2 head and hair visibility using
+the same provider-resolved worn-mask merge as DAVE. SOS user choices and
+slot-49 lower-garment support remain; no new prerequisite or API ABI is added.
+See the [English](docs/RELEASE-NOTES-v1.7.3.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.3-ko.md) release notes for details and test limits.
+
 v1.7.2 integrates the community kit grouping work and a shared body-family
 filter for the Equipment, Outfits and Kits lists. This filter changes only
 which rows are shown; it does not clear previews or restrict workbench use.
