@@ -6,6 +6,7 @@
 #include "TngGenitalCoverRules.h"
 #include "conditions/Status.h"
 #include "native/ActiveAppearanceSlotLookup.h"
+#include "native/ActualEquipmentConflictHook.h"
 #include "native/ArmorRefreshRules.h"
 #include "native/DaveIntegration.h"
 #include "native/ExternalEquipmentTransactions.h"
@@ -1550,11 +1551,12 @@ IsRealArmorVisibleInDisplaySet([[maybe_unused]] RE::Actor *a_actor,
 }
 
 [[nodiscard]] bool ShouldManageActorDisplay(RE::Actor *a_actor,
-                                            sfs::Menu &a_menu) {
+                                            sfs::Menu &a_menu,
+                                            const bool a_includeIdlePlayer = true) {
   if (!a_actor) {
     return false;
   }
-  if (IsPlayerActor(a_actor)) {
+  if (a_includeIdlePlayer && IsPlayerActor(a_actor)) {
     return true;
   }
 
@@ -1564,8 +1566,8 @@ IsRealArmorVisibleInDisplaySet([[maybe_unused]] RE::Actor *a_actor,
   }
 
   if (std::ranges::any_of(a_menu.GetWorkbench().GetRows(),
-                          [actorFormID](const auto &a_row) {
-                            return a_row.ownerActorFormID == actorFormID &&
+                          [a_actor](const auto &a_row) {
+                            return a_row.IsOwnedByActor(a_actor) &&
                                    a_row.HasOverridesOrHideState();
                           })) {
     return true;
@@ -3098,6 +3100,38 @@ bool ShouldOverrideSkinning(RE::TESObjectREFR *a_target) {
   return displaySet.active ||
          sfs::native::helmet_toggle::GetActualHairSlotReleaseMask(
              actor, displaySet.slotMask) != 0;
+}
+
+RE::TESForm *ResolveActualEquipConflictCandidate(
+    RE::Actor *a_actor, RE::BipedAnim *a_biped, const std::uint32_t a_slot,
+    RE::TESForm *a_original) {
+  if (!a_actor || !a_biped || a_slot >= equip_conflict::kArmorSlotCount) {
+    return a_original;
+  }
+  auto *menu = sfs::Menu::GetSingleton();
+  if (!menu || !menu->IsGameDataLoaded()) { return a_original; }
+  {
+    auto stateLock = menu->GetWorkbench().AcquireStateLock();
+    if (!ShouldManageActorDisplay(a_actor, *menu, false)) {
+      return a_original;
+    }
+  }
+  // Read existing physical inventory only, without initializing inventory or
+  // evaluating display conditions, virtual tokens, API caches or RaceMenu.
+  auto *inventory = a_actor->GetInventoryChanges(true);
+  auto *actual = inventory ? inventory->GetArmorInSlot(
+                                static_cast<std::int32_t>(a_slot + 30))
+                           : nullptr;
+  if (!actual) { return a_original; }
+  for (std::uint32_t slot = 0; slot < equip_conflict::kArmorSlotCount; ++slot) {
+    if (a_biped->objects[slot].item == actual) {
+      return a_original; // The original loop can already see this worn item.
+    }
+  }
+  // The native loop still validates the armor's original slot mask, quest
+  // restrictions and worn ExtraDataList, and performs its own unequip. No
+  // retained actor/armor pointers, new scan timer or repair/unequip loop.
+  return actual;
 }
 
 bool ShouldBlockVanillaArmor(RE::TESObjectARMO *a_armor,

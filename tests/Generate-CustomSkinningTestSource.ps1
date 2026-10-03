@@ -2,6 +2,9 @@ param([Parameter(Mandatory=$true)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $groups = @{
+    'ActualEquipConflict.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        '[[nodiscard]] bool ShouldManageActorDisplay(',
+        'RE::TESForm *ResolveActualEquipConflictCandidate('))
     'DyeResourceLifecycle.production.inc' = @('src/native/FittingDye.cpp', @(
         'void UpdateWorldTintActivityLocked()', 'class WorldTintBuild final',
         '[[nodiscard]] bool IsCurrentSavedWorldTintRestore(',

@@ -1,4 +1,5 @@
 #include "native/ArmorSkinning.h"
+#include "native/ActualEquipmentConflictHook.h"
 #include "native/BranchChainRules.h"
 #include "native/DaveIntegration.h"
 #include "runtime/RuntimeLayouts.h"
@@ -853,6 +854,23 @@ void InstallArmorSkinningHooks() {
     }
 
     ConfigureRealEquipmentSkinningBackend(*layout, false);
+    const auto equipBase = REL::Relocation<std::uintptr_t>{
+        REL::ID(layout->equipConflictRelocationID)}.address();
+    if (IsReadableCommittedRange(equipBase, equip_conflict::kContractSize, true) &&
+        equip_conflict::MatchesInputContract({
+            reinterpret_cast<const std::uint8_t *>(equipBase),
+            equip_conflict::kContractSize})) {
+      equip_conflict::CandidateReadCode code{
+          reinterpret_cast<std::uintptr_t>(&ResolveActualEquipConflictCandidate)};
+      code.ready();
+      auto *stub = g_localTrampoline.allocate(code.getSize());
+      std::memcpy(stub, code.getCode(), code.getSize());
+      g_localTrampoline.write_call<5>(equipBase + equip_conflict::kItemReadOffset,
+                                     reinterpret_cast<std::uintptr_t>(stub));
+      logger::info("SFS actual-equipment conflict input installed for {}; native equip rules and provider predicate unchanged", runtimeVersion.string("."));
+    } else {
+      logger::error("SFS actual-equipment conflict input not installed: unexpected engine read contract on {} (address {:X}); no existing hook overwritten", runtimeVersion.string("."), equipBase);
+    }
     if (layout->isAE) {
       InstallShimWornFlagsHookAE(*layout);
       InstallCustomSkinHookAE(*layout);

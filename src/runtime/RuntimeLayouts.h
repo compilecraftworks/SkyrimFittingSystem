@@ -35,6 +35,7 @@ struct HookLayout {
   std::uintptr_t wornMaskCallOffset{0};
   std::uint64_t customSkinRelocationID{0};
   std::uintptr_t customSkinCallOffset{0};
+  std::uint64_t equipConflictRelocationID{0};
 };
 
 inline constexpr HookLayout kSkyrimSE1597Layout{
@@ -56,6 +57,7 @@ inline constexpr HookLayout kSkyrimSE1597Layout{
     .wornMaskCallOffset = 0x7C,
     .customSkinRelocationID = 24231,
     .customSkinCallOffset = 0x81,
+    .equipConflictRelocationID = 36979,
 };
 
 inline constexpr HookLayout kSkyrimAEPre629Layout{
@@ -77,6 +79,7 @@ inline constexpr HookLayout kSkyrimAEPre629Layout{
     .wornMaskCallOffset = 0x80,
     .customSkinRelocationID = 24725,
     .customSkinCallOffset = 0x1EF,
+    .equipConflictRelocationID = 38004,
 };
 
 inline constexpr HookLayout kSkyrimAEPost629Layout{
@@ -98,6 +101,7 @@ inline constexpr HookLayout kSkyrimAEPost629Layout{
     .wornMaskCallOffset = 0x80,
     .customSkinRelocationID = 24725,
     .customSkinCallOffset = 0x1EF,
+    .equipConflictRelocationID = 38004,
 };
 
 [[nodiscard]] constexpr bool IsSupportedAEVersion(const REL::Version a_version) {

@@ -109,6 +109,11 @@ GetActiveFittingArmorSlotMaskForSlot(RE::Actor *a_actor,
 [[nodiscard]] bool IsRealEquipmentHiddenForActorSlots(RE::Actor *a_actor,
                                                       std::uint32_t a_slotMask);
 [[nodiscard]] bool ShouldOverrideSkinning(RE::TESObjectREFR *a_target);
+// Supplement a missing physical worn item at the native equip-conflict read.
+// Never equips/unequips, mutates biped state, or returns a registered appearance.
+[[nodiscard]] RE::TESForm *ResolveActualEquipConflictCandidate(
+    RE::Actor *a_actor, RE::BipedAnim *a_biped, std::uint32_t a_slot,
+    RE::TESForm *a_original);
 [[nodiscard]] bool IsDisplayedFittingArmor(RE::Actor *a_actor,
                                            const RE::TESObjectARMO *a_armor);
 // Read-only final-rendered equipment queries.  These include visible real

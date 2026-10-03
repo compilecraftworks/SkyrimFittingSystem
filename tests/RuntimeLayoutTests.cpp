@@ -40,6 +40,8 @@ int main() {
                layout->wornMaskRelocationID == 24724 &&
                layout->customSkinRelocationID == 24725,
            "every AE profile must retain the audited relocation IDs");
+    Expect(layout && layout->equipConflictRelocationID == 38004,
+           "every supported AE profile uses the guarded actual-equipment input adapter");
   }
 
   const auto se = ResolveHookLayout(REL::Version{1, 5, 97, 0});
@@ -49,6 +51,8 @@ int main() {
   Expect(se && !se->isAE && se->registerClassCallOffset == 0x8E &&
              se->customSkinCallOffset == 0x81,
          "Skyrim SE hook offsets must remain at their verified values");
+  Expect(se && se->equipConflictRelocationID == 36979,
+         "SE uses its own actual-equipment conflict relocation");
 
   const auto aeFirst = ResolveHookLayout(REL::Version{1, 6, 317, 0});
   const auto aeLegacy = ResolveHookLayout(REL::Version{1, 6, 353, 0});

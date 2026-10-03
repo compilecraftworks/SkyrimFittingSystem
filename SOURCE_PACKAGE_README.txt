@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.3 - Nexus Source Package
+Skyrim Fitting System v1.7.4 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,12 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.7.4 restores hidden actual gear as input to vanilla equipment-conflict
+checks, without an SFS equip/unequip policy or biped mutation. It includes
+production-resolver and executable x64-stub regression tests. See
+docs/ACTUAL-EQUIPMENT-CONFLICT-FIX-2026-10-03.md for live SE/AE code evidence
+and the distinction between host regression checks and in-game verification.
 
 v1.7.3 corrects the OCF/SOS upper-garment heuristic and DAV/HT2 head-mask
 handling. It includes production-source classifier, runtime/token keyword,

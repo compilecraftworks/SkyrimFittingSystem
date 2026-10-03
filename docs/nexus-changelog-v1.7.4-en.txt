@@ -1,0 +1,7 @@
+- Fixed a path where hiding actual equipment could bypass vanilla same-slot equipment conflicts.
+- Preserved Skyrim's own slot checks, quest restrictions and equipment replacement; no separate SFS equip/unequip rules or inventory changes.
+- Applied the engine-input correction to native/DAV paths and preserved DAVE's existing conflict hook.
+- Kept registered appearances, RaceMenu/BodyMorph, high heels, dye, strip/redress and IED behavior unchanged.
+
+Validation: SE/AE-only build and 37 regression executables passed. Relevant engine code was inspected read-only on 1.5.97 and 1.6.1170. New-DLL gameplay replacement remains unverified.
+Update: Keep settings, kits and saves. Requirements and optional patches are unchanged. Previously stacked equipment is not automatically cleaned up; unequip existing duplicates once.

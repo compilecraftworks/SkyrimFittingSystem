@@ -10,6 +10,7 @@ $targets = @(
     "MenuInteractionInputTests",
     "RenderedOutfitAPITests",
     "RuntimeLayoutTests",
+    "ActualEquipmentConflictTests",
     "KitGeneratorLogicTests",
     "CommunityGroupingTests",
     "SheetGroupingTests",
@@ -72,6 +73,15 @@ try {
         throw "First-run defaults must be left/unpaused, while existing saved choices remain authoritative"
     }
     $sfsInput = Get-Content -LiteralPath (Join-Path $repository "src/InputManager.cpp") -Raw
+    $sfsEquipInput = Get-Content -LiteralPath (Join-Path $repository "build/.gens/equip-conflict-tests/ActualEquipConflict.production.inc") -Raw
+    if ($sfsEquipInput -match 'EquipObject|UnequipObject|BuildDisplaySet|GetFinalRenderedOutfitSnapshot|RaceMenu|GetWornArmor' -and
+        ($sfsEquipInput -replace '//[^\r\n]*', '') -match 'EquipObject|UnequipObject|BuildDisplaySet|GetFinalRenderedOutfitSnapshot|RaceMenu|GetWornArmor') {
+        throw 'Actual equipment conflict input must stay read-only and independent of display snapshots/RaceMenu'
+    }
+    if (-not $sfsEquipInput.Contains('GetInventoryChanges(true)') -or
+        @([regex]::Matches($sfsEquipInput, 'GetArmorInSlot\(')).Count -ne 1) {
+        throw 'Actual equipment conflict input must use one non-initializing physical slot lookup'
+    }
     $sfsInputHooks = Get-Content -LiteralPath (Join-Path $repository "src/Hooks.cpp") -Raw
     $sfsVisibility = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Visibility.cpp") -Raw
     $sfsGeneratorUI = Get-Content -LiteralPath (Join-Path $repository "src/kit_generator/UI.cpp") -Raw
