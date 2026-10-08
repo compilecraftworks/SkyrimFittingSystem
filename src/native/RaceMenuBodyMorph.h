@@ -4,6 +4,8 @@
 
 #include <unordered_set>
 
+namespace SKSE { struct ModCallbackEvent; }
+
 namespace sfs::native::racemenu {
 struct AttachmentSceneSnapshot {
   std::unordered_set<RE::NiAVObject *> thirdPersonObjects;
@@ -21,6 +23,9 @@ void MorphNewRegisteredAppearanceNodes(
 // attached or removed registered-appearance nodes. The task is bounded and
 // actor-local; it never scans nearby actors or changes actual equipment.
 void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor);
+// SexLab's ordinary SendModEvent contract (also emitted by P+). No script
+// replacement, equipment mutation, or world/actor polling.
+void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event);
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor, bool a_active,
                                           bool a_observeHighHeelAttachments);
 // Only real object-unload/form-delete events. Never call for UI hiding or a

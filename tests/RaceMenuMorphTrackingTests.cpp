@@ -15,6 +15,7 @@
 #include <vector>
 #include "native/RegisteredAppearanceMorphRules.h"
 #include "native/ActorResourceWork.h"
+#include "native/HighHeelSceneRules.h"
 
 namespace RE {
 using FormID = std::uint32_t;
@@ -127,6 +128,7 @@ std::mutex g_highHeelQueueMutex;
 sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
 std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
+sfs::native::racemenu::rules::HighHeelScenes g_highHeelScenes;
 std::unordered_map<RE::FormID, std::vector<RE::NiPointer<RE::NiAVObject>>> g_registeredAppearanceAttachmentRoots;
 rules::ActorMorphActivity g_morphActivity;
 rules::ActorMorphRequests g_morphRequests;

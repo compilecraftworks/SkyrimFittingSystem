@@ -5,8 +5,10 @@
 #include "native/FittingDye.h"
 #include "native/RaceMenuInterfaces.h"
 #include "native/RegisteredAppearanceMorphRules.h"
+#include "native/HighHeelSceneRules.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -93,6 +95,7 @@ std::unordered_map<RE::FormID,
                    std::vector<RegisteredAppearanceAttachmentRoot>>
     g_registeredAppearanceAttachmentRoots;
 std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
+sfs::native::racemenu::rules::HighHeelScenes g_highHeelScenes; // g_nodeMutex
 sfs::native::racemenu::rules::ActorMorphActivity g_morphActivity;
 sfs::native::racemenu::rules::ActorMorphRequests g_morphRequests;
 std::unordered_set<RE::FormID> g_highHeelAttachmentActors;
@@ -480,14 +483,15 @@ FindLastHighHeelOffset(RE::NiAVObject *a_object) {
   return result;
 }
 
-[[nodiscard]] bool SdtaHasNpcPosition(const char *a_value) {
+[[nodiscard]] std::optional<std::array<float, 3>> ReadSdtaNpcPosition(const char *a_value) {
   if (!a_value || *a_value == '\0') {
-    return false;
+    return std::nullopt;
   }
   const auto json = nlohmann::json::parse(a_value, nullptr, false, true);
   if (!json.is_array()) {
-    return false;
+    return std::nullopt;
   }
+  std::optional<std::array<float, 3>> result;
   try {
     for (const auto &entry : json) {
       if (!entry.is_object() || entry.value("name", std::string{}) != "NPC") {
@@ -504,13 +508,19 @@ FindLastHighHeelOffset(RE::NiAVObject *a_object) {
                 std::isfinite(component.get<double>());
       }
       if (valid) {
-        return true;
+        std::array<float, 3> value{(*position)[0].get<float>(),
+                                 (*position)[1].get<float>(),
+                                 (*position)[2].get<float>()};
+        if (std::ranges::all_of(value, [](float v) { return std::isfinite(v); })) {
+          result = value;
+        }
       }
     }
   } catch (...) {
-    return false;
+    // A malformed later entry must not discard an earlier valid NPC source.
+    return result;
   }
-  return false;
+  return result;
 }
 
 [[nodiscard]] bool SceneHasNpcPositionSource(RE::NiAVObject *a_object) {
@@ -526,7 +536,7 @@ FindLastHighHeelOffset(RE::NiAVObject *a_object) {
   }
   if (const auto *extra = netimmerse_cast<RE::NiStringExtraData *>(
           a_object->GetExtraData(transformDataName));
-      extra && SdtaHasNpcPosition(extra->value)) {
+      extra && ReadSdtaNpcPosition(extra->value).has_value()) {
     return true;
   }
   if (auto *node = a_object->AsNode()) {
@@ -535,6 +545,33 @@ FindLastHighHeelOffset(RE::NiAVObject *a_object) {
     });
   }
   return false;
+}
+
+// Follow RaceMenu's SDTA-then-HH, parent-before-child metadata order, excluding
+// only roots whose registered AND actual visibility has ended. An old backend
+// attachment is not proof that a hidden shoe still owns automatic height.
+[[nodiscard]] std::optional<std::array<float, 3>> FindRemainingNpcPosition(
+    RE::NiAVObject *a_object,
+    const std::unordered_set<RE::NiAVObject *> &a_hiddenRoots) {
+  if (!a_object || a_hiddenRoots.contains(a_object)) { return std::nullopt; }
+  std::optional<std::array<float, 3>> result;
+  if (const auto *data = netimmerse_cast<RE::NiStringExtraData *>(
+          a_object->GetExtraData(RE::BSFixedString("SDTA")))) {
+    result = ReadSdtaNpcPosition(data->value);
+  }
+  if (const auto *data = netimmerse_cast<RE::NiFloatExtraData *>(
+          a_object->GetExtraData(RE::BSFixedString("HH_OFFSET")));
+      data && std::isfinite(data->value)) {
+    result = std::array<float, 3>{0.0F, 0.0F, data->value};
+  }
+  if (auto *node = a_object->AsNode()) {
+    for (const auto &child : node->GetChildren()) {
+      if (auto value = FindRemainingNpcPosition(child.get(), a_hiddenRoots)) {
+        result = value;
+      }
+    }
+  }
+  return result;
 }
 
 [[nodiscard]] bool ContainsExtraData(RE::NiAVObject *a_object,
@@ -618,9 +655,11 @@ FindNewAttachmentRoots(
 
 struct RegisteredHighHeelState {
   std::optional<float> offset;
-  bool staleAttachmentStillPresent{false};
+  bool hiddenAttachmentStillPresent{false};
   bool previouslyActive{false};
   bool awaitingAttachment{false};
+  std::optional<std::array<float, 3>> remainingPosition;
+  bool suppressForScene{false};
 };
 
 [[nodiscard]] RegisteredHighHeelState
@@ -636,6 +675,7 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
     std::lock_guard lock(g_nodeMutex);
     state.previouslyActive =
         g_registeredAppearanceHighHeelActors.contains(actorFormID);
+    state.suppressForScene = g_highHeelScenes.Contains(actorFormID);
     const auto rootsIt =
         g_registeredAppearanceAttachmentRoots.find(actorFormID);
     if (rootsIt != g_registeredAppearanceAttachmentRoots.end()) {
@@ -647,6 +687,7 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
   // same branch. Give displayed roots the existing two completion retries,
   // without using detached metadata as an active offset or retaining it forever.
   // Query display state outside g_nodeMutex (workbench -> node is the other order).
+  std::unordered_set<RE::NiAVObject *> hiddenRoots;
   for (auto &entry : roots) {
     const auto *armor =
         RE::TESForm::LookupByID<RE::TESObjectARMO>(entry.armorFormID);
@@ -664,9 +705,11 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
         state.offset = offset;
       }
     } else if (!expired) {
-      // DAVE may finish rebuilding on a later task. Do not lower the actor
-      // while its old high-heel branch is still visibly attached.
-      state.staleAttachmentStillPresent = true;
+      // The same ARMO may still be visible as actual gear. Do not remove its
+      // height merely because its registration was hidden.
+      if (!armor || !sfs::native::IsArmorShownForActor(a_actor, armor)) {
+        hiddenRoots.insert(entry.object.get());
+      }
     }
     std::lock_guard lock(g_nodeMutex);
     const auto rootsIt =
@@ -691,6 +734,10 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
       }
     }
   }
+  state.hiddenAttachmentStillPresent = !hiddenRoots.empty();
+  if (state.hiddenAttachmentStillPresent) {
+    state.remainingPosition = FindRemainingNpcPosition(a_actor->Get3D(false), hiddenRoots);
+  }
   return state;
 }
 
@@ -705,9 +752,27 @@ struct LegacyHighHeelSyncRequest {
   std::uint64_t generation{0};
   bool isFemale{false};
   bool targetActive{false};
-  std::optional<float> targetOffset;
+  std::optional<std::array<float, 3>> targetPosition;
+  bool requireAutomaticPosition{false};
+  bool suppressForScene{false};
   bool clearRaceMenuInternalPosition{false};
 };
+
+[[nodiscard]] bool RetainRegisteredHeightOwnership(const RegisteredHighHeelState &state) {
+  return state.offset.has_value() ||
+         (state.suppressForScene &&
+          (state.previouslyActive || state.hiddenAttachmentStillPresent));
+}
+
+[[nodiscard]] std::optional<std::array<float, 3>> SelectAutomaticPosition(
+    const RegisteredHighHeelState &state) {
+  if (state.offset) { return std::array<float, 3>{0.0F, 0.0F, *state.offset}; }
+  if (state.suppressForScene &&
+      (state.previouslyActive || state.hiddenAttachmentStillPresent)) {
+    return std::array<float, 3>{0.0F, 0.0F, 0.0F};
+  }
+  return state.hiddenAttachmentStillPresent ? state.remainingPosition : std::nullopt;
+}
 
 void FinishQueuedHighHeelSync(RE::FormID a_actorFormID,
                               std::uint64_t a_generation);
@@ -854,7 +919,7 @@ void DispatchLegacyRemoveBootstrap(
   }
 }
 
-void DispatchLegacySelectHeelPosition(
+void DispatchLegacyWriteHeelPosition(
     const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
   auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
   if (!actor) {
@@ -864,13 +929,13 @@ void DispatchLegacySelectHeelPosition(
   // The target is captured by the game-task sync, not resolved from a VM
   // callback. An appearance edit during dispatch queues the existing pending
   // resync; do not traverse scene/UI state on a Papyrus callback thread.
-  if (!a_request->targetOffset) {
+  if (!a_request->targetPosition) {
     DispatchLegacyRemoveBootstrap(a_request, true);
     return;
   }
   const auto continuation = [a_request](bool automaticPositionPresent) {
     auto *currentActor = LookupLegacyHighHeelActor(*a_request);
-    if (!currentActor || !automaticPositionPresent || !a_request->targetOffset) {
+    if (!currentActor || !automaticPositionPresent || !a_request->targetPosition) {
       // Do not force transforms when RaceMenu did not accept the scene source
       // (e.g. equippable transforms disabled). Always clean the bootstrap.
       DispatchLegacyRemoveBootstrap(a_request, false);
@@ -882,15 +947,51 @@ void DispatchLegacySelectHeelPosition(
             static_cast<RE::Actor *>(currentActor), false,
             static_cast<bool>(a_request->isFemale), std::string{"NPC"},
             std::string{"internal"},
-            std::vector<float>{0.0F, 0.0F, *a_request->targetOffset})) {
+            std::vector<float>{(*a_request->targetPosition)[0],
+                               (*a_request->targetPosition)[1],
+                               (*a_request->targetPosition)[2]})) {
       DispatchLegacyRemoveBootstrap(a_request, false);
     }
   };
+  if (!a_request->requireAutomaticPosition) { continuation(true); return; }
   if (!DispatchNiOverrideBoolCall(
           "HasNodeTransformPosition", continuation,
           static_cast<RE::Actor *>(actor), false,
           static_cast<bool>(a_request->isFemale), std::string{"NPC"},
           std::string{"internal"})) {
+    DispatchLegacyRemoveBootstrap(a_request, false);
+  }
+}
+
+void DispatchLegacySelectHeelPosition(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  if (!a_request->suppressForScene || !a_request->targetPosition) {
+    DispatchLegacyWriteHeelPosition(a_request);
+    return;
+  }
+  auto *actor = LookupLegacyHighHeelActor(*a_request);
+  auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+  if (!actor || !vm) { DispatchLegacyRemoveBootstrap(a_request, false); return; }
+  RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{
+      new NiOverrideDispatchCallback([a_request](RE::BSScript::Variable value) {
+        if (!LookupLegacyHighHeelActor(*a_request) || !value.IsArray()) {
+          DispatchLegacyRemoveBootstrap(a_request, false);
+          return;
+        }
+        const auto position = value.Unpack<std::vector<float>>();
+        if (position.size() != 3 || !std::isfinite(position[2])) {
+          DispatchLegacyRemoveBootstrap(a_request, false);
+          return;
+        }
+        // Preserve SexLab's key. Supply its matching automatic component so
+        // the registered heel cannot defeat, or double, the scene correction.
+        (*a_request->targetPosition)[2] = -position[2];
+        DispatchLegacyWriteHeelPosition(a_request);
+      })};
+  if (!vm->DispatchStaticCall("NiOverride", "GetNodeTransformPosition",
+          RE::MakeFunctionArguments(static_cast<RE::Actor *>(actor), false,
+              static_cast<bool>(a_request->isFemale), std::string{"NPC"},
+              std::string{"SexLab.esm"}), callback)) {
     DispatchLegacyRemoveBootstrap(a_request, false);
   }
 }
@@ -922,11 +1023,16 @@ void DispatchLegacyUpdateAll(
           .actorFormID = a_actor->GetFormID(),
           .generation = a_generation,
           .isFemale = actorBase->IsFemale(),
-          .targetActive = a_state.offset.has_value(),
-          .targetOffset = a_state.offset,
+          .targetActive = RetainRegisteredHeightOwnership(a_state),
+          .targetPosition = SelectAutomaticPosition(a_state),
+          .requireAutomaticPosition = a_state.offset.has_value(),
+          .suppressForScene = a_state.suppressForScene,
           .clearRaceMenuInternalPosition =
               !a_state.offset.has_value() &&
-              !SceneHasNpcPositionSource(a_actor->Get3D(false)),
+              !(a_state.hiddenAttachmentStillPresent
+                    ? a_state.remainingPosition.has_value()
+                    : SceneHasNpcPositionSource(a_actor->Get3D(false))) &&
+              !RetainRegisteredHeightOwnership(a_state),
       });
 
   // A scale of 1.0 is visually neutral. Its only purpose is to create the
@@ -960,11 +1066,9 @@ void DispatchLegacyUpdateAll(
   if (state.awaitingAttachment) {
     return HighHeelSyncAttempt::Retry;
   }
-  if (!state.offset.has_value() && !state.previouslyActive) {
+  if (!state.offset.has_value() && !state.previouslyActive &&
+      !state.hiddenAttachmentStillPresent) {
     return HighHeelSyncAttempt::Complete;
-  }
-  if (!state.offset.has_value() && state.staleAttachmentStillPresent) {
-    return HighHeelSyncAttempt::Retry;
   }
 
   if (route == HighHeelTransformRoute::LegacyPapyrus) {
@@ -1001,8 +1105,8 @@ void DispatchLegacyUpdateAll(
                                          temporaryKey);
 
   const auto actorFormID = a_actor->GetFormID();
-  if (state.offset.has_value()) {
-    if (!transform->HasNodeTransformPosition(
+  if (auto position = SelectAutomaticPosition(state)) {
+    if (state.offset && !transform->HasNodeTransformPosition(
             a_actor, false, isFemale, nodeName, raceMenuInternalKey)) {
       return HighHeelSyncAttempt::Retry;
     }
@@ -1011,19 +1115,32 @@ void DispatchLegacyUpdateAll(
     // unrelated HH/SDTA branch encountered by the full scan. Replacing this
     // component does not add a second offset or create a persistent SFS key;
     // every named user/mod transform and other transform component remains.
-    skee::INiTransformInterface::Position selected{0.0F, 0.0F, *state.offset};
+    if (state.suppressForScene) {
+      const float sexLabZ = transform->HasNodeTransformPosition(
+          a_actor, false, isFemale, nodeName, "SexLab.esm")
+          ? transform->GetNodeTransformPosition(
+              a_actor, false, isFemale, nodeName, "SexLab.esm").z : 0.0F;
+      if (!std::isfinite(sexLabZ)) { return HighHeelSyncAttempt::Complete; }
+      (*position)[2] = -sexLabZ;
+    }
+    skee::INiTransformInterface::Position selected{
+        (*position)[0], (*position)[1], (*position)[2]};
     transform->AddNodeTransformPosition(a_actor, false, isFemale, nodeName,
                                         raceMenuInternalKey, selected);
     transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
     {
       std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
       if (g_queuedHighHeelSyncs.Current(actorFormID, a_generation)) {
-        g_registeredAppearanceHighHeelActors.insert(actorFormID);
+        if (RetainRegisteredHeightOwnership(state)) {
+          g_registeredAppearanceHighHeelActors.insert(actorFormID);
+        } else {
+          g_registeredAppearanceHighHeelActors.erase(actorFormID);
+        }
       }
     }
     logger::debug(
         "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
-        actorFormID, *state.offset);
+        actorFormID, selected.z);
     return HighHeelSyncAttempt::Complete;
   }
 
@@ -1032,7 +1149,8 @@ void DispatchLegacyUpdateAll(
   // bypassed that callback, remove only RaceMenu's reserved automatic NPC
   // position component. Preserve every named user/mod transform and preserve
   // current actual-equipment HH_OFFSET/SDTA sources.
-  if (!SceneHasNpcPositionSource(a_actor->Get3D(false))) {
+  if (state.hiddenAttachmentStillPresent ||
+      !SceneHasNpcPositionSource(a_actor->Get3D(false))) {
     transform->RemoveNodeTransformPosition(a_actor, false, isFemale, nodeName,
                                            raceMenuInternalKey);
     transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
@@ -1857,6 +1975,64 @@ void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
   }
 }
 
+void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event) {
+  const std::string_view name = a_event.eventName.c_str();
+  const bool ended = name == "AnimationEnd";
+  if (!ended && name != "AnimationStart" && name != "StageStart" &&
+      name != "AnimationChange" && name != "PositionChange" &&
+      name != "ActorChangeEnd") { return; }
+  if (!a_event.sender) { return; }
+  const auto senderID = a_event.sender->GetFormID();
+  const auto epoch = g_highHeelQueueEpoch.load(std::memory_order_acquire);
+  auto *tasks = SKSE::GetTaskInterface();
+  if (!tasks) { return; }
+  tasks->AddTask([senderID, ended, epoch] {
+    if (g_highHeelQueueEpoch.load(std::memory_order_acquire) != epoch) { return; }
+    auto *quest = RE::TESForm::LookupByID<RE::TESQuest>(senderID);
+    const auto *file = quest ? quest->GetFile(0) : nullptr;
+    if (!file || _stricmp(file->fileName, "SexLab.esm") != 0) { return; }
+
+    std::vector<RE::FormID> actors;
+    if (!ended) {
+      // Read the user's actual SexLab option, not a package/version guess.
+      // P+ retains this script property and the ordinary SendModEvent API.
+      auto *data = RE::TESDataHandler::GetSingleton();
+      auto *config = data ? data->LookupForm<RE::TESQuest>(0xD62, "SexLab.esm") : nullptr;
+      auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+      auto *policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
+      RE::BSTSmartPointer<RE::BSScript::Object> object;
+      if (!config || !policy || !vm->FindBoundObject(
+              policy->GetHandleForObject(config->GetFormType(), config),
+              "sslSystemConfig", object) || !object) { return; }
+      const auto *option = object->GetProperty(RE::BSFixedString("RemoveHeelEffect"));
+      if (!option || !option->IsBool()) { return; }
+      if (option->GetBool()) {
+        // Use actual alias count and CommonLib's flat-layout accessors. No
+        // guessed per-SexLab-version actor-array limit or raw VM memory walk.
+        for (auto *alias : quest->aliases) {
+          if (!alias || alias->GetVMTypeID() != RE::BGSRefAlias::VMTYPEID) { continue; }
+          if (auto *actor = static_cast<RE::BGSRefAlias *>(alias)->GetActorReference()) {
+            actors.push_back(actor->GetFormID());
+          }
+        }
+      }
+    }
+    std::unordered_set<RE::FormID> changed;
+    {
+      std::lock_guard lock(g_nodeMutex);
+      if (g_highHeelQueueEpoch.load(std::memory_order_acquire) != epoch) { return; }
+      changed = g_highHeelScenes.Update(senderID, actors);
+    }
+    for (auto id : changed) {
+      // This queues transform reconciliation only. It never changes hidden
+      // flags, restores an outfit, equips an item, or refreshes actor 3D.
+      if (auto *actor = RE::TESForm::LookupByID<RE::Actor>(id)) {
+        QueueRegisteredAppearanceHighHeelSync(actor);
+      }
+    }
+  });
+}
+
 void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
                                const bool a_deleted) {
   if (a_actorFormID == 0) { return; }
@@ -1886,6 +2062,7 @@ void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
     // SFS refresh. Clearing it would drop valid first live-morph attachments.
     // Hide/preview decisions still belong exclusively to ArmorSkinning.
     if (a_deleted) {
+      g_highHeelScenes.Forget(a_actorFormID);
       g_morphActivity.SetActive(a_actorFormID, false);
       g_highHeelAttachmentActors.erase(a_actorFormID);
     }
@@ -1909,6 +2086,7 @@ void ForgetAllRegisteredAppearanceNodes() {
     g_registeredAppearanceAttachmentRoots.clear();
     g_sceneObservations.Clear();
     g_registeredAppearanceHighHeelActors.clear();
+    g_highHeelScenes.Clear();
     g_morphActivity.Clear();
     g_morphRequests.Clear();
     g_highHeelAttachmentActors.clear();

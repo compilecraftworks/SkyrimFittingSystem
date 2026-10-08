@@ -8,6 +8,85 @@ void Detach(RE::Actor& actor, RE::NiAVObject& node) {
   std::erase_if(actor.root.children, [&](const auto& p) { return p.get() == &node; });
   node.parent = nullptr;
 }
+void TestSceneHeight() {
+  RE::Actor actor{0x14}; RE::TESObjectARMO armor{0x910}; RE::TESObjectARMA addon{0x911};
+  RE::NiAVObject branch{true}; branch.heel.value = 9;
+  Reset(actor); actor.displayed.insert(armor.id); actor.sceneOffsets = {9};
+  Attach(actor, branch);
+  RegisteredAppearanceAttachmentObserver observer;
+  observer.OnAttach(&actor, &armor, &addon, &branch, false, &actor.root, &actor.root);
+  const auto queue = [&] { sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); };
+  actor.displayed.clear(); actor.internalPosition = 9.0F;
+  DrainAll();
+  Check(actor.displayedHeight == 0,
+        "hide after RaceMenu attach but before first SFS success still clears the owned automatic height");
+  actor.displayed.insert(armor.id); queue();
+  DrainAll();
+  const std::array<RE::FormID, 1> actors{actor.id};
+  g_highHeelScenes.Update(0x120, actors);
+  queue(); DrainAll();
+  Check(actor.displayedHeight == 0, "scene with no SexLab compensation (feet stripped) suppresses only owned heel height");
+  for (float correction : {-9.0F, -7.0F, 0.0F}) {
+    actor.sexLabPosition = correction; actor.otherModHeight = 3;
+    queue(); DrainAll();
+    Check(actor.displayedHeight == 3 && actor.sexLabPosition == correction && !actor.temporary,
+          "matching/stale/zero SexLab correction is preserved without double height; unrelated +3 survives");
+  }
+  actor.otherModHeight = 0; actor.sexLabPosition.reset();
+  g_highHeelScenes.Update(0x120, {}); queue(); DrainAll();
+  Check(actor.displayedHeight == 9, "scene end restores currently displayed heels, not a saved outfit");
+  g_highHeelScenes.Update(0x120, actors); queue(); SKSE::tasks.Drain();
+  g_highHeelScenes.Update(0x120, {}); queue(); DrainAll();
+  Check(actor.displayedHeight == 9 && !actor.temporary,
+        "scene ending during an outstanding legacy/public update finishes at current height");
+  RE::Actor ordinary{0x25}; ordinary.sceneOffsets = {7}; ordinary.internalPosition = 7.0F;
+  const std::array<RE::FormID, 1> ordinaryIDs{ordinary.id};
+  g_highHeelScenes.Update(0x121, ordinaryIDs);
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&ordinary); DrainAll();
+  Check(ordinary.fullUpdates == 0 && ordinary.internalPosition == 7.0F,
+        "scene member without any SFS-owned heel does not change real-equipment height");
+  g_highHeelScenes.Update(0x121, {});
+
+  // A hidden root can outlive ALL bounded tasks; its metadata is not visible
+  // footwear. Keep a real SDTA source and put the obsolete root last in scan order.
+  RE::NiAVObject actual;
+  actual.sdta = R"([{"name":"NPC","pos":[3,4,7]}])";
+  Attach(actor, actual); actor.sceneOffsets = {7, 9}; actor.displayed.clear();
+  queue(); DrainAll();
+  Check(actor.displayedHeight == 7 && actor.internalXY == std::array<float, 2>{3, 4},
+        "hidden attached heel cannot overwrite remaining actual SDTA position, including X/Y");
+  // Re-enroll, then hide the last source without an actual source.
+  Detach(actor, actual); actor.displayed.insert(armor.id); actor.sceneOffsets = {9};
+  queue(); DrainAll(); actor.displayed.clear();
+  queue(); DrainAll();
+  Check(actor.displayedHeight == 0 && !actor.internalPosition && SKSE::tasks.pending.empty(),
+        "last hidden heel clears now, even if physical root detaches after retry window");
+  Detach(actor, branch); actor.sceneOffsets.clear(); DrainAll();
+  Check(actor.displayedHeight == 0, "late removal needs no extra callback to clear already-reconciled height");
+
+  actor.displayed.insert(armor.id); Attach(actor, branch); actor.sceneOffsets = {9};
+  observer.OnAttach(&actor, &armor, &addon, &branch, false, &actor.root, &actor.root);
+  DrainAll();
+  actor.displayed.clear(); actor.actualVisible.insert(armor.id); queue(); DrainAll();
+  Check(actor.displayedHeight == 9, "same ARMO still visible as actual gear retains its genuine heel height");
+  actor.actualVisible.clear(); actor.displayed.insert(armor.id); queue(); DrainAll();
+
+  g_highHeelScenes.Update(0x120, actors); actor.sexLabPosition = -9.0F;
+  queue(); DrainAll(); actor.displayed.clear(); queue(); DrainAll();
+  Check(actor.displayedHeight == 0, "redress-OFF hidden heel stays aligned while scene compensation exists");
+  actor.sexLabPosition.reset(); g_highHeelScenes.Update(0x120, {}); queue(); DrainAll();
+  Check(actor.displayedHeight == 0 && actor.displayed.empty(), "scene end with redress-OFF does not restore hidden appearances");
+  actor.displayed.insert(armor.id); queue(); DrainAll();
+  Check(actor.displayedHeight == 9, "manual display after redress-OFF restores ordinary height");
+
+  branch.heel.value = 0; actor.sceneOffsets = {0}; g_highHeelScenes.Update(0x120, actors);
+  queue(); DrainAll();
+  Check(actor.displayedHeight == 0, "registered flat footwear remains flat during the scene");
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
+  Check(!g_highHeelScenes.Contains(actor.id), "deleted actor releases scene ownership");
+  Detach(actor, branch);
+  Check(branch.references == 0, "scene regression retains no heel root references");
+}
 int main() {
   for (auto version : {1U, 2U, 3U, 4U, 99U}) {
     g_transformInterfaceVersion = version;
@@ -159,6 +238,17 @@ int main() {
     sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
     actor.root.children.clear(); branch.parent = nullptr;
     Check(branch.references == 0, "unload/delete releases recorded root ownership");
+    TestSceneHeight();
+  }
+  const std::array<RE::FormID, 1> actorIDs{0x14};
+  g_highHeelScenes.Update(1, actorIDs); g_highHeelScenes.Update(2, actorIDs);
+  g_highHeelScenes.Update(1, {});
+  Check(g_highHeelScenes.Contains(0x14), "late old-thread end cannot cancel the actor's new scene");
+  g_highHeelScenes.Update(2, {});
+  Check(!g_highHeelScenes.Contains(0x14), "matching thread end releases scene membership");
+  for (unsigned i = 0; i < 128; ++i) {
+    g_highHeelScenes.Update(1, actorIDs); g_highHeelScenes.Update(1, {});
+    Check(!g_highHeelScenes.Contains(0x14), "128 scene cycles release their membership");
   }
   std::printf("%u production heel-root checks passed; not in-game proof.\n", checks);
 }

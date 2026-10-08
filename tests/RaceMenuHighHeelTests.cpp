@@ -2,6 +2,8 @@
 // Recording providers model only NPC-position/BNDT semantics from 9ebcb733.
 // This is NOT the RaceMenu binary, renderer emulation or in-game proof.
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <any>
 #include <atomic>
 #include <cstdint>
@@ -19,6 +21,7 @@
 #include <vector>
 #include "native/RegisteredAppearanceMorphRules.h"
 #include "native/ActorResourceWork.h"
+#include "native/HighHeelSceneRules.h"
 namespace RE {
 using FormID = std::uint32_t;
 template<class T> using BSTSmartPointer = std::shared_ptr<T>;
@@ -26,6 +29,9 @@ namespace BSScript {
 struct Object {};
 struct Variable {
   std::optional<bool> value;
+  std::optional<std::vector<float>> floats;
+  bool IsArray() const { return floats.has_value(); }
+  template<class T> T Unpack() const { return *floats; }
   bool IsBool() const { return value.has_value(); }
   bool GetBool() const { return value.value(); }
 };
@@ -82,9 +88,10 @@ struct Actor : TESObjectREFR {
   NPC base;
   bool loaded{true}, equippableTransforms{true}, stale{}, active{true};
   bool bndtExists{}, bndtContainsNpc{}, temporary{};
-  std::optional<float> selectedOffset{12.0f}, internalPosition;
+  std::optional<float> selectedOffset{12.0f}, internalPosition, sexLabPosition;
+  std::array<float, 2> internalXY{};
   std::vector<float> sceneOffsets;
-  std::unordered_set<FormID> displayed;
+  std::unordered_set<FormID> displayed, actualVisible;
   float displayedHeight{}, otherModHeight{};
   unsigned fullUpdates{}, resolverCalls{};
   bool Is3DLoaded() const { return loaded; }
@@ -111,11 +118,15 @@ Tasks* GetTaskInterface() { return &tasks; }
 namespace skee {
 struct INiTransformInterface {
   struct Position { float x{}, y{}, z{}; };
-  bool HasNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char*) {
+  bool HasNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key) {
+    if (std::string_view(key) == "SexLab.esm") return a->sexLabPosition.has_value();
     return a->internalPosition.has_value();
   }
+  Position GetNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key) {
+    return {0, 0, std::string_view(key) == "SexLab.esm" ? a->sexLabPosition.value_or(0) : a->internalPosition.value_or(0)};
+  }
   void AddNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key, Position p) {
-    if (std::string_view(key) == "internal") a->internalPosition = p.z;
+    if (std::string_view(key) == "internal") { a->internalPosition = p.z; a->internalXY = {p.x, p.y}; }
     else a->temporary = true;
   }
   void UpdateNodeAllTransforms(RE::Actor* a) {
@@ -127,14 +138,14 @@ struct INiTransformInterface {
       for (float offset : a->sceneOffsets) a->internalPosition = offset;
       if (a->bndtExists && !a->sceneOffsets.empty()) a->bndtContainsNpc = true;
     }
-    a->displayedHeight = a->internalPosition.value_or(0.0f) + a->otherModHeight;
+    a->displayedHeight = a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0);
   }
   void RemoveNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key) {
     if (std::string_view(key) == "internal") a->internalPosition.reset();
     else a->temporary = false;
   }
   void UpdateNodeTransforms(RE::Actor* a, bool, bool, const char*) {
-    a->displayedHeight = a->internalPosition.value_or(0.0f) + a->otherModHeight;
+    a->displayedHeight = a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0);
   }
 } transform;
 struct IBodyMorphInterface {} morph;
@@ -164,11 +175,15 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
         a->temporary = true;
       } else if (name == "HasNodeTransformPosition") {
         result.value = a->internalPosition.has_value();
+      } else if (name == "GetNodeTransformPosition") {
+        if (std::any_cast<std::string>(args.at(4)) != "SexLab.esm") std::abort();
+        result.floats = std::vector<float>{0, 0, a->sexLabPosition.value_or(0)};
       } else if (name == "AddNodeTransformPosition") {
         const auto p = std::any_cast<std::vector<float>>(args.at(5));
-        if (p.size() != 3 || p[0] != 0 || p[1] != 0 ||
+        if (p.size() != 3 ||
             std::any_cast<std::string>(args.at(4)) != "internal") std::abort();
         a->internalPosition = p[2];
+        a->internalXY = {p[0], p[1]};
       } else if (name == "RemoveNodeTransformScale") {
         a->temporary = false;
       } else if (name == "RemoveNodeTransformPosition") {
@@ -184,12 +199,15 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
 #include "callback.production.inc"
 struct RegisteredHighHeelState {
   std::optional<float> offset;
-  bool staleAttachmentStillPresent{}, previouslyActive{}, awaitingAttachment{};
+  bool hiddenAttachmentStillPresent{}, previouslyActive{}, awaitingAttachment{};
+  std::optional<std::array<float, 3>> remainingPosition;
+  bool suppressForScene{};
 };
 std::mutex g_nodeMutex, g_highHeelQueueMutex;
 sfs::native::resource_work::ActorBuilds g_sceneObservations;
 #include "observation.production.inc"
 std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
+sfs::native::racemenu::rules::HighHeelScenes g_highHeelScenes;
 std::unordered_set<RE::FormID> g_highHeelAttachmentActors;
 sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
@@ -213,7 +231,7 @@ std::unordered_map<RE::FormID, std::vector<RegisteredAppearanceNode>> g_register
 std::unordered_map<RE::FormID, std::vector<int>> g_registeredAppearanceAttachmentRoots;
 RegisteredHighHeelState ResolveRegisteredHighHeelState(RE::Actor* a) {
   ++a->resolverCalls;
-  return {a->selectedOffset, a->stale, g_registeredAppearanceHighHeelActors.contains(a->id)};
+  return {a->selectedOffset, a->stale, g_registeredAppearanceHighHeelActors.contains(a->id), false, {}, g_highHeelScenes.Contains(a->id)};
 }
 bool SceneHasNpcPositionSource(RE::Actor* a) { return !a->sceneOffsets.empty(); }
 bool IsRegisteredAppearanceDisplayActive(RE::FormID id) { return RE::TESForm::LookupByID<RE::Actor>(id)->active; }
@@ -224,6 +242,7 @@ bool RememberHighHeelAttachmentRoots(RE::Actor*,
 void QueuePendingMorphSync(RE::FormID) {}
 namespace sfs::native {
 bool IsDisplayedFittingArmor(RE::Actor* a, const RE::TESObjectARMO* armor) { return a->displayed.contains(armor->id); }
+bool IsArmorShownForActor(RE::Actor* a, const RE::TESObjectARMO* armor) { return a->displayed.contains(armor->id) || a->actualVisible.contains(armor->id); }
 namespace dye {
 unsigned requests{};
 void QueueSavedWorldTintRestore(RE::Actor*) { ++requests; }
@@ -245,6 +264,7 @@ void Reset(RE::Actor& a) {
   a = RE::Actor{a.id};
   RE::TESForm::forms[a.id] = &a;
   g_registeredAppearanceHighHeelActors.clear();
+  g_highHeelScenes.Clear();
   g_highHeelAttachmentActors = {a.id};
   g_queuedHighHeelSyncs.Clear(); g_pendingHighHeelResyncs.clear();
   SKSE::tasks.pending.clear();
@@ -318,7 +338,8 @@ int main() {
           "does not manufacture automatic transforms when RaceMenu declines them");
     Reset(a); a.selectedOffset.reset(); a.stale = true;
     g_registeredAppearanceHighHeelActors.insert(a.id); queue(); DrainAll();
-    Check(a.resolverCalls == 3 && a.fullUpdates == 0, "stale visible branch retries boundedly without lowering");
+    Check(a.resolverCalls == 1 && a.fullUpdates == 1 && a.displayedHeight == 0,
+          "hidden old attachment cannot exhaust retries while retaining automatic height");
     Reset(a); a.sceneOffsets = {12}; queue(); queue(); DrainAll();
     Check(a.fullUpdates == 2, "pending event coalesces into one subsequent pass");
     Reset(a); a.sceneOffsets = {12}; queue(); g_queuedHighHeelSyncs.Clear(); DrainAll();
@@ -361,6 +382,14 @@ int main() {
     Check(!a.temporary && !g_registeredAppearanceHighHeelActors.contains(a.id),
           "legacy dispatch failure removes neutral bootstrap and does not report success");
   }
+  Reset(a); a.sceneOffsets = {12};
+  const std::array<RE::FormID, 1> sceneActors{a.id};
+  g_highHeelScenes.Update(0x120, sceneActors);
+  vm.fail = "GetNodeTransformPosition"; queue(); DrainAll();
+  Check(!a.temporary && !g_registeredAppearanceHighHeelActors.contains(a.id),
+        "legacy scene-query failure cleans bootstrap without publishing false success");
+  vm.fail.clear(); queue(); DrainAll();
+  Check(a.displayedHeight == 0, "legacy scene-query failure does not permanently disable the next valid synchronization");
   Reset(a); a.sceneOffsets = {12}; queue(); SKSE::tasks.Drain();
   g_queuedHighHeelSyncs.Clear(); DrainAll();
   Check(a.fullUpdates == 0 && !g_registeredAppearanceHighHeelActors.contains(a.id),

@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.4 - Nexus Source Package
+Skyrim Fitting System v1.7.5 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,15 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.7.5 coordinates registered high-heel transforms with SexLab's actual
+RemoveHeelEffect option and existing NPC correction. Hidden owned roots cannot
+retain stale height, while visible actual HH_OFFSET/SDTA sources and other
+named transforms are preserved. Production-source tests cover legacy/public
+NiTransform routes, scene events and lifetime boundaries. See
+docs/SEXLAB-HIGH-HEEL-FIX-2026-10-08.md and the bilingual release notes.
+The release build and 38 regression executables pass; new-DLL gameplay and
+every external SexLab/RaceMenu binary are not individually verified.
 
 v1.7.4 restores hidden actual gear as input to vanilla equipment-conflict
 checks, without an SFS equip/unequip policy or biped mutation. It includes

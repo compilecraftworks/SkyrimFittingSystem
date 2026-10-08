@@ -48,6 +48,7 @@ Replace-Block 'std::unordered_map<RE::FormID, std::vector<int>> g_registeredAppe
 std::unordered_map<RE::FormID, std::vector<RegisteredAppearanceAttachmentRoot>> g_registeredAppearanceAttachmentRoots;
 template<class T> T netimmerse_cast(RE::NiExtraData* p) { return dynamic_cast<T>(p); }
 namespace sfs::native { bool IsDisplayedFittingArmor(RE::Actor*, const RE::TESObjectARMO*); }
+namespace sfs::native { bool IsArmorShownForActor(RE::Actor*, const RE::TESObjectARMO*); }
 #include "roots.production.inc"
 bool IsRegisteredAppearanceDisplayActive(RE::FormID id) { return RE::TESForm::LookupByID<RE::Actor>(id)->active; }
 std::function<void()> beforeDisplayLookup;

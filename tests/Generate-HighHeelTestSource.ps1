@@ -22,6 +22,7 @@ Write-Slice 'callback.production.inc' 'class NiOverrideDispatchCallback final' '
 Write-Slice 'sync.production.inc' 'enum class HighHeelSyncAttempt' 'void QueuePendingMorphSync('
 Write-Slice 'observer.production.inc' '[[nodiscard]] bool ShouldResyncHighHeelAfterAttachment(' 'RegisteredAppearanceAttachmentObserver g_attachmentObserver;'
 Write-Slice 'queue.production.inc' 'void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {' 'void SetRegisteredAppearanceDisplayActive('
+Write-Slice 'scene-event.production.inc' 'void ObserveHighHeelSceneEvent(' 'void ReleaseActorSceneResources('
 $source = Get-Content -LiteralPath (Join-Path $repo 'src/features/virtual_tokens/VirtualWornTokens.cpp') -Raw
 Write-Slice 'caller-identity.production.inc' 'struct CallerIdentity {' 'struct TrustProfile {'
 Write-Slice 'caller-chain.production.inc' '[[nodiscard]] std::vector<CallerIdentity>' 'void PruneRuntimeStateLocked('

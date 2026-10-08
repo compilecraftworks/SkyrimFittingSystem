@@ -39,6 +39,7 @@ $targets = @(
     "RaceMenuMorphTrackingTests",
     "RaceMenuHighHeelTests",
     "RaceMenuHighHeelRootTests",
+    "SexLabHighHeelEventTests",
     "AppearanceResourceLifecycleTests",
     "CallerChainPerformanceTests",
     "PapyrusObserverInspectionTests",

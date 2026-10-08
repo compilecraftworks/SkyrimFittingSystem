@@ -1,3 +1,11 @@
+## Version 1.7.5
+
+- Fixed registered high-heel height remaining during SexLab animations after actual footwear was stripped.
+- Coordinate SFS-managed heel height with SexLab's RemoveHeelEffect setting and existing correction, preserving SexLab's key and other mods' named transforms.
+- Remove hidden registered height even when old nodes detach late, while preserving visible actual footwear and SDTA components.
+- Use the same policy through legacy NiOverride/public NiTransform and native/DAV/DAVE; retain footwear-strip OFF, flat footwear, redress OFF and manual visibility.
+- SE/AE-only build and 38 regression executables passed. New-DLL in-game animation testing remains unverified. Requirements, supported game-runtime list, scripts, ESL, saves and optional patches are unchanged.
+
 ## Version 1.6.1
 
 - Retry partial RaceMenu/DAVE/OAR initialization; use compatible public prefixes

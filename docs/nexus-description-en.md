@@ -6,6 +6,14 @@ An SKSE appearance system that preserves the armor rating, enchantments, and eff
 
 Default UI hotkey: **F6**. It can be changed in Options.
 
+## Version 1.7.5 Update Summary
+
+- Fixed registered high-heel height remaining during SexLab animations after actual footwear was stripped.
+- Coordinate SFS-owned height with SexLab's RemoveHeelEffect setting and existing correction without changing SexLab's transform key.
+- Remove stale hidden-appearance height even when node removal is delayed, while preserving visible actual footwear and other mods' named transforms.
+- Use the same policy through legacy NiOverride/public NiTransform and native/DAV/DAVE; preserve footwear-strip OFF, flat footwear, redress OFF and manual visibility.
+- Only SFSCore.dll changes. Requirements, supported game-runtime list, scripts, ESL, settings, kits, saves and optional patches are unchanged. The SE/AE build and 38 regression executables pass; new-DLL in-game animation testing remains unverified.
+
 ## Introduction
 
 Skyrim Fitting System (SFS) separates actual inventory equipment from registered appearances. Actual gear can be hidden visually without being unequipped, while registered appearances do not replace armor stats or gameplay effects.

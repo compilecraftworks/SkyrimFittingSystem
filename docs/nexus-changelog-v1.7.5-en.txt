@@ -1,0 +1,8 @@
+- Fixed registered high-heel height remaining during SexLab animations after actual footwear was stripped.
+- Coordinate SFS-managed heel height with SexLab's RemoveHeelEffect setting and existing correction, avoiding missing or double compensation without changing SexLab's transform key.
+- Clear hidden registered height even when old display nodes detach late; preserve visible actual-footwear HH_OFFSET/SDTA and other mods' named transforms.
+- Use the same policy through legacy NiOverride/public NiTransform and native/DAV/DAVE. Preserve footwear-strip OFF, flat footwear, redress OFF and manual visibility behavior.
+- Keep actual equipment, BodyMorph, dye, scripts, save data and the public API unchanged. No polling or inventory-menu scan was added.
+
+Validation: SE/AE-only build and 38 regression executables passed. New-DLL in-game animation testing remains unverified.
+Update: Keep settings, kits and saves. Requirements, supported game-runtime list and optional patches are unchanged; only SFSCore.dll changes in the runtime package.

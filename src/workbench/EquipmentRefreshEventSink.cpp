@@ -8,6 +8,7 @@
 #include "native/ArmorSkinning.h"
 #include "native/DaveIntegration.h"
 #include "native/FittingSlotState.h"
+#include "native/RaceMenuBodyMorph.h"
 #include "native/GenitalCompatibility.h"
 #include "native/GenitalArmorResolver.h"
 #include "native/ExternalEquipmentTransactions.h"
@@ -508,6 +509,7 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
   }
 
   const auto *eventName = a_event->eventName.c_str();
+  sfs::native::racemenu::ObserveHighHeelSceneEvent(*a_event);
   if (std::strcmp(eventName, "ReSchlongify") != 0 || !a_event->strArg.c_str()) {
     return RE::BSEventNotifyControl::kContinue;
   }
