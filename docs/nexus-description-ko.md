@@ -177,7 +177,7 @@ SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 표시 환경을 자동으
 4. 이전 독립형 시험용 **SFS Kit Generator** 폴더가 남아 있다면 완전히 삭제합니다. 키트 생성기는 SFS 본체에 내장되어 별도 DLL이나 모드 폴더가 필요하지 않습니다.
 5. v1.6.0 배포 ZIP을 새 모드로 설치합니다.
 6. `SkyrimFittingSystem-VirtualTokens.esl`을 활성화합니다.
-7. 필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux, DFFMA OAR, Dynamic Footprints만 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다.
+7. 필요하면 백업한 개인 키트만 복원합니다. Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치가 필요 없으며, Wet Function Redux·DFFMA OAR·Dynamic Footprints·선택한 OStim 계열은 원본 모드 뒤에 맞는 선택형 호환 패치를 추가합니다. OStim 패치는 두 종류 중 하나만 설치합니다.
 
 v1.4.0 파일 변경 사항:
 

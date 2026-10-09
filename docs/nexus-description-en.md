@@ -177,7 +177,7 @@ Built-in: (Not required any patch file)
 4. If an old standalone test **SFS Kit Generator** folder remains, completely delete it. The Kit Generator is built into SFS and requires no separate DLL or mod folder.
 5. Install the v1.6.0 distribution ZIP as a new mod.
 6. Enable `SkyrimFittingSystem-VirtualTokens.esl`.
-7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install only the matching separate compatibility patches for Wet Function Redux, DFFMA OAR, or Dynamic Footprints after their original mod.
+7. Restore the backed-up personal kits only if needed. Grid Inventory v1.4.1+ and Helmet Toggle 2 need no SFS patch; install matching optional patches for Wet Function Redux, DFFMA OAR, Dynamic Footprints or your chosen OStim framework after their original mod. Use only one OStim patch variant.
 
 File changes in v1.4.0:
 
