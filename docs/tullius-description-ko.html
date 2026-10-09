@@ -13,7 +13,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 </style>
 </head>
 <body>
-<h1>Skyrim Fitting System v1.7.5</h1>
+<h1>Skyrim Fitting System v1.7.6</h1>
 <figure><a href="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" target="_blank" rel="noopener"><img src="https://ac-o.arca.live/20260814sac/8c528bceffd65d882143d3ae2ae345038c9c08934c5f9cc8d8ff1c046f9904c1.png?expires=1787378391&amp;key=wSK-nG9UwFePxIQ1PlXhgQ&amp;type=orig" alt="Skyrim Fitting System"></a><figcaption>Skyrim Fitting System</figcaption></figure>
 <p>실제 장비의 방어력&#183;인챈트&#183;효과는 유지하면서, 캐릭터에게 보이는 외형만 따로 구성하는 SKSE 기반 외형 시스템입니다. 기본 UI 단축키는 <strong>F6</strong>이며 옵션에서 바꿀 수 있습니다.</p>
 <p>플레이어&#183;NPC&#183;팔로워의 등록 외형, 조건, 실제 장비 숨김, 수동 표시 상태와 외부 모드 탈의 상태는 모두 액터별로 분리됩니다. SFS는 DAVE, 일반 DAV, 둘 다 없는 Skyrim native 환경을 자동으로 구분하면서 같은 작업대와 저장 데이터를 사용합니다.</p>
@@ -32,14 +32,16 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li>확실한 액터 바디 계열만 선택적으로 거르는 장비&#183;의상&#183;키트 목록과 항상 필터 없는 등록 외형 작업대</li>
 </ul>
 <hr>
-<h2>v1.7.5 주요 변경</h2>
+<h2>v1.7.6 주요 변경</h2>
 <ul>
-<li>SexLab이 실제 신발을 탈의한 뒤 등록 하이힐 높이가 남아 애니메이션 위치가 어긋날 수 있던 경로를 수정했습니다.</li>
-<li>SexLab의 RemoveHeelEffect 설정과 기존 보정에 SFS 높이를 맞추며, SexLab 자체의 변환 키는 변경하지 않습니다.</li>
-<li>노드 제거가 늦어도 숨긴 외형의 오래된 높이를 해제하고 실제 표시 신발과 다른 모드의 변환은 보존합니다.</li>
-<li>구형 NiOverride&#183;신형 NiTransform 및 native&#183;DAV&#183;DAVE에 같은 정책을 적용합니다. 발 장비 탈의 OFF&#183;일반 신발&#183;재착의 OFF&#183;수동 표시를 유지합니다.</li>
-<li>SFSCore.dll만 변경합니다. 선행 모드&#183;지원 게임 버전 목록&#183;스크립트&#183;ESL&#183;설정&#183;키트&#183;세이브&#183;선택 패치는 그대로입니다. SE/AE 빌드와 회귀 검사 38개를 통과했으며, 새 DLL의 인게임 애니메이션 테스트는 아직 미검증입니다.</li>
+<li>SFS 1.7.6 이상용 OStim&#183;OStim Standalone 탈의 연동 패치 1.0.0을 정식으로 추가했습니다.</li>
+<li>모드 설정 연동&#183;바닐라 슬롯 연동과 직접 편집의 두 기준을 연결합니다. 슬롯 보호&#183;NoStrip&#183;각 프레임워크의 가발 설정을 유지합니다.</li>
+<li>전체&#183;부분&#183;애니메이션 재착의를 액터&#183;장면별 소유권으로 연결합니다. 실제 장비와 OStim 착용 장비 배열은 OStim이 계속 관리합니다.</li>
+<li>바닐라 자동 가발 연동을 LongHair 41번으로 조정했습니다. 31+42 투구 처리와 사용자가 저장한 명시적 매핑은 변경하지 않습니다.</li>
+<li>표시 중인 머리 덮는 투구에 따라 순수 등록 41번 가발을 숨기고, 투구를 숨기거나 벗으면 복원합니다. Helmet Toggle 2에도 적용하며 수동 숨김&#183;잠긴 외형은 보존합니다.</li>
+<li>기존 native&#183;DAV&#183;DAVE 렌더, 바디모프&#183;하이힐&#183;염색&#183;조건&#183;IED&#183;공개 API 동작을 유지합니다. 주기적 액터&#183;인벤토리 스캔이나 새 필수 선행 모드는 추가하지 않았습니다.</li>
 </ul>
+<p>SE/AE 전용 본체·두 Papyrus 패치·회귀 실행 파일 42개를 통과했습니다. 실제 OStim 장면 타이밍·진행 중 세이브 로드는 별도 미검증입니다.</p>
 <hr>
 <h2>v1.6.0 주요 변경</h2>
 <ul>
@@ -119,7 +121,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li>이전 독립형 <strong>SFS Kit Generator</strong>, 기존 <strong>SFS Helmet Toggle 2 호환 패치</strong>, v1.4.4 <strong>SFS Grid Inventory Costume Compatibility Patch</strong>가 있다면 완전히 삭제합니다. 원본 모드는 삭제하지 않습니다.</li>
 <li>v1.7.5 본체 ZIP을 설치하고 <code>SkyrimFittingSystem-VirtualTokens.esl</code>을 활성화합니다. 기존 설정&#183;키트&#183;세이브는 유지합니다.</li>
 <li>필요하면 백업한 개인 키트만 복원합니다.</li>
-<li>Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints는 맞는 <strong>별도 SFS 호환 패치만</strong> 원본 모드 뒤에 설치합니다.</li>
+<li>Grid Inventory v1.4.1 이상과 Helmet Toggle 2는 별도 패치 없이 본체 내장 연동을 사용합니다. Wet Function Redux, DFFMA OAR, Dynamic Footprints 및 선택한 OStim 계열은 맞는 <strong>별도 SFS 호환 패치만</strong> 원본 모드 뒤에 설치합니다.</li>
 </ol>
 <p><code>SkyrimFittingSystem.dll</code>은 v1.4.0부터 <code>SFSCore.dll</code>로 바뀐 기존 단일 본체 DLL입니다. 구 폴더 위에 덮어쓰면 구&#183;신 DLL이 함께 로드되어 같은 훅을 두 번 설치할 수 있으므로, 반드시 이전 SFS 폴더를 지운 뒤 새로 설치하십시오. v1.2.x&#183;v1.3.x의 등록 외형&#183;조건&#183;숨김 데이터는 유지됩니다.</p>
 <hr>
@@ -174,7 +176,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <h2>본체 내장 호환</h2>
 <ul>
 <li><strong>Grid Inventory Costume v1.4.1 이상:</strong> SFSCore가 공개 Costume 상태 메시지를 직접 받습니다. 플레이어 소유 ARMO가 하나 이상인 Costume을 착용&#183;교체할 때만 플레이어 등록 외형을 교체합니다. Costume 해제&#183;빈 Costume&#183;비장비 구성은 SFS 등록 외형을 건드리지 않으며, 시작&#183;세이브 로드&#183;리버트 뒤 Grid가 보내는 첫 복원 상태도 무시합니다. Grid DLL을 교체하지 않으며 Grid의 UI&#183;렌더&#183;로드아웃&#183;세이브&#183;실제 장비는 그대로 Grid가 관리합니다.</li>
-<li><strong>Helmet Toggle 2:</strong> SFSCore 본체가 정확한 플레이어 상태 전역값과 액터별 NPC&#183;팔로워 주문 전환만 관찰하므로 별도 SFS 패치가 필요 없습니다. HT2가 숨긴 착용 상태의 실제 투구가 31 Hair를 점유하면 해당 액터의 스키닝 worn-mask에서 실제 31번만 해제해 원래 머리카락을 표시합니다. 실제 장비&#183;HT2/DAVE 변형&#183;모드 설정 가상토큰은 건드리지 않으며, 순수 등록 31번은 독립적으로 유지하고 등록 31+42 카드는 42번을 통해 따릅니다. 주기적 액터 스캔과 HT2 스크립트 교체는 없습니다.</li>
+<li><strong>Helmet Toggle 2:</strong> SFSCore 본체가 정확한 플레이어 상태 전역값과 액터별 NPC&#183;팔로워 주문 전환만 관찰하므로 별도 SFS 패치가 필요 없습니다. HT2가 숨긴 착용 상태의 실제 투구가 31 Hair를 점유하면 해당 액터의 스키닝 worn-mask에서 실제 31번만 해제해 원래 머리카락을 표시합니다. 실제 장비&#183;HT2/DAVE 변형&#183;모드 설정 가상토큰은 건드리지 않으며, 순수 등록 31번은 독립적으로 유지하고 등록 31+42 카드는 42번을 통해 따릅니다. 주기적 액터 스캔과 HT2 스크립트 교체는 없습니다. 순수 등록 LongHair 41번 가발은 표시 중인 머리 덮는 투구 아래에서 숨기고 투구를 숨기거나 벗으면 복원하며, 수동 숨김·잠긴 외형·기존 31+42 투구 처리는 보존합니다.</li>
 </ul>
 <hr>
 <h2>선택형 호환 패치</h2>
@@ -182,6 +184,7 @@ blockquote{border-left:4px solid #42acc8;margin:20px 0;padding:10px 16px;backgro
 <li><strong>Wet Function Redux Visual Effect Patch v1.2.0:</strong> 시각 효과 스크립트만 제공합니다. Wet Function MCM을 덮어쓰지 않으며 RaceMenu 경고는 Wet Function의 기존 자체 검사입니다.</li>
 <li><strong>DFFMA Displayed Outfit Patch v1.4.4.1 (DFFMA OAR 4.30용):</strong> 선택한 OAR <code>config.json</code>의 표시 장비 조건만 바꿉니다. DFFMA 애니메이션&#183;OAR 규칙&#183;세이브&#183;충돌 자체를 고치지는 않습니다.</li>
 <li><strong>Dynamic Footprints SKSE BASE v3:</strong> Dynamic Footprints 자신의 발자국 분류에서만 표시 중인 SFS 37번 신발 외형을 읽습니다. 발자국 규칙&#183;에셋&#183;세이브&#183;충돌 자체를 고치지는 않으며 검증한 정확한 DLL 빌드가 아니면 자동 비활성화됩니다.</li>
+<li><strong>OStim / OStim Standalone Strip Link Patch v1.0.0:</strong> SFS 1.7.6 이상이 필요합니다. 프레임워크에 맞는 패치 하나만 설치하고 OUndress.pex가 충돌에서 이기게 한 뒤 다시 로드하세요. 모드 설정·바닐라 슬롯·직접 편집 두 기준을 연결합니다. 실제 장비는 OStim이 담당하며 SFS는 등록 외형 숨김·복원만 연결합니다. 다른 OUndress 교체 모드는 변경 사항 병합이 필요합니다. OStim DLL·ESP는 교체하지 않습니다.</li>
 </ul>
 <hr>
 <h2>기타 호환</h2>

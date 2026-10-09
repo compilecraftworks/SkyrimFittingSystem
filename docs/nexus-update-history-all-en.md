@@ -1,3 +1,14 @@
+## Version 1.7.6
+
+- Added official optional OStim and OStim Standalone Strip Link patches v1.0.0, requiring SFS v1.7.6 or later.
+- Connect Mod Settings and Vanilla Slots strip/redress linking, including both Direct Edit bases. Preserve slot protection, NoStrip and each framework's wig policy.
+- Support full, partial and animated appearance redress with actor/session-scoped ownership. Keep actual equipment and OStim's equipment arrays under OStim's control.
+- Move automatic vanilla wig linking to LongHair slot 41 without changing 31+42 helmet handling or explicit saved mappings.
+- Hide pure registered slot-41 wigs under visible hair-covering helmets and restore them when the helmet is hidden or removed, including Helmet Toggle 2. Preserve manual hiding and locked appearances.
+- Retain existing native/DAV/DAVE rendering, BodyMorph, high heels, dye, conditions, IED and public API behavior. No periodic actor/inventory scan or new mandatory dependency was added.
+
+SE/AE-only build, both Papyrus variants and 42 regression executables passed. In-game scene timing/save-load remains unverified. Install only one matching optional patch and restart/reload.
+
 ## Version 1.7.5
 
 - Fixed registered high-heel height remaining during SexLab animations after actual footwear was stripped.

@@ -6,6 +6,7 @@
 #include "native/RaceMenuInterfaces.h"
 #include "native/RegisteredAppearanceMorphRules.h"
 #include "native/HighHeelSceneRules.h"
+#include "features/virtual_tokens/VirtualWornTokens.h"
 
 #include <algorithm>
 #include <array>
@@ -1315,6 +1316,7 @@ public:
       }
       return;
     }
+    sfs::virtual_tokens::ObserveRegisteredAppearanceWig(actor, a_armor, a_object);
 
     // Independent appearance consumer: late DAVE attachments can arrive after
     // dye's bounded rebuild retry. Rearm saved tint restoration from the actual
@@ -1896,6 +1898,11 @@ void MorphNewRegisteredAppearanceNodes(
   auto *firstPersonRoot = a_actor->Get3D(true);
   const auto newThirdPersonRoots =
       FindNewAttachmentRoots(thirdPersonRoot, a_before.thirdPersonObjects);
+  if (auto *armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(a_armorFormID)) {
+    for (const auto &root : newThirdPersonRoots) {
+      sfs::virtual_tokens::ObserveRegisteredAppearanceWig(a_actor, armor, root.get());
+    }
+  }
   static_cast<void>(RememberHighHeelAttachmentRoots(
       a_actor, newThirdPersonRoots, a_armorFormID, false, &observation));
   std::vector<RE::NiPointer<RE::NiAVObject>> newFirstPersonRoots;

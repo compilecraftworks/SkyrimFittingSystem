@@ -240,6 +240,9 @@ bool RememberHighHeelAttachmentRoots(RE::Actor*,
   return !fp && std::ranges::any_of(nodes, [](const auto& n) { return n.get()->hasHeel; });
 }
 void QueuePendingMorphSync(RE::FormID) {}
+namespace sfs::virtual_tokens {
+void ObserveRegisteredAppearanceWig(RE::Actor*, RE::TESObjectARMO*, RE::NiAVObject*) {}
+}
 namespace sfs::native {
 bool IsDisplayedFittingArmor(RE::Actor* a, const RE::TESObjectARMO* armor) { return a->displayed.contains(armor->id); }
 bool IsArmorShownForActor(RE::Actor* a, const RE::TESObjectARMO* armor) { return a->displayed.contains(armor->id) || a->actualVisible.contains(armor->id); }

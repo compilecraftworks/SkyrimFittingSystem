@@ -678,20 +678,17 @@ GetVanillaAnchorPriority(const RE::TESObjectARMO *a_appearance) {
   AppendClassificationKeywordText(text, a_appearance);
   const auto displayMask = armor::GetArmorDisplaySlotMask(a_appearance);
 
-  // Preserve distinct vanilla appearance slots before semantic classification
-  // can fold them into a neighboring primary equipment category. Multi-slot
-  // body, hand, foot, and head items continue through the ordinary rules below
-  // and select their representative primary slot.
+  // Standalone registered wigs follow LongHair (41), not a helmet's Hair
+  // (31) obstruction partition. Do not change physical equipment masks or
+  // multi-slot headgear: 31+42 helmets still use their existing head rules.
+  // Forearms/Calves retain their independent vanilla anchors below.
   if ((displayMask & Slot(31)) != 0 &&
       (displayMask & (Slot(30) | Slot(42))) == 0) {
-    return Priority({31});
+    return Priority({41});
   }
-  // Vanilla Long Hair is a hair-visibility partition rather than an ordinary
-  // headgear anchor. Treat a slot-41 appearance like replacement Hair (31),
-  // unless the same item explicitly occupies an ordinary headgear slot.
   if ((displayMask & Slot(41)) != 0 &&
       (displayMask & (Slot(30) | Slot(31) | Slot(42))) == 0) {
-    return Priority({31});
+    return Priority({41});
   }
   if ((displayMask & Slot(34)) != 0 &&
       (displayMask & (Slot(32) | Slot(33))) == 0) {
@@ -708,8 +705,9 @@ GetVanillaAnchorPriority(const RE::TESObjectARMO *a_appearance) {
   // languages. First match wins; specific accessories therefore precede broad
   // body and miscellaneous categories.
 
-  // Hair ornaments which are not slot-31 replacement hair prefer circlet
-  // (42). Wigs placed in an ordinary head slot remain head equipment here.
+  // Hair ornaments prefer Circlet (42). Semantically recognized wigs in
+  // extension slots follow LongHair (41); items occupying ordinary headgear
+  // slots keep their established head-equipment route.
   const bool hairAccessoryAppearance = ContainsAny(
       text, {"hair ornament", "hair accessory", "hairpin",   "hair pin",
              "headband",      "head band",      "헤어 장식", "헤어장식",
@@ -725,7 +723,9 @@ GetVanillaAnchorPriority(const RE::TESObjectARMO *a_appearance) {
                          "假髮",       "发片",      "髮片",       "马尾",
                          "馬尾",       "双马尾",    "雙馬尾",     "头发",
                          "頭髮",       "发型",      "髮型"})) {
-    return Priority({30, 42});
+    return (displayMask & (Slot(30) | Slot(42))) != 0
+               ? Priority({30, 42})
+               : Priority({41});
   }
 
   if (ContainsAny(text, {"shield", "buckler", "방패", "버클러", "盾", "盾牌",
@@ -1115,7 +1115,7 @@ GetVanillaAnchorPriority(const RE::TESObjectARMO *a_appearance) {
     return Priority({30, 42});
   }
   if ((displayMask & Slot(41)) != 0) {
-    return Priority({31});
+    return Priority({41});
   }
   if ((displayMask & Slot(43)) != 0) {
     return Priority({30, 42});

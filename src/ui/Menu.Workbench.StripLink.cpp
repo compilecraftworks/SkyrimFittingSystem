@@ -179,10 +179,10 @@ using SlotAppearances =
 DefaultVanillaMapping(const std::uint32_t a_slotNumber) {
   switch (a_slotNumber) {
   case 30:
-  case 41:
     return 30;
   case 31:
-    return 31;
+  case 41:
+    return 41;
   case 42:
   case 43:
   case 44:

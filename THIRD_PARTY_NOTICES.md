@@ -30,5 +30,17 @@ SFS resolves nlohmann/json v3.12.0 as an exact XMake package requirement. The
 package version and XMake recipe revision are fixed by `xmake-requires.lock`.
 nlohmann/json is distributed under the MIT License.
 
+## OStim / OStim Standalone optional compatibility patches
+
+The separately packaged OUndress overrides derive from VersuchDrei/OStim
+revision `4f56819a8281e7a0ea4e0c56569f82ead023532d` and VersuchDrei/OStimNG
+revision `3954683bbdfcd34b2f9157012ed0c446d6eefd1e`, respectively, under GNU
+GPL v3. Each patch includes the modified PSC sources, bridge PSC and GPL
+license; the full corresponding SFS source archive contains both variants.
+Compile-only declarations and compiler binaries are not installed by patches.
+No OStim DLL, plugin, assets or complete original distribution is bundled.
+SFS's optional public scene adapter consumes the verified interface v1 prefix
+from the pinned OStimNG headers, without private object or engine offsets.
+
 See `DEPENDENCIES.md` for the reproducible build-tool and transitive dependency
 baseline.

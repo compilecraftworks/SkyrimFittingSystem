@@ -12,6 +12,24 @@ namespace sfs::virtual_tokens {
 void InitializeVirtualWornTokens();
 bool RegisterVirtualWornTokenPapyrus(RE::BSScript::IVirtualMachine *a_vm);
 void UpdateVirtualWornTokenCache();
+// OStim's explicit Papyrus override reuses the existing identity/generation
+// tickets. It never returns tokens or source appearances to OStim's real-gear
+// cache, and never equips/unequips actual equipment.
+void BeginOStimEquipmentPass(RE::VMStackID a_stackID, RE::Actor *a_actor);
+void EndOStimEquipmentPass(RE::VMStackID a_stackID);
+void StripOStimAppearances(RE::Actor *a_actor, std::int32_t a_threadID,
+                          std::uint32_t a_mask, bool a_undressWigs);
+void RestoreOStimAppearances(RE::Actor *a_actor, std::int32_t a_threadID,
+                            std::uint32_t a_mask);
+RE::BSFixedString GetOStimRedressSession(RE::Actor *a_actor);
+std::uint32_t GetOStimSessionMask(RE::Actor *a_actor, RE::BSFixedString a_session);
+void RestoreOStimSession(RE::Actor *a_actor, RE::BSFixedString a_session,
+                         std::uint32_t a_mask);
+void ObserveOStimSceneEnd(RE::Actor *a_actor, std::int32_t a_threadID);
+void ObserveOStimSceneStart(RE::Actor *a_actor);
+void ObserveRegisteredAppearanceWig(RE::Actor *a_actor,
+                                    RE::TESObjectARMO *a_armor,
+                                    RE::NiAVObject *a_object);
 // Reconciles a generic actor-context wardrobe replacement (for example a
 // vanilla/quest jail transfer) without identifying the caller mod. This is
 // intentionally actor-local and only evaluates at a location/cell boundary.

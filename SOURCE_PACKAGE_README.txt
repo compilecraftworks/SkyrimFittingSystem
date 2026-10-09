@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.5 - Nexus Source Package
+Skyrim Fitting System v1.7.6 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,15 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.7.6 includes the complete core and both official OStim strip-link patch
+v1.0.0 sources under compat/OStimSfsPatch, including compile-only imports and
+the Papyrus builder. Compiler binaries and runtime PEX are not in this archive.
+See compat/OStimSfsPatch/README.txt for installation and immutable upstream
+contracts. Automatic wig linking uses slot 41; pure registered long-hair wigs
+follow visible hair-covering headgear without changing actual equipment.
+The SE/AE-only build, both Papyrus variants and 42 regression executables
+pass; in-game scene/animation/save-load verification is not claimed.
 
 v1.7.5 coordinates registered high-heel transforms with SexLab's actual
 RemoveHeelEffect option and existing NPC correction. Hidden owned roots cannot

@@ -124,9 +124,9 @@ void ClearAutomaticEquipmentStateEvents();
 GetAutomaticEquipmentControlSlotMask(const RE::TESObjectARMO *a_armor);
 
 // Returns an ordered list of ordinary Skyrim equipment slots which naturally
-// controls the supplied registered appearance. Pure 31/34/38 appearances keep
-// their own Hair/Forearms/Calves anchors instead of being folded into a nearby
-// primary slot.
+// controls the supplied registered appearance. Standalone 31/41 wigs follow
+// LongHair (41), while multi-slot headgear retains its existing head anchors.
+// Pure Forearms (34) and Calves (38) retain their own independent anchors.
 [[nodiscard]] VanillaAnchorPriority
 GetVanillaAnchorPriority(const RE::TESObjectARMO *a_appearance);
 } // namespace sfs::workbench

@@ -16,6 +16,7 @@
 #include "native/HelmetToggle2Integration.h"
 #include "native/IedConditionIntegration.h"
 #include "native/OpenAnimationReplacerIntegration.h"
+#include "native/OStimIntegration.h"
 #include "native/RaceMenuBodyMorph.h"
 #include "native/SOSStorageSync.h"
 #include "native/SmoothCamIntegration.h"
@@ -65,6 +66,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     }
     break;
   case SKSE::MessagingInterface::kPostPostLoad:
+    sfs::native::ostim::InitializeSceneListeners();
     sfs::native::ied::InstallConditionBridge();
     sfs::native::oar::RegisterConditions();
     sfs::native::smoothcam::RequestInterface();

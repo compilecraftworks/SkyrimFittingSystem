@@ -1,4 +1,5 @@
 #include "native/HelmetToggle2Integration.h"
+#include "native/RegisteredLongHairRules.h"
 
 #include "ArmorUtils.h"
 #include "native/ArmorSkinning.h"
@@ -353,12 +354,17 @@ void ApplyActorState(RE::Actor *a_actor, const bool a_hidden,
       hasAppearances ? sfs::native::GetDisplayedFittingSlotMask(a_actor) : 0;
   const bool fittingDisplayChanged =
       stateChanged && displayedBefore != displayedAfter;
+  const bool registeredLongHairDisplayChanged =
+      wasHidden != a_hidden &&
+      sfs::native::long_hair::rules::LongHairDisplayChanged(displayedBefore,
+                                                          displayedAfter);
   const auto hairReleaseAfter =
       sfs::native::helmet_toggle::rules::ComputeActualHairSlotReleaseMask(
           a_hidden, observedHeadgear.armorMask, displayedAfter);
   const bool actualHairDisplayChanged =
       hairReleaseBefore != hairReleaseAfter;
-  if (fittingDisplayChanged || actualHairDisplayChanged) {
+  if (fittingDisplayChanged || actualHairDisplayChanged ||
+      registeredLongHairDisplayChanged) {
     logger::info("HT2 actor-local fitting refresh actor={:08X} hidden={} "
                  "controller={:08X} fitting={:08X} displayedBefore={:08X} "
                  "displayedAfter={:08X} hairRelease={:08X}",
@@ -538,6 +544,26 @@ void SynchronizeActor(RE::Actor *a_actor, const bool a_queueRefresh) {
 
 void SynchronizePlayer(const bool a_queueRefresh) {
   SynchronizeActor(RE::PlayerCharacter::GetSingleton(), a_queueRefresh);
+}
+
+bool IsActualHeadgearHidden(RE::Actor *a_actor,
+                           const RE::TESObjectARMO *a_armor) {
+  if (!a_armor || !IsAvailable() || !IsActorHidden(a_actor)) {
+    return false;
+  }
+  const auto armorMask =
+      static_cast<std::uint32_t>(a_armor->GetSlotMask().underlying());
+  constexpr std::array<std::uint32_t, 5> kQuerySlots{30, 31, 42, 44, 55};
+  for (const auto slot : kQuerySlots) {
+    if (slot == 55 && !IsPlayer(a_actor)) {
+      continue;
+    }
+    if ((armorMask & sfs::armor::GetArmorSlotMask(slot)) != 0 &&
+        IsManagedHeadgear(a_armor, slot)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 std::uint32_t GetActualHairSlotReleaseMask(

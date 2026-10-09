@@ -2,6 +2,10 @@ param([Parameter(Mandatory=$true)][string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $groups = @{
+    'RegisteredLongHair.production.inc' = @('src/native/ArmorSkinning.cpp', @(
+        'void ApplyRegisteredLongHairOcclusion('))
+    'HelmetToggleLongHair.production.inc' = @('src/native/HelmetToggle2Integration.cpp', @(
+        'bool IsActualHeadgearHidden('))
     'ActualEquipConflict.production.inc' = @('src/native/ArmorSkinning.cpp', @(
         '[[nodiscard]] bool ShouldManageActorDisplay(',
         'RE::TESForm *ResolveActualEquipConflictCandidate('))

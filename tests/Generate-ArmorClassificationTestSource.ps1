@@ -32,6 +32,29 @@ function Emit([string]$Name, [string]$Text) {
     }
 }
 $groups = @{
+    'VanillaHairClassification.production.inc' = @('src/workbench/AutomaticEquipmentVisibility.cpp', @(
+        '[[nodiscard]] std::uint64_t Slot(',
+        '[[nodiscard]] bool IsAsciiAlpha(', '[[nodiscard]] bool IsAsciiUpper(',
+        '[[nodiscard]] bool IsAsciiLower(', '[[nodiscard]] bool IsAsciiDigit(',
+        '[[nodiscard]] bool IsAsciiAlphaNumeric(',
+        '[[nodiscard]] std::string BuildSearchTextPart(', 'void AppendSearchText(',
+        ('[[nodiscard]] std::string' + "`n" + 'BuildClassificationIdentityText('),
+        'void AppendClassificationKeywordText(',
+        ('[[nodiscard]] bool' + "`n" + 'ContainsAny('),
+        '[[nodiscard]] bool ContainsAsciiTokenSuffix(',
+        ('[[nodiscard]] VanillaAnchorPriority' + "`n" + 'Priority('),
+        'std::uint64_t GetAutomaticEquipmentControlSlotMask(',
+        ('VanillaAnchorPriority' + "`n" + 'GetVanillaAnchorPriority(')))
+    'VanillaHairBindings.production.inc' = @('src/VariantWorkbench.cpp', @(
+        'struct WornArmorState {', 'void ClearAutomaticEquipmentBinding(',
+        '[[nodiscard]] bool UpdateAutomaticEquipmentVisibility('))
+    'VanillaHairUI.production.inc' = @('src/ui/Menu.Workbench.StripLink.cpp', @(
+        '[[nodiscard]] std::size_t SlotIndex(',
+        '[[nodiscard]] std::uint8_t FirstSlotNumber(',
+        ('[[nodiscard]] bool IsVanillaDirectTargetSlot('),
+        ('[[nodiscard]] std::uint8_t' + "`n" + 'DefaultVanillaMapping('),
+        ('[[nodiscard]] std::uint8_t' + "`n" + 'ResolveVanillaMapping('),
+        ('[[nodiscard]] Mappings' + "`n" + 'BuildDisplayedMappings(')))
     'ClassificationTypes.production.inc' = @('src/native/ArmorSkinning.h', @(
         'enum class ArmorGenitalKeywordDisposition', 'struct ArmorGenitalKeywordOverride'))
     'Classification.production.inc' = @('src/native/ArmorSkinning.cpp', @(

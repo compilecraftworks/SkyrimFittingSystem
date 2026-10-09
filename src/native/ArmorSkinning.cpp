@@ -19,6 +19,7 @@
 #include "native/IedVisitorRoutingRules.h"
 #include "native/RaceMenuBodyMorph.h"
 #include "native/RegisteredAppearanceMorphRules.h"
+#include "native/RegisteredLongHairRules.h"
 #include "features/devious_devices/DeviousDevicesIntegration.h"
 #include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/Menu.h"
@@ -1511,6 +1512,45 @@ IsRealArmorVisibleInDisplaySet([[maybe_unused]] RE::Actor *a_actor,
   return nullptr;
 }
 
+void ApplyRegisteredLongHairOcclusion(
+    RE::Actor *a_actor, DisplaySet &a_displaySet,
+    const std::unordered_set<const RE::TESObjectARMO *> &a_equippedArmors,
+    const std::size_t a_longHairIndex) {
+  using namespace sfs::native::long_hair::rules;
+  if (a_longHairIndex >= a_displaySet.armors.size() ||
+      a_displaySet.armorSlotMasks.size() != a_displaySet.armors.size() ||
+      a_displaySet.armorSlotMasks[a_longHairIndex] != kLongHairSlotMask) {
+    return;
+  }
+
+  // Rows, conditions, manual visibility, strip tickets and HT2's existing
+  // helmet suppression have already selected the displayed appearances.
+  // An actually hidden helmet must not keep the registered wig hidden.
+  const bool registeredHelmetVisible = std::ranges::any_of(
+      a_displaySet.armorSlotMasks, HeadgearOccludesLongHair);
+  const bool actualHelmetVisible =
+      !registeredHelmetVisible &&
+      std::ranges::any_of(a_equippedArmors, [&](const auto *armor) {
+        return armor &&
+               HeadgearOccludesLongHair(static_cast<std::uint32_t>(
+                   sfs::armor::GetArmorDisplaySlotMask(armor))) &&
+               IsRealArmorVisibleInDisplaySet(a_actor, a_displaySet, armor) &&
+               !sfs::native::helmet_toggle::IsActualHeadgearHidden(a_actor,
+                                                                  armor);
+      });
+  if (!registeredHelmetVisible && !actualHelmetVisible) {
+    return;
+  }
+
+  // This request-local projection never edits rows, saved hide flags, real
+  // equipment, token ownership or strip anchors. Rebuilding after a helmet
+  // disappears naturally restores the wig only if it is otherwise visible.
+  a_displaySet.armors.erase(a_displaySet.armors.begin() + a_longHairIndex);
+  a_displaySet.armorSlotMasks.erase(a_displaySet.armorSlotMasks.begin() +
+                                  a_longHairIndex);
+  a_displaySet.slotMask &= ~kLongHairSlotMask;
+}
+
 [[nodiscard]] std::uint32_t GetActorEquippedRowSlotMask(
     const sfs::workbench::VariantWorkbenchRow &a_row,
     const std::unordered_set<const RE::TESObjectARMO *> &a_equippedArmors,
@@ -1651,6 +1691,7 @@ BuildDisplaySet(RE::Actor *a_actor,
 
   std::uint32_t occupiedDisplaySlots = 0;
   std::uint32_t forceVisibleRealSlotMask = 0;
+  std::optional<std::size_t> registeredLongHairIndex;
   auto suppressedFittingSlots =
       a_applyTemporarySuppression &&
               sfs::workbench::IsModSettingsStripLinkPolicyActive()
@@ -1811,6 +1852,10 @@ BuildDisplaySet(RE::Actor *a_actor,
             displaySet.slotMask |= slotMask;
             displaySet.armors.push_back(armor);
             displaySet.armorSlotMasks.push_back(slotMask);
+            if (sfs::native::long_hair::rules::IsOccludableRegisteredLongHair(
+                    slotMask, overrideItem.locked, allowRestrictedPreview)) {
+              registeredLongHairIndex = displaySet.armors.size() - 1;
+            }
             displayedRowOverride = true;
             displayedRowSlotMask |= slotMask;
           }
@@ -1898,6 +1943,11 @@ BuildDisplaySet(RE::Actor *a_actor,
   }
   if (!previewReplacesRows) {
     appendRows(menu->GetWorkbench().GetRows(), false, false);
+  }
+
+  if (a_applyTemporarySuppression && registeredLongHairIndex.has_value()) {
+    ApplyRegisteredLongHairOcclusion(a_actor, displaySet, equippedArmors,
+                                    *registeredLongHairIndex);
   }
 
   // RaceMenu attachment callbacks can run synchronously from the skinning

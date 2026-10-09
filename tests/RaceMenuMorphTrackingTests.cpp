@@ -95,6 +95,9 @@ struct Tasks {
 } tasks;
 Tasks* GetTaskInterface() { return &tasks; }
 }
+namespace sfs::virtual_tokens {
+void ObserveRegisteredAppearanceWig(RE::Actor*, RE::TESObjectARMO*, RE::NiAVObject*) {}
+}
 namespace sfs::native {
 namespace dye {
 std::unordered_map<RE::FormID, unsigned> restoreRequests;

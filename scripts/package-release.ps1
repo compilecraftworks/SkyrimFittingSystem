@@ -118,6 +118,9 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
+    'RELEASE-NOTES-v1.7.6.md', 'RELEASE-NOTES-v1.7.6-ko.md',
+    'GITHUB-RELEASE-v1.7.6.md',
+    'nexus-changelog-v1.7.6-en.txt', 'nexus-changelog-v1.7.6-ko.txt',
     'RELEASE-NOTES-v1.7.5.md', 'RELEASE-NOTES-v1.7.5-ko.md',
     'GITHUB-RELEASE-v1.7.5.md',
     'nexus-changelog-v1.7.5-en.txt', 'nexus-changelog-v1.7.5-ko.txt',
@@ -233,6 +236,17 @@ Copy-RequiredFile $dffmaModuleConfig (Join-Path $sourceStage 'compat\DynamicFemi
 Copy-RequiredFile $dffmaInfo (Join-Path $sourceStage 'compat\DynamicFeminineFemaleModestyAnimationsSfsPatch\fomod-info.xml')
 Copy-RequiredFile (Join-Path $repoRoot 'compat\DynamicFootprintsSfsPatch\README.txt') (Join-Path $sourceStage 'compat\DynamicFootprintsSfsPatch\README.txt')
 Copy-RequiredFile (Join-Path $repoRoot 'compat\WetFunctionReduxSfsPatch\README - SFS Wet Function Redux Compatibility Patch.txt') (Join-Path $sourceStage 'compat\WetFunctionReduxSfsPatch\README - SFS Wet Function Redux Compatibility Patch.txt')
+foreach ($relativePath in @(
+    'compat\OStimSfsPatch\OStim\Scripts\Source',
+    'compat\OStimSfsPatch\Standalone\Scripts\Source',
+    'compat\OStimSfsPatch\shared',
+    'compat\OStimSfsPatch\compile-only'
+)) {
+    Copy-RequiredDirectory (Join-Path $repoRoot $relativePath) (Join-Path $sourceStage $relativePath)
+}
+Copy-RequiredFile (Join-Path $repoRoot 'compat\OStimSfsPatch\README.txt') (Join-Path $sourceStage 'compat\OStimSfsPatch\README.txt')
+Copy-RequiredFile (Join-Path $repoRoot 'compat\OStimSfsPatch\VERSION') (Join-Path $sourceStage 'compat\OStimSfsPatch\VERSION')
+Copy-RequiredFile (Join-Path $repoRoot 'docs\OStim-Strip-Link-Implementation-2026-10-09.md') (Join-Path $sourceStage 'docs\OStim-Strip-Link-Implementation-2026-10-09.md')
 
 foreach ($relativePath in @(
     'data\Scripts\Source\SkyrimFittingSystemNative.psc',

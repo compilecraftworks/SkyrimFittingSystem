@@ -7,6 +7,16 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.6 adds official optional OStim / OStim Standalone strip-link patches
+v1.0.0. Mod Settings, Vanilla Slots and both Direct Edit bases keep their
+existing ownership/protection rules; OStim remains in charge of actual gear.
+Automatic vanilla wig linking uses slot 41, without changing 31+42 helmet
+handling or explicit saved mappings. Pure registered slot-41 wigs follow
+visible hair-covering headgear, including Helmet Toggle 2 hide/restore.
+See the [English](docs/RELEASE-NOTES-v1.7.6.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.6-ko.md) notes and
+[patch installation / verification](compat/OStimSfsPatch/README.txt).
+
 v1.7.5 coordinates registered high-heel height with SexLab's RemoveHeelEffect
 setting and existing scene correction. Hidden registered roots no longer retain
 stale height while a display backend finishes detaching them; visible actual

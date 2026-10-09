@@ -6,6 +6,10 @@ $ErrorActionPreference = "Stop"
 $repository = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $repository "VERSION") -Raw).Trim()
 $targets = @(
+    "VanillaHairStripLinkTests",
+    "RegisteredLongHairTests",
+    "OStimAppearanceTests",
+    "OStimSceneInterfaceTests",
     "IedConditionIntegrationTests",
     "MenuInteractionInputTests",
     "RenderedOutfitAPITests",
@@ -64,6 +68,33 @@ try {
             throw "$target failed with exit code $LASTEXITCODE"
         }
     }
+
+    foreach ($ostimVariant in @('OStim', 'Standalone')) {
+        $ostimScript = Get-Content -LiteralPath (Join-Path $repository "compat/OStimSfsPatch/$ostimVariant/Scripts/Source/OUndress.psc") -Raw
+        if (@([regex]::Matches($ostimScript, 'SFSOStimBridge.BeginEquipmentPass\(Act\)')).Count -ne 5 -or
+            @([regex]::Matches($ostimScript, 'SFSOStimBridge.EndEquipmentPass\(\)')).Count -ne 5 -or
+            @([regex]::Matches($ostimScript, '= TrimArmorArray\(')).Count -ne 3 -or
+            -not $ostimScript.Contains('Return SFSOStimBridge.IsAvailable()') -or
+            -not $ostimScript.Contains('String Session = SFSOStimBridge.GetRedressSession(Act)') -or
+            -not $ostimScript.Contains('SFSOStimBridge.RestoreSession(Act, Session, SlotMask)') -or
+            -not $ostimScript.Contains('Math.LogicalAnd(SlotMask, OData.GetUndressingSlotMask())') -or
+            $ostimScript -match 'AddItem\(|RemoveItem\(|GetWornForm\(|VirtualToken') {
+            throw "OStim $ostimVariant must preserve actual arrays, balanced passes, partial masks and stable animated ownership"
+        }
+        foreach ($mask in @('0x04C90004', '0x00000080', '0x00000008', '0x02004001')) {
+            if (-not $ostimScript.Contains($mask)) { throw "Changed OStim redress category: $mask" }
+        }
+        if ($ostimVariant -eq 'OStim' -and ($ostimScript -notmatch 'ScriptName OUndress Extends Quest' -or
+            $ostimScript -notmatch 'Bool Function SFSUndressWigs\(\) Global\s+Return false')) {
+            throw 'Archived OStim must retain Quest contract and its original wig exclusion'
+        }
+        if ($ostimVariant -eq 'Standalone' -and ($ostimScript -match 'ScriptName OUndress Extends' -or
+            -not $ostimScript.Contains('OUtils.GetOStim()') -or
+            -not $ostimScript.Contains('Main.UndressWigs'))) {
+            throw 'Standalone must retain static contract and its own UndressWigs setting'
+        }
+    }
+    Write-Host 'OStim Papyrus contract, actual-array, pass, mask and session boundaries passed'
 
     $menuHeader = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.h") -Raw
     $menuSettingsDefaults = Get-Content -LiteralPath (Join-Path $repository "src/ui/Menu.Settings.cpp") -Raw
@@ -382,6 +413,20 @@ try {
         -not $bodyKeywordQuery.Contains('BuildFinalRenderedOutfitSnapshot(a_actor, displaySet, equipped, &visibleActual)') -or
         -not $displayBuilder.Contains('PrepareOutfitValue(a_actor, displaySet, equippedArmors, a_visibleActual)')) {
         throw "Final body queries must reuse one request-local worn snapshot, without changing runtime scan coverage"
+    }
+    $longHairProjectionIndex = $displayBuilder.IndexOf('ApplyRegisteredLongHairOcclusion(')
+    $longHairMorphIndex = $displayBuilder.IndexOf('displaySet.trackRegisteredAppearanceMorphNodes =')
+    if ($longHairProjectionIndex -lt 0 -or $longHairMorphIndex -le $longHairProjectionIndex -or
+        -not $displayBuilder.Contains('a_applyTemporarySuppression && registeredLongHairIndex.has_value()') -or
+        -not $displayBuilder.Contains('slotMask, overrideItem.locked, allowRestrictedPreview')) {
+        throw "Registered 41 projection must honor existing locks/preview and precede morph/API publication"
+    }
+    $helmetIntegrationSource = Get-Content -LiteralPath (
+        Join-Path $repository "src/native/HelmetToggle2Integration.cpp") -Raw
+    if (-not $helmetIntegrationSource.Contains('wasHidden != a_hidden &&') -or
+        -not $helmetIntegrationSource.Contains('long_hair::rules::LongHairDisplayChanged(displayedBefore,') -or
+        -not $helmetIntegrationSource.Contains('registeredLongHairDisplayChanged)')) {
+        throw "HT2 must refresh a changed registered 41 even with no registered helmet suppression"
     }
     $dyePerformanceSource = Get-Content -LiteralPath (
         Join-Path $repository "src/native/FittingDye.cpp") -Raw

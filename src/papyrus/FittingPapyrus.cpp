@@ -1,4 +1,5 @@
 #include "papyrus/FittingPapyrus.h"
+#include "papyrus/OStimPapyrus.h"
 
 #include "native/ArmorSkinning.h"
 #include "native/ExternalEquipmentTransactions.h"
@@ -154,6 +155,7 @@ bool Register(RE::BSScript::IVirtualMachine *a_vm) {
   if (!a_vm) {
     return false;
   }
+  RegisterOStim(a_vm);
   if (!sfs::native::external_equipment::RegisterPapyrusObserver(a_vm)) {
     logger::warn("External equipment transaction observer is unavailable");
   }

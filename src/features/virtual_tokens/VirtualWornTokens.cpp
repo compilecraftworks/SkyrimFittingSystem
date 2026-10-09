@@ -6,6 +6,7 @@
 #include "native/FittingSlotState.h"
 #include "native/GenitalCompatibility.h"
 #include "native/PapyrusObserverInstallRules.h"
+#include "native/OStimAppearanceRules.h"
 #include "native/SexLabPPlusRules.h"
 #include "features/devious_devices/DeviousDevicesIntegration.h"
 #include "runtime/RuntimeLayouts.h"
@@ -23,6 +24,7 @@
 #include <array>
 #include <atomic>
 #include <chrono>
+#include <objbase.h>
 #include <cstring>
 #include <format>
 #include <functional>
@@ -82,6 +84,7 @@ struct RegisteredAppearance {
   // token without changing its real display slots.
   std::uint32_t tokenSlotMask{0};
   std::uint64_t generation{0};
+  bool observedWig{false}; // Scalar classification only; no retained scene nodes.
 };
 
 std::mutex g_cacheMutex;
@@ -125,6 +128,8 @@ struct StackObservation {
   bool retrospectiveSelectionStaged{false};
   bool tokenTrustDecisionMade{false};
   bool tokenExposureAuthorized{false};
+  bool ostimEquipmentPass{false};
+  RE::FormID ostimPassActorID{0};
 };
 
 struct StripTransaction {
@@ -3463,6 +3468,23 @@ struct NativeDispatchHook {
     }
 
     auto operation = PrepareOperation(target, a_stack.get());
+    if (target == TargetNative::EquipItem || target == TargetNative::EquipItemEx ||
+        target == TargetNative::UnequipItem || target == TargetNative::UnequipItemEx) {
+      bool adapterOwnsMutation = false;
+      {
+        std::lock_guard lock(g_runtimeMutex);
+        const auto pass = g_stackObservations.find(a_stack->stackID);
+        adapterOwnsMutation = pass != g_stackObservations.end() &&
+            pass->second.ostimEquipmentPass &&
+            pass->second.ostimPassActorID == ActorID(operation.actor);
+      }
+      if (adapterOwnsMutation) {
+        // Only this explicit bridge pass owns the cosmetic selection. Keep
+        // the original actual-equipment call and every other observer intact;
+        // do not infer a second slot-based ticket that ignores NoStrip/wigs.
+        return CallOriginalNative(a_function, a_stack, a_logger, a_vm, a_arg4);
+      }
+    }
     if (HandleVirtualTokenOperation(operation, *a_stack)) {
       return NativeCallResult::kCompleted;
     }
@@ -4245,6 +4267,7 @@ void UpdateVirtualWornTokenCache() {
               &RegisteredAppearance::identity);
           if (matching != oldIt->second.end()) {
             appearance.generation = matching->generation;
+            appearance.observedWig = matching->observedWig;
           }
         }
         if (appearance.generation == 0) {
@@ -4286,6 +4309,213 @@ void InitializeVirtualWornTokens() {
 
 bool RegisterVirtualWornTokenPapyrus(RE::BSScript::IVirtualMachine *a_vm) {
   return InstallNativeDispatchHook(a_vm);
+}
+
+void BeginOStimEquipmentPass(const RE::VMStackID a_stackID, RE::Actor *a_actor) {
+  if (!a_actor || !IsModSettingsStripLinkActive()) { return; }
+  std::lock_guard lock(g_runtimeMutex);
+  PruneRuntimeStateLocked(RuntimeClock::now());
+  auto &pass = g_stackObservations[a_stackID];
+  pass.ostimPassActorID = ActorID(a_actor);
+  pass.lastSeen = RuntimeClock::now();
+  pass.ostimEquipmentPass = true;
+}
+
+void EndOStimEquipmentPass(const RE::VMStackID a_stackID) {
+  std::lock_guard lock(g_runtimeMutex);
+  const auto pass = g_stackObservations.find(a_stackID);
+  if (pass != g_stackObservations.end() && pass->second.ostimEquipmentPass) {
+    auto &observation = pass->second;
+    observation.ostimEquipmentPass = false;
+    observation.ostimPassActorID = 0;
+    // Nested callers may already own catalog evidence in this same VM stack.
+    // Remove only a bridge-only entry, never another observer's evidence.
+    if (observation.callerChain.empty() && observation.returnedForms.empty() &&
+        observation.completedMutations.empty() && observation.queriedMask == 0 &&
+        !observation.equippedArrayObserved) {
+      g_stackObservations.erase(pass);
+    }
+  }
+}
+
+void ObserveRegisteredAppearanceWig(RE::Actor *a_actor,
+    RE::TESObjectARMO *a_armor, RE::NiAVObject *a_object) {
+  if (!a_actor || !a_armor || !a_object ||
+      (a_armor->GetSlotMask().underlying() & SlotMask(31)) == 0 ||
+      !a_object->HasShaderType(RE::BSShaderMaterial::Feature::kHairTint)) {
+    return;
+  }
+  std::lock_guard lock(g_cacheMutex);
+  const auto actor = g_registeredAppearances.find(ActorID(a_actor));
+  if (actor == g_registeredAppearances.end()) { return; }
+  for (auto &appearance : actor->second) {
+    if (appearance.armorID == a_armor->GetFormID()) {
+      appearance.observedWig = true;
+    }
+  }
+}
+
+namespace {
+std::string OStimSource(const std::int32_t threadID, const bool ended = false) {
+  return std::format("{}{}:", ended ? native::ostim::rules::kEndedPrefix
+                                  : native::ostim::rules::kActivePrefix, threadID);
+}
+std::string NewOStimSession(const std::int32_t threadID) {
+  GUID id{};
+  if (FAILED(CoCreateGuid(&id))) {
+    logger::error("OStim cosmetic session allocation failed; actual OStim equipment operations are unchanged");
+    return {};
+  }
+  return std::format("{}{:08X}{:04X}{:04X}{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
+      OStimSource(threadID), id.Data1, id.Data2, id.Data3, id.Data4[0], id.Data4[1],
+      id.Data4[2], id.Data4[3], id.Data4[4], id.Data4[5], id.Data4[6], id.Data4[7]);
+}
+
+// Cache is copied before the runtime lock, preserving the established lock
+// order. Stale identity/generation references are removed only for this owner.
+template <class Predicate>
+void RestoreOStimOwned(RE::Actor *actor, std::uint32_t mask, Predicate matches) {
+  if (!actor || mask == 0) { return; }
+  const auto actorID = ActorID(actor);
+  const auto live = GetRegisteredAppearances(actorID);
+  bool changed = false;
+  {
+    std::lock_guard lock(g_runtimeMutex);
+    for (auto &ticket : g_suppressionTickets) {
+      if (ticket.actorID != actorID || !native::ostim::rules::IsOwned(ticket.source) ||
+          !matches(ticket)) { continue; }
+      const auto before = ticket.appearances.size();
+      std::erase_if(ticket.appearances, [&](const AppearanceTicketRef &ref) {
+        const auto current = std::ranges::find_if(live, [&](const auto &appearance) {
+          return appearance.identity == ref.identity && appearance.generation == ref.generation;
+        });
+        return current == live.end() || native::ostim::rules::CanRestore(current->tokenSlotMask, mask);
+      });
+      changed |= before != ticket.appearances.size();
+    }
+    std::erase_if(g_suppressionTickets, [](const auto &ticket) {
+      return native::ostim::rules::IsOwned(ticket.source) && ticket.appearances.empty();
+    });
+  }
+  if (changed) { ApplyOwnedMask(actorID, true); }
+}
+} // namespace
+
+void StripOStimAppearances(RE::Actor *actor, std::int32_t threadID,
+                          std::uint32_t mask, bool undressWigs) {
+  if (!actor || mask == 0 || !IsModSettingsStripLinkActive()) { return; }
+  auto selected = GetRegisteredAppearances(ActorID(actor), mask);
+  std::erase_if(selected, [&](const RegisteredAppearance &appearance) {
+    const auto *armor = RE::TESForm::LookupByID<RE::TESObjectARMO>(appearance.armorID);
+    return !armor || !native::ostim::rules::CanStrip(appearance.tokenSlotMask,
+        mask, armor->ContainsKeywordString("NoStrip"), appearance.observedWig, undressWigs);
+  });
+  if (selected.empty()) { return; }
+  auto source = OStimSource(threadID);
+  std::uint64_t transaction = 0;
+  {
+    std::lock_guard lock(g_runtimeMutex);
+    for (const auto &ticket : g_suppressionTickets) {
+      if (ticket.actorID == ActorID(actor) && std::string_view(ticket.source).starts_with(source)) {
+        transaction = ticket.transactionID;
+        source = ticket.source;
+        break;
+      }
+    }
+  }
+  if (transaction == 0) { source = NewOStimSession(threadID); }
+  if (source.empty()) { return; }
+  // restoreItemID=0: no generic real-item recovery can consume this ticket.
+  // No StripTransaction inventory snapshot or separate suppression cache.
+  static_cast<void>(AddTicket(ActorID(actor), 0, selected, source, transaction));
+}
+
+void RestoreOStimAppearances(RE::Actor *actor, std::int32_t threadID, std::uint32_t mask) {
+  const auto active = OStimSource(threadID), ended = OStimSource(threadID, true);
+  RestoreOStimOwned(actor, mask, [&](const auto &ticket) {
+    return std::string_view(ticket.source).starts_with(active) ||
+           std::string_view(ticket.source).starts_with(ended);
+  });
+}
+
+RE::BSFixedString GetOStimRedressSession(RE::Actor *actor) {
+  if (!actor) { return {}; }
+  std::lock_guard lock(g_runtimeMutex);
+  // Capture before Utility.Wait. Delayed animation must never restore a newer
+  // scene that happens to reuse the same thread ID (especially player ID 0).
+  std::uint64_t oldest = 0;
+  std::string session;
+  for (const auto &ticket : g_suppressionTickets) {
+    if (ticket.actorID == ActorID(actor) && native::ostim::rules::IsOwned(ticket.source) &&
+        (oldest == 0 || ticket.transactionID < oldest)) {
+      oldest = ticket.transactionID;
+      session = std::string(native::ostim::rules::kActivePrefix) +
+          std::string(native::ostim::rules::SessionSuffix(ticket.source));
+    }
+  }
+  // Save loading deliberately reassigns internal transaction IDs. This stable
+  // key lives in the already-serialized owner string, so a saved Papyrus wait
+  // still resumes against its original session, never a newer scene.
+  // Entering animated redress closes this particular strip episode even if
+  // an older OStim build exposes no native scene-stop interface. A later strip
+  // must get a fresh key instead of merging into the animation's captured key.
+  // Phase only: do not restore visibility or consume any appearance here.
+  if (!session.empty()) {
+    for (auto &ticket : g_suppressionTickets) {
+      if (ticket.actorID == ActorID(actor) && ticket.source == session) {
+        ticket.source = std::string(native::ostim::rules::kEndedPrefix) +
+            std::string(native::ostim::rules::SessionSuffix(session));
+      }
+    }
+  }
+  return RE::BSFixedString(session);
+}
+
+std::uint32_t GetOStimSessionMask(RE::Actor *actor, RE::BSFixedString session) {
+  if (!actor) { return 0; }
+  if (!native::ostim::rules::IsOwned(session.c_str())) { return 0; }
+  const auto live = GetRegisteredAppearances(ActorID(actor));
+  std::uint32_t mask = 0;
+  std::lock_guard lock(g_runtimeMutex);
+  for (const auto &ticket : g_suppressionTickets) {
+    if (ticket.actorID != ActorID(actor) ||
+        !native::ostim::rules::SameSession(ticket.source, session.c_str())) { continue; }
+    for (const auto &ref : ticket.appearances) {
+      for (const auto &appearance : live) {
+        if (appearance.identity == ref.identity && appearance.generation == ref.generation) {
+          mask |= appearance.tokenSlotMask;
+        }
+      }
+    }
+  }
+  return mask;
+}
+
+void RestoreOStimSession(RE::Actor *actor, RE::BSFixedString session, std::uint32_t mask) {
+  if (native::ostim::rules::IsOwned(session.c_str())) {
+    RestoreOStimOwned(actor, mask, [&](const auto &ticket) {
+      return native::ostim::rules::SameSession(ticket.source, session.c_str());
+    });
+  }
+}
+
+void ObserveOStimSceneEnd(RE::Actor *actor, std::int32_t threadID) {
+  if (!actor) { return; }
+  const auto active = OStimSource(threadID), ended = OStimSource(threadID, true);
+  std::lock_guard lock(g_runtimeMutex);
+  for (auto &ticket : g_suppressionTickets) {
+    if (ticket.actorID == ActorID(actor) && std::string_view(ticket.source).starts_with(active)) {
+      ticket.source = ended + ticket.source.substr(active.size());
+    }
+  }
+}
+
+void ObserveOStimSceneStart(RE::Actor *actor) {
+  // Only actors actually continuing into the next scene: removed NPCs retain
+  // their delayed animated redress. Ordinary scene-end/redress-off stays hidden.
+  RestoreOStimOwned(actor, 0xFFFFFFFFU, [](const auto &ticket) {
+    return std::string_view(ticket.source).starts_with(native::ostim::rules::kEndedPrefix);
+  });
 }
 
 void ResetVirtualWornTokenRuntimeState() {

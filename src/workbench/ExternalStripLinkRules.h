@@ -20,9 +20,9 @@ inline constexpr std::uint32_t kAutomaticEquipmentFirstSlot = 30;
 inline constexpr std::uint32_t kAutomaticEquipmentLastSlot = 61;
 inline constexpr std::size_t kAutomaticEquipmentSlotCount =
     kAutomaticEquipmentLastSlot - kAutomaticEquipmentFirstSlot + 1;
-inline constexpr std::array<std::uint32_t, 11>
+inline constexpr std::array<std::uint32_t, 12>
     kAutomaticEquipmentVanillaAnchorSlots{30, 31, 32, 33, 34, 35,
-                                          36, 37, 38, 39, 42};
+                                          36, 37, 38, 39, 41, 42};
 using AutomaticEquipmentSlotMappings =
     std::array<std::uint8_t, kAutomaticEquipmentSlotCount>;
 using AutomaticEquipmentSlotOverrides =

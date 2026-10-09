@@ -23,6 +23,12 @@ void ObserveActorSpellChanged(RE::Actor *a_actor, RE::SpellItem *a_spell);
 void SynchronizeActor(RE::Actor *a_actor, bool a_queueRefresh);
 void SynchronizePlayer(bool a_queueRefresh);
 
+// Read-only actor-local HT2 decision for one physical armor. Used only when
+// deciding whether a displayed helmet occludes a standalone registered wig;
+// does not query worn slots or change HT2 controller/suppression masks.
+[[nodiscard]] bool IsActualHeadgearHidden(RE::Actor *a_actor,
+                                         const RE::TESObjectARMO *a_armor);
+
 // Returns the renderer-only Hair (31) release used by the proven v1.5.0 HT2
 // path. It never equips, unequips, or edits the actor's real armor.
 [[nodiscard]] std::uint32_t GetActualHairSlotReleaseMask(

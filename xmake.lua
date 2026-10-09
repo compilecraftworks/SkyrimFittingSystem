@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.5"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.6"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -347,6 +347,32 @@ target("WornSnapshotRegressionTests")
             "build/.gens/worn-snapshot-tests"})
     end)
 
+target("RegisteredLongHairTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/RegisteredLongHairTests.cpp")
+    add_includedirs("src", "build/.gens/long-hair-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-CustomSkinningTestSource.ps1", "-OutputDirectory",
+            "build/.gens/long-hair-tests"})
+    end)
+
+target("VanillaHairStripLinkTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/VanillaHairStripLinkTests.cpp")
+    add_includedirs("src", "build/.gens/vanilla-hair-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-ArmorClassificationTestSource.ps1", "-OutputDirectory",
+            "build/.gens/vanilla-hair-tests"})
+    end)
+
 target("ArmorClassificationTests")
     set_default(false)
     set_kind("binary")
@@ -419,6 +445,33 @@ target(regression)
             "build/.gens/" .. target:name()})
     end)
 end
+
+target("OStimSceneInterfaceTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/OStimSceneInterfaceTests.cpp")
+    add_includedirs("src", "build/.gens/ostim-scene-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-OStimSceneTestSource.ps1", "-Output",
+            "build/.gens/ostim-scene-tests/OStimScene.production.inc"})
+    end)
+
+target("OStimAppearanceTests")
+    set_default(false)
+    set_kind("binary")
+    set_encodings("utf-8")
+    set_targetdir("build/v" .. build_version .. "/tests")
+    add_files("tests/OStimAppearanceTests.cpp")
+    add_syslinks("ole32")
+    add_includedirs("src", "build/.gens/ostim-tests")
+    before_build(function (target)
+        os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
+            "tests/Generate-OStimTestSource.ps1", "-Output",
+            "build/.gens/ostim-tests/OStim.production.inc"})
+    end)
 
 target("RaceMenuInterfaceTests")
     set_default(false)

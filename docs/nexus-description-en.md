@@ -6,13 +6,16 @@ An SKSE appearance system that preserves the armor rating, enchantments, and eff
 
 Default UI hotkey: **F6**. It can be changed in Options.
 
-## Version 1.7.5 Update Summary
+## Version 1.7.6 Update Summary
 
-- Fixed registered high-heel height remaining during SexLab animations after actual footwear was stripped.
-- Coordinate SFS-owned height with SexLab's RemoveHeelEffect setting and existing correction without changing SexLab's transform key.
-- Remove stale hidden-appearance height even when node removal is delayed, while preserving visible actual footwear and other mods' named transforms.
-- Use the same policy through legacy NiOverride/public NiTransform and native/DAV/DAVE; preserve footwear-strip OFF, flat footwear, redress OFF and manual visibility.
-- Only SFSCore.dll changes. Requirements, supported game-runtime list, scripts, ESL, settings, kits, saves and optional patches are unchanged. The SE/AE build and 38 regression executables pass; new-DLL in-game animation testing remains unverified.
+- Added official optional OStim and OStim Standalone Strip Link patches v1.0.0, requiring SFS v1.7.6 or later.
+- Connect Mod Settings and Vanilla Slots strip/redress linking, including both Direct Edit bases. Preserve slot protection, NoStrip and each framework's wig policy.
+- Support full, partial and animated appearance redress with actor/session-scoped ownership. Keep actual equipment and OStim's equipment arrays under OStim's control.
+- Move automatic vanilla wig linking to LongHair slot 41 without changing 31+42 helmet handling or explicit saved mappings.
+- Hide pure registered slot-41 wigs under visible hair-covering helmets and restore them when the helmet is hidden or removed, including Helmet Toggle 2. Preserve manual hiding and locked appearances.
+- Retain existing native/DAV/DAVE rendering, BodyMorph, high heels, dye, conditions, IED and public API behavior. No periodic actor/inventory scan or new mandatory dependency was added.
+
+SE/AE-only core, both Papyrus variants and 42 regression executables passed. Real OStim scene timing/save-load remains unverified. Install exactly one matching optional patch, let its OUndress.pex win conflicts and restart/reload. Keep settings, kits and saves; the existing runtime scripts/ESL and mandatory requirements are unchanged.
 
 ## Introduction
 
@@ -155,6 +158,7 @@ Optional: (Required optional patch file)
 - Wet Function Redux with the separate SFS compatibility patch
 - Dynamic Footprints SKSE BASE v3 only with its matching separate SFS patch
 - Open Animation Replacer and Dynamic Feminine Female Modesty Animations OAR with the separate DFFMA configuration patch
+- OStim or OStim Standalone with its matching SFS Strip Link patch v1.0.0 (SFS v1.7.6+); install only one variant
 
 Built-in: (Not required any patch file)
 
@@ -303,7 +307,7 @@ This mode does not directly follow the MCM strip-slot or keyword settings select
 
 Automatic classification proceeds in this order:
 
-1. SFS unions the slots occupied by the appearance ARMO and every attached ARMA. Unambiguous vanilla partitions such as pure Hair 31, Long Hair 41, Forearms 34, and Calves 38 are preserved first.
+1. SFS unions the slots occupied by the appearance ARMO and every attached ARMA. Standalone Hair 31 and Long Hair 41 wigs bind to actual LongHair 41 for strip/redress linking, independently of a helmet's Hair 31 obstruction. Forearms 34 and Calves 38 retain their own anchors; multi-slot headgear keeps its existing rules.
 2. The EditorID and display name are normalized into lowercase word tokens. CamelCase and letter/number boundaries such as `BattleAngelsTop01` are split before matching.
 3. Keyword EditorIDs supplied by the original ESP/KID or other mods are added to the same classification text. SFS-owned temporary SOS/TNG runtime keywords are excluded so they cannot feed back into a second classification pass.
 4. Specific categories win before broad ones. For example, `circlet`, `glasses`, and `mask` prefer 42; `helmet`, `hood`, and `hat` prefer 30; and `necklace`, `amulet`, and `choker` prefer 35. Equivalent Korean, Simplified Chinese, and Traditional Chinese terms are included.
@@ -314,7 +318,7 @@ The vocabulary covers English, Korean, Simplified Chinese, and Traditional Chine
 
 Representative bindings:
 
-- Helmet/hood: 30, wig/hair: 31, circlet/glasses/mask: 42
+- Helmet/hood: 30, standalone wig/hair: 41, circlet/glasses/mask: 42
 - Body, upper/lower clothing, underwear, skirt, and belt: 32
 - Gloves/arm accessory: 33, forearms: 34
 - Necklace: 35, ring: 36
@@ -436,11 +440,14 @@ Wet Function Redux applies wet effects to SFS registered appearances through the
 
 Helmet Toggle 2 needs no separate SFS patch. SFSCore observes only HT2's exact player state global and exact actor-local NPC/follower spell transitions. It reads the managed real ARMO's full slots, excludes pure registered slot 31, and lets registered 31+42 cards follow through slot 42. When a hidden, still-equipped real headgear occupies Hair 31, SFS releases only that actor's Hair bit from the renderer's worn mask so the original hair is skinned. There is no periodic actor scan, and SFS never edits HT2 scripts, calls, actual equipment, DAVE variants, or Mod-Configured virtual tokens.
 
+Pure registered LongHair 41 wigs are temporarily hidden under visible hair-covering headgear, and return when that headgear is hidden/removed. This final-display rule does not change manual hide flags, locked appearances, pure slot-31 wigs or the existing 31+42 helmet route.
+
 ## Optional Compatibility Patches
 
 - **Dynamic Feminine Female Modesty Animations OAR 4.30:** the separate FOMOD changes only its selected OAR JSON conditions to read SFS's final displayed outfit. It does not replace DFFMA animations, meshes, scripts, DLLs, or plugins.
 - **Wet Function Redux Visual Effect Patch v1.2.0:** supplies only the visual-effect script. It never replaces Wet Function's MCM script; a RaceMenu warning is Wet Function's own legacy self-check, not an SFS equipment or save-data modification.
 - **Dynamic Footprints SKSE BASE v3:** the separate patch reads only a visible SFS Feet 37 appearance for Dynamic Footprints' own footprint classification and otherwise uses actual footwear. It disables itself unless the exact verified v3 DLL build is present.
+- **OStim / OStim Standalone Strip Link Patch v1.0.0:** requires SFS v1.7.6+. Select the one matching your framework, never both. Supports Mod Settings / Vanilla Slots / both Direct Edit bases, preserving protection and framework wig/NoStrip choices. OStim owns actual gear; SFS connects registered appearance hiding/restoration. The patch replaces OUndress.pex and supplies SFSOStimBridge.pex; it must win script conflicts. Restart/reload afterward. Other OUndress overrides need a merged patch; no OStim DLL or ESP is replaced.
 
 ## External Runtime Menu API
 
