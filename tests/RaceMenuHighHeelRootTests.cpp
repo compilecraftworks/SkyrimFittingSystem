@@ -23,9 +23,25 @@ void TestSceneHeight() {
   actor.displayed.insert(armor.id); queue();
   DrainAll();
   const std::array<RE::FormID, 1> actors{actor.id};
+  RE::TESObjectARMO actualBoots{0x920};
+  actor.inventory.feet = &actualBoots;
+  g_highHeelScenes.Update(0x120, actors, false); queue(); DrainAll();
+  Check(actor.displayedHeight == 9,"OFF with retained physical boots preserves registered heel height");
+  actor.inventoryAvailable = false; queue(); DrainAll();
+  Check(actor.displayedHeight == 9,"OFF does not mistake unavailable physical inventory for proof of barefoot state");
+  actor.inventoryAvailable = true;
+  actor.inventory.feet = nullptr; queue(); DrainAll();
+  Check(actor.displayedHeight == 0,"OFF with actual feet stripped aligns registered heels to barefoot animation");
+  actor.inventory.feet = &actualBoots; queue(); DrainAll();
+  Check(actor.displayedHeight == 9,"physical feet redress during OFF scene restores ordinary registered height");
   g_highHeelScenes.Update(0x120, actors);
   queue(); DrainAll();
-  Check(actor.displayedHeight == 0, "scene with no SexLab compensation (feet stripped) suppresses only owned heel height");
+  Check(actor.displayedHeight == 0, "ON suppresses registered heel height even while actual boots are retained");
+  actor.inventoryAvailable = false; queue(); DrainAll();
+  Check(actor.displayedHeight == 0,"ON remains effective when physical inventory cannot be read");
+  actor.inventoryAvailable = true;
+  actor.inventory.feet = nullptr; queue(); DrainAll();
+  Check(actor.displayedHeight == 0, "ON with stripped feet and absent SexLab transform still suppresses registered height");
   for (float correction : {-9.0F, -7.0F, 0.0F}) {
     actor.sexLabPosition = correction; actor.otherModHeight = 3;
     queue(); DrainAll();
@@ -43,7 +59,7 @@ void TestSceneHeight() {
   const std::array<RE::FormID, 1> ordinaryIDs{ordinary.id};
   g_highHeelScenes.Update(0x121, ordinaryIDs);
   sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&ordinary); DrainAll();
-  Check(ordinary.fullUpdates == 0 && ordinary.internalPosition == 7.0F,
+  Check(ordinary.fullUpdates == 0 && ordinary.inventoryReads == 0 && ordinary.internalPosition == 7.0F,
         "scene member without any SFS-owned heel does not change real-equipment height");
   g_highHeelScenes.Update(0x121, {});
 

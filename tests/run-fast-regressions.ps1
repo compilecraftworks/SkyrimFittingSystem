@@ -24,6 +24,7 @@ $targets = @(
     "ConditionDropLogicTests",
     "WorkbenchTransactionTests",
     "EquipmentRefreshQueueTests",
+    "EquipmentEventDispatchTests",
     "StateBoundaryTests",
     "ConditionStoreIntegrityTests",
     "ConditionFormTokenTests",
@@ -43,6 +44,7 @@ $targets = @(
     "RaceMenuMorphTrackingTests",
     "RaceMenuHighHeelTests",
     "RaceMenuHighHeelRootTests",
+    "RaceMenuTransformObserverTests",
     "SexLabHighHeelEventTests",
     "AppearanceResourceLifecycleTests",
     "CallerChainPerformanceTests",
@@ -384,6 +386,19 @@ try {
         Join-Path $repository "src\native\ArmorSkinning.cpp") -Raw
     $tokenPerformanceSource = Get-Content -LiteralPath (
         Join-Path $repository "src/features/virtual_tokens/VirtualWornTokens.cpp") -Raw
+    $positionNativeObserver = [regex]::Match($tokenPerformanceSource,
+        '(?s)\[\[nodiscard\]\] NativeCallResult ObserveRaceMenuPositionNative\(.*?(?=struct NativeDispatchHook)').Value
+    $nativeDispatchBody = [regex]::Match($tokenPerformanceSource,
+        '(?s)struct NativeDispatchHook.*?(?=struct NativeRegistrationHook)').Value
+    if (-not $positionNativeObserver.Contains('"SexLab.esm"') -or
+        -not $positionNativeObserver.Contains('"NPC"') -or
+        $positionNativeObserver.IndexOf('CallOriginalNative(') -ge $positionNativeObserver.IndexOf('ObserveHighHeelTransformChange(') -or
+        $positionNativeObserver -match 'ReadCallerChain|PrepareOperation|EquipObject|UnequipObject|GetInventory' -or
+        $nativeDispatchBody.IndexOf('return ObserveRaceMenuPositionNative(') -lt 0 -or
+        $nativeDispatchBody.IndexOf('return ObserveRaceMenuPositionNative(') -ge $nativeDispatchBody.IndexOf('IsModSettingsStripLinkActive()')) {
+        throw 'SexLab heel observation must follow the original exact native and remain independent of strip mode/caller scans/equipment mutation'
+    }
+    Write-Host 'Late SexLab position writes use the post-native, actor-local notification boundary'
     $tokenRuntimeReset = [regex]::Match($tokenPerformanceSource,
         '(?s)void ResetVirtualWornTokenRuntimeState\(\).*?(?=void SerializeVirtualWornTokenState)').Value
     if (-not $tokenRuntimeReset.Contains('ResetScriptTypeInspectionMemo();')) {

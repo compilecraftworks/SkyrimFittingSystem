@@ -672,16 +672,30 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
 
   const auto actorFormID = a_actor->GetFormID();
   std::vector<RegisteredAppearanceAttachmentRoot> roots;
+  bool inScene = false;
   {
     std::lock_guard lock(g_nodeMutex);
     state.previouslyActive =
         g_registeredAppearanceHighHeelActors.contains(actorFormID);
-    state.suppressForScene = g_highHeelScenes.Contains(actorFormID);
+    inScene = g_highHeelScenes.Contains(actorFormID);
     const auto rootsIt =
         g_registeredAppearanceAttachmentRoots.find(actorFormID);
     if (rootsIt != g_registeredAppearanceAttachmentRoots.end()) {
       roots = rootsIt->second;
     }
+  }
+
+  if (inScene && (state.previouslyActive || !roots.empty())) {
+    // Physical inventory, not GetWornForm (which intentionally exposes SFS
+    // tokens to strip scripts), and not the skinned biped (hidden actual gear
+    // is still worn). Read existing changes only; never initialize inventory.
+    auto *inventory = a_actor->GetInventoryChanges(true);
+    // No existing inventory is unknown, not evidence that an actor is barefoot.
+    // Preserve the ordinary OFF policy in that case; ON still suppresses heels.
+    const bool hasActualFootwear = !inventory || inventory->GetArmorInSlot(37);
+    std::lock_guard lock(g_nodeMutex);
+    state.suppressForScene =
+        g_highHeelScenes.ShouldSuppress(actorFormID, hasActualFootwear);
   }
 
   // OnAttach can precede grafting, and a rebuild can temporarily reparent the
@@ -2000,6 +2014,7 @@ void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event) {
     if (!file || _stricmp(file->fileName, "SexLab.esm") != 0) { return; }
 
     std::vector<RE::FormID> actors;
+    std::optional<bool> removeHeelEffect;
     if (!ended) {
       // Read the user's actual SexLab option, not a package/version guess.
       // P+ retains this script property and the ordinary SendModEvent API.
@@ -2008,12 +2023,18 @@ void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event) {
       auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
       auto *policy = vm ? vm->GetObjectHandlePolicy() : nullptr;
       RE::BSTSmartPointer<RE::BSScript::Object> object;
-      if (!config || !policy || !vm->FindBoundObject(
+      if (config && policy && vm->FindBoundObject(
               policy->GetHandleForObject(config->GetFormType(), config),
-              "sslSystemConfig", object) || !object) { return; }
-      const auto *option = object->GetProperty(RE::BSFixedString("RemoveHeelEffect"));
-      if (!option || !option->IsBool()) { return; }
-      if (option->GetBool()) {
+              "sslSystemConfig", object) && object) {
+        // Let the VM resolve inherited auto-property storage. A missing or
+        // unreadable option must not drop scene membership: barefoot animation
+        // alignment is still required after actual slot 37 was stripped.
+        RE::BSScript::Variable option;
+        if (vm->GetPropertyValue(object, "RemoveHeelEffect", option) && option.IsBool()) {
+          removeHeelEffect = option.GetBool();
+        }
+      }
+      if (config) {
         // Use actual alias count and CommonLib's flat-layout accessors. No
         // guessed per-SexLab-version actor-array limit or raw VM memory walk.
         for (auto *alias : quest->aliases) {
@@ -2028,7 +2049,7 @@ void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event) {
     {
       std::lock_guard lock(g_nodeMutex);
       if (g_highHeelQueueEpoch.load(std::memory_order_acquire) != epoch) { return; }
-      changed = g_highHeelScenes.Update(senderID, actors);
+      changed = g_highHeelScenes.Update(senderID, actors, removeHeelEffect);
     }
     for (auto id : changed) {
       // This queues transform reconciliation only. It never changes hidden
@@ -2038,6 +2059,38 @@ void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event) {
       }
     }
   });
+}
+
+void ObserveHighHeelTransformChange(RE::Actor *a_actor) {
+  if (!a_actor) { return; }
+  {
+    std::lock_guard lock(g_nodeMutex);
+    const auto id = a_actor->GetFormID();
+    const auto roots = g_registeredAppearanceAttachmentRoots.find(id);
+    if (!g_highHeelScenes.Contains(id) ||
+        (!g_registeredAppearanceHighHeelActors.contains(id) &&
+         (roots == g_registeredAppearanceAttachmentRoots.end() || roots->second.empty()))) {
+      return;
+    }
+  }
+  // No inventory/scene traversal on the Papyrus worker. If a legacy callback
+  // chain is in flight, the queue remembers one follow-up using current data.
+  QueueRegisteredAppearanceHighHeelSync(a_actor);
+}
+
+void ObserveHighHeelEquipmentEvent(RE::Actor *a_actor,
+                                   const RE::TESObjectARMO *a_armor) {
+  if (!a_actor || !a_armor ||
+      (a_armor->GetSlotMask().underlying() & (1U << 7U)) == 0) {
+    return;
+  }
+  {
+    std::lock_guard lock(g_nodeMutex);
+    if (!g_highHeelScenes.Contains(a_actor->GetFormID())) { return; }
+  }
+  // Equipment callbacks precede a settled worn list. Use the existing bounded,
+  // coalesced main-thread heel queue, even when no appearance slot is linked.
+  QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
 
 void ReleaseActorSceneResources(const RE::FormID a_actorFormID,

@@ -32,6 +32,11 @@ struct TESForm {
   }
 };
 struct Actor : TESForm { using TESForm::TESForm; };
+struct TESObjectARMO : TESForm {
+  using TESForm::TESForm;
+  struct Mask { std::uint32_t bits{}; std::uint32_t underlying() const { return bits; } } slots;
+  Mask GetSlotMask() const { return slots; }
+};
 struct TESFile { const char* fileName = "SexLab.esm"; };
 struct BGSBaseAlias { int type = 139; int GetVMTypeID() const { return type; } };
 struct BGSRefAlias : BGSBaseAlias {
@@ -75,6 +80,9 @@ struct VirtualMachine {
     if (!bound || std::string_view(name) != "sslSystemConfig") return false;
     out = config; return true;
   }
+  bool GetPropertyValue(std::shared_ptr<Object>& object, const char* name, Variable& out) {
+    auto* value=object->GetProperty(name); if(!value) return false; out=*value; return true;
+  }
 };
 }
 }
@@ -91,6 +99,8 @@ Tasks* GetTaskInterface() { return &tasks; }
 std::atomic_uint64_t g_highHeelQueueEpoch{};
 std::mutex g_nodeMutex;
 sfs::native::racemenu::rules::HighHeelScenes g_highHeelScenes;
+std::unordered_set<RE::FormID> g_registeredAppearanceHighHeelActors;
+std::unordered_map<RE::FormID, std::vector<int>> g_registeredAppearanceAttachmentRoots;
 std::unordered_set<RE::FormID> queued;
 namespace sfs::native::racemenu {
 void QueueRegisteredAppearanceHighHeelSync(RE::Actor* a) { queued.insert(a->id); }
@@ -122,19 +132,41 @@ int main() {
   Check(!g_highHeelScenes.Contains(player.id) && queued.size() == 2, "end after alias clearing still releases both cached scene actors");
   queued.clear(); thread.aliases = {&playerAlias}; vm.config->option.value = false;
   send("AnimationStart", &thread); SKSE::tasks.Drain();
-  Check(queued.empty() && !g_highHeelScenes.Contains(player.id), "RemoveHeelEffect OFF leaves ordinary heel behavior alone");
+  Check(queued.contains(player.id) && g_highHeelScenes.Contains(player.id) &&
+        !g_highHeelScenes.ShouldSuppress(player.id,true) && g_highHeelScenes.ShouldSuppress(player.id,false),
+        "option OFF still tracks scene: retained actual footwear keeps height; stripped feet suppress registered height");
+  send("AnimationEnd", &thread); SKSE::tasks.Drain(); queued.clear();
   vm.config->option.value = true;
   for (auto* sender : std::vector<RE::TESForm*>{nullptr, &player, &foreign}) {
     send("AnimationStart", sender); SKSE::tasks.Drain();
     Check(queued.empty(), "foreign/non-quest/no-sender events cannot activate compensation");
   }
   send("UnrelatedEvent", &thread); Check(SKSE::tasks.pending.empty(), "unrelated mod events enqueue no work");
+  foreign.file.fileName="OStim.esp";send("AnimationStart",&foreign);SKSE::tasks.Drain();
+  Check(queued.empty(),"OStim's independent heel policy cannot be enrolled as a SexLab scene");
   RE::TESDataHandler::installed = false; send("AnimationStart", &thread); SKSE::tasks.Drain();
   Check(queued.empty(), "absent SexLab cannot activate compensation"); RE::TESDataHandler::installed = true;
   send("AnimationStart", &thread); ++g_highHeelQueueEpoch; SKSE::tasks.Drain();
   Check(queued.empty(), "load/revert invalidates an old queued scene event");
   send("AnimationStart", &thread); SKSE::tasks.Drain(); queued.clear();
   vm.config->option.value = false; send("StageStart", &thread); SKSE::tasks.Drain();
-  Check(queued.contains(player.id) && !g_highHeelScenes.Contains(player.id), "option disabled during scene reconciles the previously owned actor");
+  Check(queued.contains(player.id) && g_highHeelScenes.Contains(player.id) && !g_highHeelScenes.ShouldSuppress(player.id,true), "option disabled during scene keeps membership but reconciles heel policy");
+  queued.clear(); vm.config->propertyAvailable=false; send("StageStart", &thread); SKSE::tasks.Drain();
+  Check(g_highHeelScenes.ShouldSuppress(player.id,false) && !g_highHeelScenes.ShouldSuppress(player.id,true),"unreadable option never blocks barefoot alignment or flips known OFF policy");
+  send("AnimationEnd", &thread); SKSE::tasks.Drain();queued.clear();
+  vm.bound=false;send("AnimationStart", &thread);SKSE::tasks.Drain();
+  Check(g_highHeelScenes.Contains(player.id) && g_highHeelScenes.ShouldSuppress(player.id,false) && !g_highHeelScenes.ShouldSuppress(player.id,true),"temporarily unbound config cannot lose new barefoot scene membership or invent an ON option");
+  vm.bound=true;
+  vm.config->propertyAvailable=true;vm.config->option.value=true;send("StageStart", &thread);SKSE::tasks.Drain();
+  vm.config->propertyAvailable=false;send("StageStart", &thread);SKSE::tasks.Drain();
+  Check(g_highHeelScenes.ShouldSuppress(player.id,true),"transient property read failure cannot turn a known ON scene back into OFF");
+  RE::TESObjectARMO boots{0x300}, helmet{0x301};boots.slots.bits=0x80;queued.clear();
+  sfs::native::racemenu::ObserveHighHeelEquipmentEvent(&player,&boots);
+  Check(queued.contains(player.id),"physical feet strip/redress requeues scene height without waiting for another stage");
+  queued.clear();sfs::native::racemenu::ObserveHighHeelEquipmentEvent(&player,&helmet);
+  Check(queued.empty(),"non-foot equipment cannot broaden heel-event work");
+  send("AnimationEnd", &thread); SKSE::tasks.Drain();queued.clear();
+  sfs::native::racemenu::ObserveHighHeelEquipmentEvent(&player,&boots);
+  Check(queued.empty(),"ended scene cannot retain foot-event work");
   std::printf("%u production SexLab event adapter checks passed; not in-game proof.\n", checks);
 }

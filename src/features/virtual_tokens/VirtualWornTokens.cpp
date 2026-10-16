@@ -8,6 +8,7 @@
 #include "native/PapyrusObserverInstallRules.h"
 #include "native/OStimAppearanceRules.h"
 #include "native/SexLabPPlusRules.h"
+#include "native/RaceMenuBodyMorph.h"
 #include "features/devious_devices/DeviousDevicesIntegration.h"
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
@@ -1932,7 +1933,9 @@ enum class TargetNative {
   DeviousDevicesSyncSetting,
   SexLabPPlusStripByData,
   SexLabPPlusStripByDataEx,
-  SexLabPPlusUnequipSlots
+  SexLabPPlusUnequipSlots,
+  RaceMenuAddPosition,
+  RaceMenuRemovePosition
 };
 
 [[nodiscard]] bool EqualNoCase(const char *a_left, const char *a_right) {
@@ -1986,6 +1989,20 @@ ClassifyNativeUncached(const NativeFunctionBase *a_function) {
   }
   const auto *object = a_function->GetObjectTypeName().c_str();
   const auto *name = a_function->GetName().c_str();
+  if (EqualNoCase(object, "NiOverride")) {
+    using Raw = RE::BSScript::TypeInfo::RawType;
+    if (EqualNoCase(name, "AddNodeTransformPosition") &&
+        MatchesStaticNativeSignature(a_function, Raw::kNone,
+            {Raw::kObject, Raw::kBool, Raw::kBool, Raw::kString, Raw::kString, Raw::kFloatArray})) {
+      return TargetNative::RaceMenuAddPosition;
+    }
+    if (EqualNoCase(name, "RemoveNodeTransformPosition") &&
+        MatchesStaticNativeSignature(a_function, Raw::kBool,
+            {Raw::kObject, Raw::kBool, Raw::kBool, Raw::kString, Raw::kString})) {
+      return TargetNative::RaceMenuRemovePosition;
+    }
+    return TargetNative::None;
+  }
   if (EqualNoCase(object, "Actor")) {
     if (EqualNoCase(name, "GetWornForm")) {
       return TargetNative::GetWornForm;
@@ -3447,6 +3464,31 @@ NativeCallResult CallOriginalNative(
   return original(a_function, a_stack, a_logger, a_vm, a_arg4);
 }
 
+// Observe the successful write, not an earlier equipment/scene notification.
+// SexLab 1.63 and SLU+ can finish this Papyrus native after SFS's previous
+// reconciliation. Never substitute arguments/results or inspect caller chains.
+[[nodiscard]] NativeCallResult ObserveRaceMenuPositionNative(
+    const TargetNative a_target, NativeFunctionBase *a_function,
+    const RE::BSTSmartPointer<RE::BSScript::Stack> &a_stack,
+    RE::BSScript::ErrorLogger *a_logger,
+    RE::BSScript::Internal::VirtualMachine *a_vm, const bool a_arg4) {
+  const auto &frame = *a_stack->top;
+  RE::Actor *actor = nullptr;
+  if (!ReadArgument<bool>(frame, 1) &&
+      ReadArgument<std::string>(frame, 3) == "NPC" &&
+      ReadArgument<std::string>(frame, 4) == "SexLab.esm") {
+    auto *reference = ReadArgument<RE::TESObjectREFR *>(frame, 0);
+    actor = reference ? reference->As<RE::Actor>() : nullptr;
+  }
+  const auto result = CallOriginalNative(a_function, a_stack, a_logger, a_vm, a_arg4);
+  const bool changed = a_target == TargetNative::RaceMenuAddPosition ||
+      (a_stack->returnValue.IsBool() && a_stack->returnValue.GetBool());
+  if (actor && result == NativeCallResult::kCompleted && changed) {
+    sfs::native::racemenu::ObserveHighHeelTransformChange(actor);
+  }
+  return result;
+}
+
 struct NativeDispatchHook {
   static NativeCallResult thunk(
       NativeFunctionBase *a_function,
@@ -3456,6 +3498,12 @@ struct NativeDispatchHook {
     const auto target = ClassifyNative(a_function);
     if (target == TargetNative::None || !a_stack || !a_stack->top) {
       return CallOriginalNative(a_function, a_stack, a_logger, a_vm, a_arg4);
+    }
+    if (target == TargetNative::RaceMenuAddPosition ||
+        target == TargetNative::RaceMenuRemovePosition) {
+      // Independent of virtual tokens and strip-link mode (including OFF).
+      return ObserveRaceMenuPositionNative(target, a_function, a_stack,
+                                            a_logger, a_vm, a_arg4);
     }
     const bool displayedBodyKeywordQuery =
         target == TargetNative::WornHasKeyword;
@@ -4127,9 +4175,9 @@ struct NativeRegistrationHook {
   // other Papyrus type is inspected lazily by ScriptTypeLoadHook when the
   // game or a newly installed mod naturally loads it; no mod or PEX name is
   // enumerated here.
-  constexpr std::array<std::string_view, 5> targetTypes{
+  constexpr std::array<std::string_view, 6> targetTypes{
       "Actor", "Form", "ObjectReference", "sslActorAlias",
-      "sslActorLibrary"};
+      "sslActorLibrary", "NiOverride"};
   std::size_t patchedCount = 0;
   for (const auto typeName : targetTypes) {
     RE::BSTSmartPointer<RE::BSScript::ObjectTypeInfo> type;

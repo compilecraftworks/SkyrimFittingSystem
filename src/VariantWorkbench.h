@@ -423,6 +423,9 @@ public:
   HasRegisteredAppearancesForActor(RE::FormID a_actorFormID) const;
   [[nodiscard]] bool
   HasDisplayStateForActor(RE::FormID a_actorFormID) const;
+  // Includes saved actual-only eye state while its row is temporarily absent
+  // during an external strip. Does not query inventory or change eye values.
+  [[nodiscard]] bool HasHiddenActualEquipmentForActor(RE::Actor *a_actor) const;
   [[nodiscard]] bool
   HasActualEquipmentLinkedAppearancesForActor(RE::FormID a_actorFormID) const;
   [[nodiscard]] std::uint64_t

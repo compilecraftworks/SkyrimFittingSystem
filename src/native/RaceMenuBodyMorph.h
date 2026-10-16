@@ -26,6 +26,11 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor);
 // SexLab's ordinary SendModEvent contract (also emitted by P+). No script
 // replacement, equipment mutation, or world/actor polling.
 void ObserveHighHeelSceneEvent(const SKSE::ModCallbackEvent &a_event);
+void ObserveHighHeelEquipmentEvent(RE::Actor *a_actor,
+                                   const RE::TESObjectARMO *a_armor);
+// Notification after an external SexLab NPC-position native actually changed.
+// Reuses bounded actor-local work; never changes the external transform key.
+void ObserveHighHeelTransformChange(RE::Actor *a_actor);
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor, bool a_active,
                                           bool a_observeHighHeelAttachments);
 // Only real object-unload/form-delete events. Never call for UI hiding or a

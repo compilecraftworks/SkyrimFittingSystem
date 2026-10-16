@@ -1475,6 +1475,25 @@ bool VariantWorkbench::HasActualEquipmentLinkedAppearancesForActor(
   return GetActualEquipmentLinkedSlotMaskForActor(a_actorFormID) != 0;
 }
 
+bool VariantWorkbench::HasHiddenActualEquipmentForActor(RE::Actor *a_actor) const {
+  if (!a_actor) { return false; }
+  if (const auto *menu = sfs::Menu::GetSingleton();
+      menu && menu->HideRealEquipmentWithFittingForActor(a_actor)) {
+    return true;
+  }
+  auto stateLock = AcquireStateLock();
+  const auto actorID = a_actor->GetFormID();
+  if (const auto it = equippedHiddenByActor_.find(actorID);
+      it != equippedHiddenByActor_.end() &&
+      std::ranges::any_of(it->second, [](const auto &entry) { return entry.second; })) {
+    return true;
+  }
+  return std::ranges::any_of(rows_, [&](const auto &row) {
+    return row.IsOwnedByActor(a_actor) && !row.IsSlotRow() &&
+           row.hideEquipped && !row.IsAlwaysVisibleActualEquipment();
+  });
+}
+
 std::uint64_t VariantWorkbench::GetActualEquipmentLinkedSlotMaskForActor(
     const RE::FormID a_actorFormID) const {
   if (!IsActualEquipmentStripLinkPolicyActive()) {

@@ -1,7 +1,8 @@
 param(
     [ValidateSet('release', 'releasedbg')]
     [string]$Mode = 'releasedbg',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$IncludeExistingOStimPatches
 )
 
 $ErrorActionPreference = 'Stop'
@@ -118,6 +119,10 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
+    'RELEASE-NOTES-v1.7.7.md', 'RELEASE-NOTES-v1.7.7-ko.md',
+    'GITHUB-RELEASE-v1.7.7.md',
+    'nexus-changelog-v1.7.7-en.txt', 'nexus-changelog-v1.7.7-ko.txt',
+    'SEXLAB-HEIGHT-AND-REDRESS-FOLLOWUP-v1.7.7.md',
     'RELEASE-NOTES-v1.7.6.md', 'RELEASE-NOTES-v1.7.6-ko.md',
     'GITHUB-RELEASE-v1.7.6.md',
     'nexus-changelog-v1.7.6-en.txt', 'nexus-changelog-v1.7.6-ko.txt',
@@ -301,8 +306,24 @@ $distSourceZip = Join-Path $distDirectory (Split-Path -Leaf $sourceZip)
 Copy-Item -LiteralPath $runtimeZip -Destination $distRuntimeZip -Force
 Copy-Item -LiteralPath $sourceZip -Destination $distSourceZip -Force
 
+$manifestArchives = @($runtimeZip, $sourceZip)
+if ($IncludeExistingOStimPatches) {
+    # Reuse the released patch bytes; a core-only correction must not silently
+    # recompile or overwrite a published patch with the same version number.
+    $patchVersion = ([IO.File]::ReadAllText(
+        (Join-Path $repoRoot 'compat\OStimSfsPatch\VERSION'))).Trim()
+    if ($patchVersion -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid existing OStim patch version' }
+    foreach ($label in @('OStim', 'OStim Standalone')) {
+        $patchZip = Join-Path $releaseDirectory "SFS - $label Strip Link Patch v$patchVersion.zip"
+        if (-not (Test-Path -LiteralPath $patchZip -PathType Leaf)) {
+            throw "Existing official patch not found: $patchZip"
+        }
+        Copy-Item -LiteralPath $patchZip -Destination (Join-Path $distDirectory (Split-Path -Leaf $patchZip)) -Force
+        $manifestArchives += $patchZip
+    }
+}
 $hashLines = @()
-foreach ($archive in @($runtimeZip, $sourceZip)) {
+foreach ($archive in $manifestArchives) {
     $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash
     $hashLines += "$hash *$(Split-Path -Leaf $archive)"
 }

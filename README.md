@@ -7,6 +7,14 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.7 fixes additional SexLab registered-heel alignment cases, including
+RemoveHeelEffect ON and late height-correction writes. Hidden actual helmets
+are reapplied after redress without reopening the UI, across native/DAV/DAVE.
+Actual gear remains under the game's/external mod's control. See the
+[English](docs/RELEASE-NOTES-v1.7.7.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.7-ko.md) notes and
+[verification boundary](docs/SEXLAB-HEIGHT-AND-REDRESS-FOLLOWUP-v1.7.7.md).
+
 v1.7.6 adds official optional OStim / OStim Standalone strip-link patches
 v1.0.0. Mod Settings, Vanilla Slots and both Direct Edit bases keep their
 existing ownership/protection rules; OStim remains in charge of actual gear.

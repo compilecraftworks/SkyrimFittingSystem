@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.6"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.7"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -190,7 +190,7 @@ target("ConditionDropLogicTests")
     add_files("tests/ConditionDropLogicTests.cpp")
     add_includedirs("src")
 
-for _, regression in ipairs({"WorkbenchTransactionTests", "EquipmentRefreshQueueTests"}) do
+for _, regression in ipairs({"WorkbenchTransactionTests", "EquipmentRefreshQueueTests", "EquipmentEventDispatchTests"}) do
 target(regression)
     set_default(false)
     set_kind("binary")
@@ -253,12 +253,13 @@ target("ConditionMaterializationReadTests")
             "build/.gens/condition-materialization-tests"})
     end)
 
-target("RaceMenuHighHeelRootTests")
+for _, regression in ipairs({"RaceMenuHighHeelRootTests", "RaceMenuTransformObserverTests"}) do
+target(regression)
     set_default(false)
     set_kind("binary")
     set_encodings("utf-8")
     set_targetdir("build/v" .. build_version .. "/tests")
-    add_files("tests/RaceMenuHighHeelRootTests.cpp")
+    add_files("tests/" .. regression .. ".cpp")
     add_includedirs("src", "tests", "build/.gens/high-heel-root-tests")
     add_packages("nlohmann_json")
     before_build(function (target)
@@ -266,6 +267,7 @@ target("RaceMenuHighHeelRootTests")
             "tests/Generate-HighHeelRootTestSource.ps1", "-OutputDirectory",
             "build/.gens/high-heel-root-tests"})
     end)
+end
 
 target("FittingDyeRulesTests")
     set_default(false)

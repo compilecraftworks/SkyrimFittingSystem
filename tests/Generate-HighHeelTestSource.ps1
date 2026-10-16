@@ -23,9 +23,13 @@ Write-Slice 'sync.production.inc' 'enum class HighHeelSyncAttempt' 'void QueuePe
 Write-Slice 'observer.production.inc' '[[nodiscard]] bool ShouldResyncHighHeelAfterAttachment(' 'RegisteredAppearanceAttachmentObserver g_attachmentObserver;'
 Write-Slice 'queue.production.inc' 'void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {' 'void SetRegisteredAppearanceDisplayActive('
 Write-Slice 'scene-event.production.inc' 'void ObserveHighHeelSceneEvent(' 'void ReleaseActorSceneResources('
+Write-Slice 'transform-change.production.inc' 'void ObserveHighHeelTransformChange(' 'void ObserveHighHeelEquipmentEvent('
 $source = Get-Content -LiteralPath (Join-Path $repo 'src/features/virtual_tokens/VirtualWornTokens.cpp') -Raw
 Write-Slice 'caller-identity.production.inc' 'struct CallerIdentity {' 'struct TrustProfile {'
 Write-Slice 'caller-chain.production.inc' '[[nodiscard]] std::vector<CallerIdentity>' 'void PruneRuntimeStateLocked('
 Write-Slice 'target-native.production.inc' 'enum class TargetNative {' '[[nodiscard]] bool EqualNoCase('
 Write-Slice 'hook-operation.production.inc' 'struct HookOperation {' '[[nodiscard]] const char *TargetName('
 Write-Slice 'prepare-operation.production.inc' '[[nodiscard]] HookOperation PrepareOperation(' '[[nodiscard]] bool HandleVirtualTokenOperation('
+Write-Slice 'native-classification.production.inc' '[[nodiscard]] bool EqualNoCase(' 'template <class T>'
+Write-Slice 'native-argument.production.inc' 'template <class T>' 'struct HookOperation {'
+Write-Slice 'position-native.production.inc' '[[nodiscard]] NativeCallResult ObserveRaceMenuPositionNative(' 'struct NativeDispatchHook {'

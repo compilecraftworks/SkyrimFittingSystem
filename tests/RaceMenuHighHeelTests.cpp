@@ -28,10 +28,14 @@ template<class T> using BSTSmartPointer = std::shared_ptr<T>;
 namespace BSScript {
 struct Object {};
 struct Variable {
+  std::any argument;
   std::optional<bool> value;
   std::optional<std::vector<float>> floats;
   bool IsArray() const { return floats.has_value(); }
-  template<class T> T Unpack() const { return *floats; }
+  template<class T> T Unpack() const {
+    if constexpr (std::is_same_v<T, std::vector<float>>) { return *floats; }
+    else { return std::any_cast<T>(argument); }
+  }
   bool IsBool() const { return value.has_value(); }
   bool GetBool() const { return value.value(); }
 };
@@ -80,7 +84,11 @@ struct TESObjectREFR : TESForm {
   using TESForm::TESForm;
   template<class T> T* As() { return static_cast<T*>(this); }
 };
-struct TESObjectARMO : TESForm { using TESForm::TESForm; };
+struct TESObjectARMO : TESForm {
+  using TESForm::TESForm;
+  struct Mask { std::uint32_t bits{}; std::uint32_t underlying() const { return bits; } } slots;
+  Mask GetSlotMask() const { return slots; }
+};
 struct TESObjectARMA : TESForm { using TESForm::TESForm; };
 struct NPC { bool IsFemale() const { return true; } };
 struct Actor : TESObjectREFR {
@@ -88,12 +96,18 @@ struct Actor : TESObjectREFR {
   NPC base;
   bool loaded{true}, equippableTransforms{true}, stale{}, active{true};
   bool bndtExists{}, bndtContainsNpc{}, temporary{};
+  struct Inventory {
+    TESObjectARMO* feet{};
+    TESObjectARMO* GetArmorInSlot(int slot) { if(slot != 37) std::abort(); return feet; }
+  } inventory;
+  bool inventoryAvailable{true};
+  Inventory* GetInventoryChanges(bool noInit) { if(!noInit) std::abort(); ++inventoryReads; return inventoryAvailable ? &inventory : nullptr; }
   std::optional<float> selectedOffset{12.0f}, internalPosition, sexLabPosition;
   std::array<float, 2> internalXY{};
   std::vector<float> sceneOffsets;
   std::unordered_set<FormID> displayed, actualVisible;
   float displayedHeight{}, otherModHeight{};
-  unsigned fullUpdates{}, resolverCalls{};
+  unsigned fullUpdates{}, resolverCalls{}, inventoryReads{};
   bool Is3DLoaded() const { return loaded; }
   NPC* GetActorBase() { return &base; }
   Actor* Get3D(bool) { return this; }

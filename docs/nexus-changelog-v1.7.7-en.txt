@@ -1,0 +1,5 @@
+- Fixed additional registered high-heel alignment cases during SexLab scenes, including when RemoveHeelEffect is ON and actual footwear has been stripped.
+- Reconcile late SexLab height-correction changes and footwear strip/redress without overwriting SexLab's transform key or other mods' named transforms.
+- Fixed hidden actual helmets becoming visible again after redress until the SFS UI was reopened. Reapply the saved visibility state across native, DAV and DAVE.
+- Preserve footwear-strip OFF, redress OFF, manual visibility, locked/protected appearances and existing SexLab, SLU+, P+, OStim and DD strip/redress behavior.
+- No actual-equipment equip/unequip commands, periodic actor/inventory scans, replacement framework scripts or new mandatory dependencies were added.

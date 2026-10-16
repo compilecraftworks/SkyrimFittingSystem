@@ -355,6 +355,7 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
       actor, const_cast<RE::TESObjectARMO *>(armor), a_event->equipped);
   sfs::native::SynchronizeArmorClassificationKeywords(
       const_cast<RE::TESObjectARMO *>(armor));
+  sfs::native::racemenu::ObserveHighHeelEquipmentEvent(actor, armor);
 
   const bool isGenitalArmor = sfs::armor::IsSosTngGenitalArmor(armor);
   if (isGenitalArmor) {
@@ -369,10 +370,12 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
   const auto activeFittingSlotMask =
       sfs::native::GetActiveFittingSlotMask(actor);
   const bool hasTrackedFittingState = sfs::native::HasFittingSlotState(actor);
-  const bool hasSfsDisplayState =
-      activeFittingSlotMask != 0 || hasTrackedFittingState;
-  const bool untrackedGenitalArmorEvent = !hasSfsDisplayState && isGenitalArmor;
   auto *menu = sfs::Menu::GetSingleton();
+  const bool hasHiddenActualEquipment =
+      menu && menu->GetWorkbench().HasHiddenActualEquipmentForActor(actor);
+  const bool hasSfsDisplayState =
+      activeFittingSlotMask != 0 || hasTrackedFittingState || hasHiddenActualEquipment;
+  const bool untrackedGenitalArmorEvent = !hasSfsDisplayState && isGenitalArmor;
   const auto actualEquipmentLinkedSlotMask =
       menu != nullptr
           ? menu->GetWorkbench().GetActualEquipmentLinkedSlotMaskForActor(
@@ -426,8 +429,14 @@ RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(
     // an SFS display rebuild; props and replacement outfits use the engine's
     // own equip update. Their row was initialized visible above, while both
     // the individual and global eye controls remain authoritative afterward.
+    // The ledger tracks only slots linked to registered appearances. A hidden
+    // actual helmet can therefore be original gear without a ledger entry.
+    // Reapply that actor's actual-eye state too, but keep event-added props on
+    // their existing no-extra-rebuild path (SGO/DD hand-off).
     if (externalEquipmentEvent.originalStripped ||
-        externalEquipmentEvent.originalItemRestored) {
+        externalEquipmentEvent.originalItemRestored ||
+        (hasHiddenActualEquipment && !eventAddedArmor &&
+         !externalEquipmentEvent.eventAddedRemoved)) {
       MarkEquipmentChangeRefreshPending(actor->GetFormID());
       QueueActorRefresh(actor->GetFormID());
     }

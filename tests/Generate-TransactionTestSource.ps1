@@ -60,3 +60,20 @@ $queue = @(
     (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' 'void EquipmentRefreshEventSink::TickConditionState()')
 ) -join "`n`n"
 Write-Generated 'EquipmentQueue.production.inc' $queue
+$equipment = @(
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' "[[nodiscard]] std::uint64_t`nQueueActorRefreshGeneration("),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' "[[nodiscard]] bool`nIsLatestActorRefreshGeneration("),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' 'void MarkEquipmentChangeRefreshPending('),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' 'void MarkActorStateReconciliationPending('),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' "[[nodiscard]] bool`nConsumeActorStateReconciliationPending("),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' "[[nodiscard]] bool`nConsumeEquipmentChangeRefreshPending("),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' "[[nodiscard]] bool`nConsumeContextBoundaryRefreshPending("),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' 'void RunActorRefresh(')
+) -join "`n`n"
+Write-Generated 'EquipmentDispatchGlobals.production.inc' $equipment
+Write-Generated 'EquipmentDispatch.production.inc' (@(
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' 'EquipmentRefreshEventSink *EquipmentRefreshEventSink::GetSingleton()'),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' "RE::BSEventNotifyControl EquipmentRefreshEventSink::ProcessEvent(`n    const RE::TESEquipEvent *"),
+    (Extract-Function 'src/workbench/EquipmentRefreshEventSink.cpp' 'void EquipmentRefreshEventSink::QueueActorRefresh(')
+) -join "`n`n")
+Write-Generated 'ActualEyeState.production.inc' (Extract-Function 'src/VariantWorkbench.cpp' 'bool VariantWorkbench::HasHiddenActualEquipmentForActor(')

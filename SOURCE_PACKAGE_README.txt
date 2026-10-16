@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.6 - Nexus Source Package
+Skyrim Fitting System v1.7.7 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,14 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.7.7 adds actor-local reconciliation after late SexLab position writes and
+physical footwear changes, and repairs hidden actual-gear redress refreshes.
+Ordinary SexLab 1.63, installed SLU+ 2024.4.7 and P+ 2.17.1 contracts were
+compared. 44 production-source/host regression executables and source-boundary
+checks pass; this is not an in-game animation or every-binary verification.
+See docs/SEXLAB-HEIGHT-AND-REDRESS-FOLLOWUP-v1.7.7.md and the bilingual notes.
+Existing optional patch versions, settings, kits and save schemas are unchanged.
 
 v1.7.6 includes the complete core and both official OStim strip-link patch
 v1.0.0 sources under compat/OStimSfsPatch, including compile-only imports and

@@ -70,6 +70,7 @@ struct AttachmentSceneSnapshot {
 };
 #include "native-root-capture.production.inc"
 #include "root-lifecycle.production.inc"
+#include "transform-change.production.inc"
 }
 '@
 Write-Generated 'HighHeelRootFixture.inc' $fixture
