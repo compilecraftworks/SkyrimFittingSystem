@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.7 - Nexus Source Package
+Skyrim Fitting System v1.7.8 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,15 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.7.8 reconciles late RaceMenu full rescans during registered-heel SexLab
+scenes and suppresses native/ENB depth of field only while the SFS UI is open.
+It includes bounded task ownership, allocation/lifetime regressions and menu
+restoration checks. All 45 regression executables and source-boundary checks
+pass; this is not an in-game FPS or every-binary compatibility claim.
+See docs/HIGH-HEEL-RESCAN-AND-MENU-DOF.md and the bilingual release notes.
+ENB is optional; independent ReShade blur is outside this adapter's scope.
+Existing optional patches, settings, kits, scripts and save schemas are unchanged.
 
 v1.7.7 adds actor-local reconciliation after late SexLab position writes and
 physical footwear changes, and repairs hidden actual-gear redress refreshes.

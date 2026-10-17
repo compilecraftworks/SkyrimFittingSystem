@@ -119,6 +119,10 @@ foreach ($relativeDirectory in @('src', 'tests', 'scripts', 'extras')) {
 }
 
 $sourceDocs = @(
+    'RELEASE-NOTES-v1.7.8.md', 'RELEASE-NOTES-v1.7.8-ko.md',
+    'GITHUB-RELEASE-v1.7.8.md',
+    'nexus-changelog-v1.7.8-en.txt', 'nexus-changelog-v1.7.8-ko.txt',
+    'HIGH-HEEL-RESCAN-AND-MENU-DOF.md',
     'RELEASE-NOTES-v1.7.7.md', 'RELEASE-NOTES-v1.7.7-ko.md',
     'GITHUB-RELEASE-v1.7.7.md',
     'nexus-changelog-v1.7.7-en.txt', 'nexus-changelog-v1.7.7-ko.txt',

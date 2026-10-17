@@ -13,6 +13,7 @@
 #include <mutex>
 #include <memory>
 #include <optional>
+#include <span>
 #include <string_view>
 #include <string>
 #include <utility>
@@ -65,10 +66,15 @@ template<class... Args> std::vector<std::any> MakeFunctionArguments(Args&&... ar
 }
 template<class T> struct NiPointer {
   T* value{};
-  NiPointer(T* p) : value(p) {}
+  NiPointer(T* p = nullptr) : value(p) {}
   T* get() const { return value; }
+  T* operator->() const { return value; }
+  explicit operator bool() const { return value != nullptr; }
 };
-struct NiAVObject { bool hasHeel{}; };
+struct NiAVObject {
+  bool hasHeel{};
+  struct { struct { float z{}; } translate; } local;
+};
 using NiNode = NiAVObject;
 struct TESForm {
   static inline std::unordered_map<FormID, TESForm*> forms;
@@ -111,6 +117,9 @@ struct Actor : TESObjectREFR {
   bool Is3DLoaded() const { return loaded; }
   NPC* GetActorBase() { return &base; }
   Actor* Get3D(bool) { return this; }
+  NiAVObject heightNode;
+  NiAVObject* GetObjectByName(const char*) { return &heightNode; }
+  void SetDisplayedHeight(float value) { displayedHeight = value; heightNode.local.translate.z = value; }
 };
 }
 namespace logger {
@@ -152,14 +161,14 @@ struct INiTransformInterface {
       for (float offset : a->sceneOffsets) a->internalPosition = offset;
       if (a->bndtExists && !a->sceneOffsets.empty()) a->bndtContainsNpc = true;
     }
-    a->displayedHeight = a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0);
+    a->SetDisplayedHeight(a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0));
   }
   void RemoveNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key) {
     if (std::string_view(key) == "internal") a->internalPosition.reset();
     else a->temporary = false;
   }
   void UpdateNodeTransforms(RE::Actor* a, bool, bool, const char*) {
-    a->displayedHeight = a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0);
+    a->SetDisplayedHeight(a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0));
   }
 } transform;
 struct IBodyMorphInterface {} morph;
@@ -225,6 +234,7 @@ sfs::native::racemenu::rules::HighHeelScenes g_highHeelScenes;
 std::unordered_set<RE::FormID> g_highHeelAttachmentActors;
 sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
+#include "height-watch-state.production.inc"
 std::atomic<std::uint64_t> g_highHeelQueueEpoch{0};
 std::atomic<skee::INiTransformInterface*> g_transformInterface{&skee::transform};
 std::atomic_uint32_t g_transformInterfaceVersion{3};
@@ -278,6 +288,7 @@ void Check(bool result, const char* message) {
   std::printf("PASS: %s\n", message);
 }
 void Reset(RE::Actor& a) {
+  g_sceneHeightWatches.clear(); g_hasSceneHeightWatches = false; g_sceneHeightCheckQueued = false;
   a = RE::Actor{a.id};
   RE::TESForm::forms[a.id] = &a;
   g_registeredAppearanceHighHeelActors.clear();

@@ -21,6 +21,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -104,6 +105,26 @@ std::uint64_t g_nodeObservation{0}; // protected by g_nodeMutex
 std::mutex g_highHeelQueueMutex;
 sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
+struct SceneHeightWatch {
+  RE::NiPointer<RE::NiAVObject> node;
+  std::uint64_t generation{0};
+  float reconciledZ{0.0F};
+  bool armed{false};
+};
+// Only scene participants with an SFS-owned heel, never the loaded actor list.
+// Stable checks validate actor/attachment lifetime and compare Z; no inventory,
+// VM dispatch or transform rebuild. The game-task handoff is still required.
+std::unordered_map<RE::FormID, SceneHeightWatch> g_sceneHeightWatches;
+std::atomic_bool g_hasSceneHeightWatches{false};
+// Zero means idle; otherwise the owning load epoch plus one. An old/discarded
+// task must neither block a new save nor clear its replacement's queued state.
+std::atomic<std::uint64_t> g_sceneHeightCheckQueued{0};
+// Called with g_nodeMutex held, only when watch state changes. An unfinished
+// legacy callback chain is not a reason to schedule idle frame checks.
+void UpdateSceneHeightWatchActivityLocked() {
+  g_hasSceneHeightWatches.store(std::ranges::any_of(g_sceneHeightWatches,
+      [](const auto &entry) { return entry.second.armed; }), std::memory_order_release);
+}
 std::atomic<std::uint64_t> g_highHeelQueueEpoch{0};
 // Only in-flight observations are recorded; unload cancels their publication
 // without disabling the next legitimate attachment for the same actor.
@@ -798,6 +819,49 @@ void FinishQueuedHighHeelSync(RE::FormID a_actorFormID,
   return g_queuedHighHeelSyncs.Current(a_actorFormID, a_generation);
 }
 
+void PrepareSceneHeightWatch(RE::Actor *a_actor, std::uint64_t a_generation,
+                             bool a_ownsHeight) {
+  RE::NiPointer<RE::NiAVObject> node;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    a_ownsHeight = a_ownsHeight && g_highHeelScenes.Contains(a_actor->GetFormID());
+  }
+  if (a_ownsHeight) {
+    if (auto *root = a_actor->Get3D(false)) {
+      node = RE::NiPointer<RE::NiAVObject>{root->GetObjectByName("NPC")};
+    }
+  }
+  SceneHeightWatch released;
+  {
+    std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+    const auto id = a_actor->GetFormID();
+    if (!g_queuedHighHeelSyncs.Current(id, a_generation)) { return; }
+    if (const auto it = g_sceneHeightWatches.find(id);
+        it != g_sceneHeightWatches.end()) {
+      released = std::move(it->second);
+      g_sceneHeightWatches.erase(it);
+    }
+    if (node && g_highHeelScenes.Contains(id)) {
+      g_sceneHeightWatches.emplace(id, SceneHeightWatch{node, a_generation});
+    }
+    UpdateSceneHeightWatchActivityLocked();
+  }
+}
+
+void RecordReconciledSceneHeight(RE::FormID a_actor, std::uint64_t a_generation) {
+  std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+  const auto it = g_sceneHeightWatches.find(a_actor);
+  if (it == g_sceneHeightWatches.end() ||
+      it->second.generation != a_generation ||
+      !g_queuedHighHeelSyncs.Current(a_actor, a_generation)) { return; }
+  // The legacy callback reads only a retained, already-resolved node. No scene
+  // traversal, actor lookup, inventory or workbench access on the VM worker.
+  auto &watch = it->second;
+  watch.reconciledZ = watch.node->local.translate.z;
+  watch.armed = std::isfinite(watch.reconciledZ);
+  UpdateSceneHeightWatchActivityLocked();
+}
+
 [[nodiscard]] RE::Actor *
 LookupLegacyHighHeelActor(const LegacyHighHeelSyncRequest &a_request) {
   if (!IsCurrentHighHeelSync(a_request.actorFormID, a_request.generation)) {
@@ -864,6 +928,7 @@ void CompleteLegacyHighHeelSync(
     logger::debug(
         "Synchronized registered-appearance HH_OFFSET through legacy NiOverride API actor={:08X} active={}",
         a_request->actorFormID, a_request->targetActive);
+    RecordReconciledSceneHeight(a_request->actorFormID, a_request->generation);
   } else if (IsCurrentHighHeelSync(a_request->actorFormID, a_request->generation)) {
     logger::warn(
         "Legacy NiOverride HH_OFFSET synchronization failed for actor {:08X}; no direct skeleton transform was applied",
@@ -1083,8 +1148,11 @@ void DispatchLegacyUpdateAll(
   }
   if (!state.offset.has_value() && !state.previouslyActive &&
       !state.hiddenAttachmentStillPresent) {
+    PrepareSceneHeightWatch(a_actor, a_generation, false);
     return HighHeelSyncAttempt::Complete;
   }
+
+  PrepareSceneHeightWatch(a_actor, a_generation, RetainRegisteredHeightOwnership(state));
 
   if (route == HighHeelTransformRoute::LegacyPapyrus) {
     if (StartLegacyHighHeelSync(a_actor, state, a_generation)) {
@@ -1156,6 +1224,7 @@ void DispatchLegacyUpdateAll(
     logger::debug(
         "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
         actorFormID, selected.z);
+    RecordReconciledSceneHeight(actorFormID, a_generation);
     return HighHeelSyncAttempt::Complete;
   }
 
@@ -1184,10 +1253,22 @@ void DispatchLegacyUpdateAll(
 void FinishQueuedHighHeelSync(const RE::FormID a_actorFormID,
                               const std::uint64_t a_generation) {
   bool resync = false;
+  SceneHeightWatch releasedWatch;
   {
-    std::lock_guard lock(g_highHeelQueueMutex);
+    std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
     if (g_queuedHighHeelSyncs.Finish(a_actorFormID, a_generation)) {
       resync = g_pendingHighHeelResyncs.erase(a_actorFormID) != 0;
+      const auto watch = g_sceneHeightWatches.find(a_actorFormID);
+      if (watch != g_sceneHeightWatches.end() && !watch->second.armed) {
+        // A failed/no-op provider cannot arm this watch. Release it now, not
+        // at scene end, so it retains neither a skeleton nor idle frame tasks.
+        // Finish above already fenced this completion. Also drop an older
+        // disarmed watch if this actor vanished before Prepare could replace it.
+        // A later ordinary event can create a fresh watch without restriction.
+        releasedWatch = std::move(watch->second);
+        g_sceneHeightWatches.erase(watch);
+        UpdateSceneHeightWatchActivityLocked();
+      }
     }
   }
   if (resync) {
@@ -2093,6 +2174,78 @@ void ObserveHighHeelEquipmentEvent(RE::Actor *a_actor,
   QueueRegisteredAppearanceHighHeelSync(a_actor);
 }
 
+void QueueHighHeelSceneCheck() {
+  if (!g_hasSceneHeightWatches.load(std::memory_order_acquire)) { return; }
+  auto *tasks = SKSE::GetTaskInterface();
+  const auto epoch = g_highHeelQueueEpoch.load(std::memory_order_acquire);
+  std::uint64_t expected = 0;
+  if (!tasks || !g_sceneHeightCheckQueued.compare_exchange_strong(
+          expected, epoch + 1, std::memory_order_acq_rel)) { return; }
+  if (epoch != g_highHeelQueueEpoch.load(std::memory_order_acquire) ||
+      !g_hasSceneHeightWatches.load(std::memory_order_acquire)) {
+    expected = epoch + 1;
+    g_sceneHeightCheckQueued.compare_exchange_strong(expected, 0, std::memory_order_acq_rel);
+    return;
+  }
+  tasks->AddTask([epoch] {
+    auto queuedEpoch = epoch + 1;
+    if (!g_sceneHeightCheckQueued.compare_exchange_strong(queuedEpoch, 0, std::memory_order_acq_rel) ||
+        epoch != g_highHeelQueueEpoch.load(std::memory_order_acquire)) { return; }
+    // Most scenes fit on the stack. Overflow is deliberately uncapped: this
+    // storage optimization must never skip participants in larger scenes.
+    std::array<RE::FormID, 16> localActors;
+    std::vector<RE::FormID> overflowActors;
+    std::span<RE::FormID> actors;
+    {
+      std::lock_guard lock(g_nodeMutex);
+      const auto count = g_sceneHeightWatches.size();
+      if (count > localActors.size()) {
+        overflowActors.resize(count);
+        actors = overflowActors;
+      } else {
+        actors = std::span{localActors}.first(count);
+      }
+      std::size_t index = 0;
+      for (const auto &[id, watch] : g_sceneHeightWatches) { actors[index++] = id; }
+    }
+    for (const auto id : actors) {
+      auto *actor = RE::TESForm::LookupByID<RE::Actor>(id);
+      if (!actor || !actor->Is3DLoaded()) {
+        ReleaseActorSceneResources(id, false);
+        continue;
+      }
+      bool changed = false;
+      SceneHeightWatch released;
+      {
+        std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+        const auto it = g_sceneHeightWatches.find(id);
+        if (it == g_sceneHeightWatches.end()) { continue; }
+        auto &watch = it->second;
+        if (!g_highHeelScenes.Contains(id) ||
+            !IsAttachedToActorRoot(actor, watch.node.get(), false)) {
+          released = std::move(watch);
+          g_sceneHeightWatches.erase(it);
+          UpdateSceneHeightWatchActivityLocked();
+        } else if (watch.armed && !g_queuedHighHeelSyncs.Contains(id)) {
+          const auto z = watch.node->local.translate.z;
+          changed = std::isfinite(z) && std::abs(z - watch.reconciledZ) > 0.001F;
+          // A failed provider call must not start an endless retry loop. A new
+          // successful reconciliation or ordinary event arms the watch again.
+          if (changed) {
+            watch.armed = false;
+            UpdateSceneHeightWatchActivityLocked();
+          }
+        }
+      }
+      if (changed) {
+        // Re-resolve the current display and named mod transforms. Never write
+        // the saved skeleton height back: another mod may have changed it.
+        QueueRegisteredAppearanceHighHeelSync(actor);
+      }
+    }
+  });
+}
+
 void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
                                const bool a_deleted) {
   if (a_actorFormID == 0) { return; }
@@ -2100,6 +2253,7 @@ void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
   // destructor may in turn release engine/renderer-owned resources.
   decltype(g_registeredAppearanceNodes)::mapped_type releasedNodes;
   decltype(g_registeredAppearanceAttachmentRoots)::mapped_type releasedRoots;
+  SceneHeightWatch releasedWatch;
   {
     std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
     if (const auto it = g_registeredAppearanceNodes.find(a_actorFormID);
@@ -2113,6 +2267,12 @@ void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
       g_registeredAppearanceAttachmentRoots.erase(it);
     }
     g_registeredAppearanceHighHeelActors.erase(a_actorFormID);
+    if (const auto it = g_sceneHeightWatches.find(a_actorFormID);
+        it != g_sceneHeightWatches.end()) {
+      releasedWatch = std::move(it->second);
+      g_sceneHeightWatches.erase(it);
+    }
+    UpdateSceneHeightWatchActivityLocked();
     g_sceneObservations.Forget(a_actorFormID);
     g_morphRequests.Forget(a_actorFormID);
     g_queuedHighHeelSyncs.Forget(a_actorFormID);
@@ -2130,23 +2290,29 @@ void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
 }
 
 void ForgetAllRegisteredAppearanceNodes() {
-  g_highHeelQueueEpoch.fetch_add(1, std::memory_order_acq_rel);
+  std::vector<RE::FormID> highHeelActors;
+  decltype(g_registeredAppearanceNodes) releasedNodes;
+  decltype(g_registeredAppearanceAttachmentRoots) releasedRoots;
+  decltype(g_sceneHeightWatches) releasedWatches;
   {
-    std::lock_guard queueLock(g_highHeelQueueMutex);
+    std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+    // Disable scheduling before advancing the epoch; callbacks cannot rearm
+    // an old watch between queue cancellation and scene cleanup.
+    g_hasSceneHeightWatches.store(false, std::memory_order_release);
+    g_highHeelQueueEpoch.fetch_add(1, std::memory_order_acq_rel);
+    g_sceneHeightCheckQueued.store(0, std::memory_order_release);
     g_queuedHighHeelSyncs.Clear();
     g_pendingHighHeelResyncs.clear();
-  }
-
-  std::vector<RE::FormID> highHeelActors;
-  {
-    std::lock_guard lock(g_nodeMutex);
     highHeelActors.assign(g_registeredAppearanceHighHeelActors.begin(),
                           g_registeredAppearanceHighHeelActors.end());
-    g_registeredAppearanceNodes.clear();
-    g_registeredAppearanceAttachmentRoots.clear();
+    // Like actor unload, release engine-owned nodes only after our mutex is
+    // unlocked. Clearing the tables under lock could run scene destructors.
+    releasedNodes.swap(g_registeredAppearanceNodes);
+    releasedRoots.swap(g_registeredAppearanceAttachmentRoots);
     g_sceneObservations.Clear();
     g_registeredAppearanceHighHeelActors.clear();
     g_highHeelScenes.Clear();
+    releasedWatches.swap(g_sceneHeightWatches);
     g_morphActivity.Clear();
     g_morphRequests.Clear();
     g_highHeelAttachmentActors.clear();

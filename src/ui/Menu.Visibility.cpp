@@ -11,6 +11,7 @@
 #include "native/ArmorSkinning.h"
 #include "native/GridInventoryIntegration.h"
 #include "ui/GameplayControlLease.h"
+#include "ui/MenuDepthOfField.h"
 #include "ui/components/PinnableTooltip.h"
 #include "workbench/EquipmentRefreshEventSink.h"
 
@@ -94,6 +95,7 @@ namespace sfs {
 
 void Menu::SetGameDataLoaded(const bool a_loaded) {
   if (!a_loaded) {
+    ui::depth_of_field::SetMenuOpen(false);
     ui::MenuCharacterPresentation::GetSingleton()->Restore();
   }
   gameDataLoaded_ = a_loaded;
@@ -140,6 +142,7 @@ void Menu::Close() {
 }
 
 void Menu::NotifyWindowShutdown() {
+  ui::depth_of_field::SetMenuOpen(false);
   ReleaseGameplayControls();
   ui::MenuCharacterPresentation::GetSingleton()->Restore();
   hooks::ResetInputFilterState();
@@ -223,11 +226,13 @@ void Menu::OnMenuShow() {
         actor->GetFormID());
   }
   enabled_ = true;
+  ui::depth_of_field::SetMenuOpen(true);
   ui::MenuCharacterPresentation::GetSingleton()->Apply(
       menuCharacterSide_, ResolveWorkbenchPreviewActor());
 }
 
 void Menu::OnMenuHide() {
+  ui::depth_of_field::SetMenuOpen(false);
   ui::MenuCharacterPresentation::GetSingleton()->Restore();
   hooks::ResetInputFilterState(true);
   InputManager::GetSingleton()->SetShortcutSuppressionActive(false);

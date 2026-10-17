@@ -1,3 +1,13 @@
+## Version 1.7.8
+
+- Addressed late RaceMenu full rescans that could reapply registered high-heel height during SexLab scenes, while respecting the existing heel-removal setting and actual footwear stripping state.
+- Temporarily suppress native game and ENB depth of field while the SFS UI is open to reduce character/background blur. Normal behavior returns when the UI closes, and temporary ENB values are restored before preset saves.
+- Reduced unnecessary checks while heel synchronization is pending or has failed, and reduced temporary allocations in stable scenes. Stable checks perform no additional inventory queries, Papyrus calls or height recalculations.
+- Improved node-reference and queued-task cleanup during actor unload and save transitions so old work cannot block height monitoring in the next scene.
+- Preserved existing BodyMorph, visibility, strip/redress, dye and native/DAV/DAVE paths. No new mandatory dependency; existing settings, kits, saves and optional patches remain compatible.
+
+SE/AE-only build, 45 regression executables and source-boundary checks passed. In-game timing remains unverified; independent ReShade blur is outside scope. Existing optional patches are unchanged.
+
 ## Version 1.7.7
 
 - Fixed additional registered high-heel alignment cases during SexLab scenes, including when RemoveHeelEffect is ON and actual footwear has been stripped.

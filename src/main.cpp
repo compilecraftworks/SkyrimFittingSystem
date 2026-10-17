@@ -25,6 +25,7 @@
 #include "features/virtual_tokens/VirtualWornTokens.h"
 #include "ui/ConditionParamOptionCache.h"
 #include "ui/Menu.h"
+#include "ui/MenuDepthOfField.h"
 #include "workbench/EquipmentRefreshEventSink.h"
 
 static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
@@ -71,6 +72,7 @@ static void SKSEMessageHandler(SKSE::MessagingInterface::Message *a_message) {
     sfs::native::oar::RegisterConditions();
     sfs::native::smoothcam::RequestInterface();
     sfs::hooks::Install();
+    sfs::ui::depth_of_field::Install();
     sfs::native::InstallArmorSkinningHooks();
     sfs::native::InstallDisplayedBodyConditionHook();
     sfs::native::racemenu::InitializeBodyMorphInterface();

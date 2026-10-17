@@ -31,9 +31,11 @@ void ObserveHighHeelEquipmentEvent(RE::Actor *a_actor,
 // Notification after an external SexLab NPC-position native actually changed.
 // Reuses bounded actor-local work; never changes the external transform key.
 void ObserveHighHeelTransformChange(RE::Actor *a_actor);
+// Present only schedules a coalesced game-thread check; no render-thread scene access.
+void QueueHighHeelSceneCheck();
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor, bool a_active,
                                           bool a_observeHighHeelAttachments);
-// Only real object-unload/form-delete events. Never call for UI hiding or a
+// Unloaded, deleted or no-longer-resolvable scenes. Never call for UI hiding or a
 // backend refresh that can retain its attachments. No RaceMenu transform edits.
 void ReleaseActorSceneResources(RE::FormID a_actorFormID, bool a_deleted);
 void ForgetAllRegisteredAppearanceNodes();

@@ -42,6 +42,7 @@ function Replace-Block([string]$first, [string]$last, [string]$replacement) {
 Replace-Exact '#include <algorithm>' "#include <algorithm>`n#include <cmath>`n#include <limits>`n#include <nlohmann/json.hpp>"
 Replace-Block 'template<class T> struct NiPointer {' 'struct TESForm {' "#include `"HighHeelSceneFixture.h`"`n"
 Replace-Exact 'Actor* Get3D(bool) { return this; }' 'NiNode root, firstRoot; NiNode* Get3D(bool first) { return first ? &firstRoot : &root; }'
+Replace-Exact 'heightNode.local.translate.z = value;' 'root.local.translate.z = value;'
 Replace-Block 'struct RegisteredHighHeelState {' 'std::mutex g_nodeMutex' ''
 Replace-Block 'std::unordered_map<RE::FormID, std::vector<int>> g_registeredAppearanceAttachmentRoots;' 'void QueuePendingMorphSync(RE::FormID)' @'
 #include "root-record.production.inc"
@@ -70,6 +71,7 @@ struct AttachmentSceneSnapshot {
 };
 #include "native-root-capture.production.inc"
 #include "root-lifecycle.production.inc"
+#include "height-watch-tick.production.inc"
 #include "transform-change.production.inc"
 }
 '@

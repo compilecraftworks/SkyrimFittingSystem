@@ -1,6 +1,17 @@
 // Production metadata/root capture + resolver + transform/queue/lifecycle, with
 // scene ownership and public/legacy NiOverride recording providers, not Skyrim.
 #include "HighHeelRootFixture.inc"
+#include <new>
+#include <thread>
+// Test executable only: count ordinary C++ allocations in the actual stable
+// check body, excluding the fake scheduler's queue allocation before dispatch.
+std::atomic_size_t allocations{0};
+void* operator new(std::size_t size) {
+  if (auto* p = std::malloc(size ? size : 1)) { ++allocations; return p; }
+  throw std::bad_alloc{};
+}
+void operator delete(void* p) noexcept { std::free(p); }
+void operator delete(void* p, std::size_t) noexcept { std::free(p); }
 void Attach(RE::Actor& actor, RE::NiAVObject& node) {
   node.parent = &actor.root; actor.root.children.emplace_back(&node);
 }
@@ -102,6 +113,248 @@ void TestSceneHeight() {
   Check(!g_highHeelScenes.Contains(actor.id), "deleted actor releases scene ownership");
   Detach(actor, branch);
   Check(branch.references == 0, "scene regression retains no heel root references");
+}
+
+void TestLateFullRescan() {
+  RE::Actor actor{0x14}; RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
+  Reset(actor); actor.displayed.insert(boots.id); actor.sceneOffsets = {9};
+  RE::NiAVObject heel{true}; heel.heel.value = 9; Attach(actor, heel);
+  const std::array<RE::FormID, 1> actors{actor.id};
+  g_highHeelScenes.Update(0x120, actors, true);
+  RegisteredAppearanceAttachmentObserver observer;
+  observer.OnAttach(&actor, &boots, &addon, &heel, false, &actor.root, &actor.root);
+  SKSE::tasks.Drain();
+  if (g_transformInterfaceVersion < 3) {
+    const auto pendingBefore = SKSE::tasks.pending.size();
+    for (unsigned frame = 0; frame < 256; ++frame) {
+      sfs::native::racemenu::QueueHighHeelSceneCheck();
+    }
+    Check(!g_hasSceneHeightWatches && SKSE::tasks.pending.size() == pendingBefore,
+          "waiting for legacy completion does not schedule frame checks");
+  }
+  DrainAll();
+  Check(actor.displayedHeight == 0 && g_sceneHeightWatches.size() == 1,
+        "ON scene arms one watch after successful height reconciliation");
+  const auto idleUpdates = actor.fullUpdates, idleInventoryReads = actor.inventoryReads;
+  const auto idleVmCalls = RE::BSScript::Internal::vm.calls.size();
+  for (unsigned frame = 0; frame < 256; ++frame) {
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
+    if (SKSE::tasks.pending.size() != 1) { Check(false, "frame checks coalesce"); }
+    const auto beforeCheckAllocations = allocations.load();
+    SKSE::tasks.Drain();
+    if (allocations != beforeCheckAllocations) {
+      Check(false, "stable small-scene check body must not allocate");
+    }
+  }
+  Check(true, "256 stable small-scene checks allocate no temporary actor lists");
+  Check(actor.fullUpdates == idleUpdates && actor.inventoryReads == idleInventoryReads &&
+        RE::BSScript::Internal::vm.calls.size() == idleVmCalls,
+        "256 stable scene frames do not scan inventory, call Papyrus or recalculate transforms");
+  for (unsigned i = 0; i < 16; ++i) {
+    // No attachment or SexLab position-key event. Models full SetTransforms
+    // from UpdateAllReferenceTransforms, ActorUpdateManager or its private task.
+    skee::transform.UpdateNodeAllTransforms(&actor);
+    Check(actor.displayedHeight == 9, "late full rescan restores HH=9 before repair");
+    sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+    Check(actor.displayedHeight == 0 && !actor.temporary,
+          "late full rescan is repaired without changing any mod key or retaining bootstrap");
+  }
+  actor.otherModHeight = 3;
+  skee::transform.UpdateNodeAllTransforms(&actor);
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  Check(actor.displayedHeight == 3 && actor.otherModHeight == 3,
+        "repair preserves a newly changed unrelated mod height, not the old skeleton result");
+  actor.sexLabPosition = -6.0F;
+  skee::transform.UpdateNodeAllTransforms(&actor);
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  Check(actor.displayedHeight == 3 && actor.sexLabPosition == -6,
+        "late rescan with a new SexLab key reconciles using current compensation");
+  g_highHeelScenes.Update(0x120, {}); actor.sexLabPosition.reset();
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  Check(actor.displayedHeight == 12 && g_sceneHeightWatches.empty() && actor.root.references == 0,
+        "scene end restores ordinary heel and releases watched skeleton reference");
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  Check(SKSE::tasks.pending.empty(), "no frame task remains outside an owned scene");
+  // OFF + actual footwear retained uses the same late-rescan repair but keeps
+  // the registered heel. Bare actual feet continue to follow scene alignment.
+  g_highHeelScenes.Update(0x120, actors, false); actor.inventory.feet = &boots;
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  actor.sceneOffsets = {9, 15}; skee::transform.UpdateNodeAllTransforms(&actor);
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  Check(actor.displayedHeight == 12, "OFF retained footwear preserves registered height after unrelated scan order");
+  actor.inventory.feet = nullptr;
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  skee::transform.UpdateNodeAllTransforms(&actor);
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  Check(actor.displayedHeight == 3, "OFF with actual feet stripped still repairs barefoot alignment");
+  skee::transform.UpdateNodeAllTransforms(&actor);
+  auto *savedTransform = g_transformInterface.load();
+  g_transformInterface = nullptr;
+  RE::BSScript::Internal::vm.fail = "AddNodeTransformScale";
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  const auto failedUpdates = actor.fullUpdates;
+  const auto failedVmCalls = RE::BSScript::Internal::vm.calls.size();
+  for (unsigned frame = 0; frame < 64; ++frame) {
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
+    Check(SKSE::tasks.pending.empty(), "failed provider leaves no idle frame-check task");
+  }
+  Check(g_sceneHeightWatches.empty() && actor.root.references == 0 && !g_hasSceneHeightWatches,
+        "failed provider releases its watch and skeleton immediately");
+  Check(actor.fullUpdates == failedUpdates && RE::BSScript::Internal::vm.calls.size() == failedVmCalls,
+        "provider failure disarms repair rather than retrying transforms or Papyrus every frame");
+  g_transformInterface = savedTransform; RE::BSScript::Internal::vm.fail.clear();
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  Check(actor.displayedHeight == 3 && g_sceneHeightWatches.at(actor.id).armed,
+        "next legitimate event recovers and rearms after a temporary provider failure");
+  const auto oldGeneration = g_sceneHeightWatches.at(actor.id).generation;
+  skee::transform.UpdateNodeAllTransforms(&actor);
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); SKSE::tasks.Drain();
+  actor.loaded = false; DrainAll();
+  Check(g_sceneHeightWatches.empty() && actor.root.references == 0 && !g_hasSceneHeightWatches,
+        "actor becoming unavailable before repair starts cannot retain a disarmed older watch");
+  actor.loaded = true;
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  FinishQueuedHighHeelSync(actor.id, oldGeneration);
+  Check(g_sceneHeightWatches.at(actor.id).armed && actor.displayedHeight == 3,
+        "old completion cannot discard a newer successful watch");
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, false); DrainAll();
+  Check(g_sceneHeightWatches.empty() && actor.root.references == 0,
+        "unload cancels an already-queued check and releases its watched skeleton");
+  for (unsigned cycle = 0; cycle < 128; ++cycle) {
+    g_highHeelScenes.Update(0x120, actors, true);
+    g_highHeelAttachmentActors.insert(actor.id);
+    observer.OnAttach(&actor, &boots, &addon, &heel, false, &actor.root, &actor.root);
+    DrainAll();
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
+    sfs::native::racemenu::ReleaseActorSceneResources(actor.id, false);
+    DrainAll();
+    if (!g_sceneHeightWatches.empty() || actor.root.references != 0 || g_hasSceneHeightWatches) {
+      Check(false, "repeated watched scenes release every skeleton reference");
+    }
+  }
+  Check(g_sceneHeightWatches.empty() && actor.root.references == 0,
+        "128 watched scene/unload cycles retain no skeletons or watch state");
+  // A stale frame check from before revert must not examine a replacement scene.
+  observer.OnAttach(&actor, &boots, &addon, &heel, false, &actor.root, &actor.root); DrainAll();
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  sfs::native::racemenu::ForgetAllRegisteredAppearanceNodes();
+  const auto fullUpdates = actor.fullUpdates;
+  DrainAll();
+  Check(g_sceneHeightWatches.empty() && actor.root.references == 0 && actor.fullUpdates == fullUpdates,
+        "revert invalidates pending frame checks and releases their nodes");
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
+  Detach(actor, heel);
+}
+void TestLargeSceneWatch() {
+  RE::Actor resetActor{0x14}; Reset(resetActor);
+  RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
+  std::vector<std::unique_ptr<RE::Actor>> actors;
+  std::vector<std::unique_ptr<RE::NiAVObject>> heels;
+  std::array<RE::FormID, 33> ids{};
+  RegisteredAppearanceAttachmentObserver observer;
+  for (std::size_t i = 0; i < ids.size(); ++i) {
+    ids[i] = 0x4000 + static_cast<RE::FormID>(i);
+    actors.push_back(std::make_unique<RE::Actor>(ids[i]));
+    heels.push_back(std::make_unique<RE::NiAVObject>(true));
+    auto &actor = *actors.back(); auto &heel = *heels.back();
+    heel.heel.value = 9; actor.sceneOffsets = {9}; actor.displayed.insert(boots.id);
+    g_highHeelAttachmentActors.insert(actor.id);
+    Attach(actor, heel);
+  }
+  g_highHeelScenes.Update(0x120, ids, true);
+  for (std::size_t i = 0; i < ids.size(); ++i) {
+    auto &actor = *actors[i];
+    observer.OnAttach(&actor, &boots, &addon, heels[i].get(), false, &actor.root, &actor.root);
+  }
+  DrainAll();
+  Check(g_sceneHeightWatches.size() == ids.size(), "large scene watches every owned heel");
+  for (auto &actor : actors) { skee::transform.UpdateNodeAllTransforms(actor.get()); }
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  Check(SKSE::tasks.pending.size() == 1, "33 actors share one frame-check task");
+  DrainAll();
+  bool allRepaired = true;
+  for (const auto &actor : actors) { allRepaired &= actor->displayedHeight == 0; }
+  Check(allRepaired, "overflow beyond inline snapshot capacity never drops a participant");
+
+  // An unavailable actor can disappear without a delivered unload event.
+  RE::TESForm::forms.erase(ids[0]);
+  actors[1]->loaded = false;
+  sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  Check(g_sceneHeightWatches.size() == ids.size() - 2 &&
+        actors[0]->root.references == 0 && actors[1]->root.references == 0,
+        "missing/unloaded actors release watches without disabling other participants");
+  for (std::size_t i = 0; i < ids.size(); ++i) {
+    sfs::native::racemenu::ReleaseActorSceneResources(ids[i], true);
+    Detach(*actors[i], *heels[i]);
+    RE::TESForm::forms.erase(ids[i]);
+  }
+  Check(g_sceneHeightWatches.empty() && !g_hasSceneHeightWatches,
+        "large scene releases every watch and returns to inactive fast path");
+  for (unsigned frame = 0; frame < 1024; ++frame) {
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
+  }
+  Check(SKSE::tasks.pending.empty(), "1024 inactive frames enqueue no work");
+}
+void TestResetReleasesOutsideLocks() {
+  RE::Actor actor{0x14}; Reset(actor);
+  RE::NiAVObject morph, heel, skeleton;
+  unsigned releases = 0;
+  const auto onFinalRelease = [&] {
+    bool nodeUnlocked = false, queueUnlocked = false;
+    // try_lock on a different thread: never recursively lock std::mutex.
+    std::thread probe([&] {
+      nodeUnlocked = g_nodeMutex.try_lock();
+      if (nodeUnlocked) { g_nodeMutex.unlock(); }
+      queueUnlocked = g_highHeelQueueMutex.try_lock();
+      if (queueUnlocked) { g_highHeelQueueMutex.unlock(); }
+    });
+    probe.join();
+    Check(nodeUnlocked && queueUnlocked, "final scene-reference release runs outside both SFS mutexes");
+    ++releases;
+  };
+  morph.onFinalRelease = heel.onFinalRelease = skeleton.onFinalRelease = onFinalRelease;
+  g_registeredAppearanceNodes[actor.id].push_back({&morph, 0x910, 0x911, false});
+  g_registeredAppearanceAttachmentRoots[actor.id].push_back({&heel, 0x910, false});
+  g_sceneHeightWatches.emplace(actor.id, SceneHeightWatch{&skeleton, 1, 0, true});
+  g_hasSceneHeightWatches = true;
+  sfs::native::racemenu::ForgetAllRegisteredAppearanceNodes();
+  Check(releases == 3 && morph.references == 0 && heel.references == 0 && skeleton.references == 0,
+        "save/reset releases morph roots, heel roots and watched skeletons exactly once");
+}
+void TestDiscardedSceneCheck() {
+  RE::Actor actor{0x14}; Reset(actor);
+  RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
+  RE::NiAVObject heel{true}; heel.heel.value = 9; Attach(actor, heel);
+  actor.displayed.insert(boots.id); actor.sceneOffsets = {9};
+  const std::array<RE::FormID, 1> ids{actor.id};
+  RegisteredAppearanceAttachmentObserver observer;
+  const auto start = [&] {
+    g_highHeelScenes.Update(0x120, ids, true);
+    g_highHeelAttachmentActors.insert(actor.id);
+    observer.OnAttach(&actor, &boots, &addon, &heel, false, &actor.root, &actor.root);
+    DrainAll();
+  };
+  start();
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  // Simulate an engine queue discarding old work on load. Do not rely on that
+  // old callback ever executing to make the next save's guard usable again.
+  auto oldTasks = std::move(SKSE::tasks.pending); SKSE::tasks.pending.clear();
+  sfs::native::racemenu::ForgetAllRegisteredAppearanceNodes();
+  start();
+  skee::transform.UpdateNodeAllTransforms(&actor);
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  Check(SKSE::tasks.pending.size() == 1, "discarded old check cannot block checks in the next save");
+  // If the old task instead arrives late, it must not clear the new guard.
+  for (auto &task : oldTasks) { task(); }
+  sfs::native::racemenu::QueueHighHeelSceneCheck();
+  Check(SKSE::tasks.pending.size() == 1, "late old check cannot clear or duplicate the new queued check");
+  DrainAll();
+  Check(actor.displayedHeight == 0, "new save still repairs a late rescan after stale task delivery");
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
+  Detach(actor, heel);
 }
 int main() {
   for (auto version : {1U, 2U, 3U, 4U, 99U}) {
@@ -255,7 +508,11 @@ int main() {
     actor.root.children.clear(); branch.parent = nullptr;
     Check(branch.references == 0, "unload/delete releases recorded root ownership");
     TestSceneHeight();
+    TestLateFullRescan();
+    TestLargeSceneWatch();
+    TestDiscardedSceneCheck();
   }
+  TestResetReleasesOutsideLocks();
   const std::array<RE::FormID, 1> actorIDs{0x14};
   g_highHeelScenes.Update(1, actorIDs); g_highHeelScenes.Update(2, actorIDs);
   g_highHeelScenes.Update(1, {});

@@ -19,6 +19,10 @@ $names = @(
   'void ReleaseActorSceneResources('
 )
 $blocks = [Collections.Generic.List[string]]::new()
+$watchStart = $source.IndexOf('struct SceneHeightWatch {', [StringComparison]::Ordinal)
+$watchEnd = $source.IndexOf('std::atomic<std::uint64_t> g_highHeelQueueEpoch', [StringComparison]::Ordinal)
+if ($watchStart -lt 0 -or $watchEnd -le $watchStart) { throw 'Missing scene height watch state' }
+$blocks.Add($source.Substring($watchStart, $watchEnd - $watchStart))
 foreach ($name in $names) {
   $start = $source.IndexOf($name, [StringComparison]::Ordinal)
   if ($start -lt 0) { throw "Missing production definition: $name" }

@@ -109,6 +109,10 @@ namespace sfs {
 namespace hooks { void ResetInputFilterState(bool = false) {} }
 namespace api { void SetMenuLifecycleActive(bool) {} void SetMenuInitialized(bool) {} }
 namespace ui {
+namespace depth_of_field {
+bool menuOpen{};
+void SetMenuOpen(bool open) { menuOpen = open; }
+}
 namespace catalog {
 enum class BrowserTab { Gear, Outfits, Kits, KitGenerator };
 enum class TransientPopup { None };
@@ -258,8 +262,10 @@ int main(int argc, char** argv) {
     controls->stored=0x80000000u; controls->calls.clear();
     const auto initial=controls->enabled;
     menu.OnMenuShow(); menu.OnMenuShow();
+    check(sfs::ui::depth_of_field::menuOpen, "show enables menu-scoped DOF suppression");
     check((controls->enabled & kBlockedGameplayControls)==0,"UI locks enabled gameplay bits");
     menu.OnMenuHide(); menu.OnMenuHide();
+    check(!sfs::ui::depth_of_field::menuOpen, "hide releases DOF even on repeated early-return path");
     check(controls->enabled==initial,"UI restores only its own bits; repeated show/hide is idempotent");
   }
   {
@@ -280,6 +286,7 @@ int main(int argc, char** argv) {
     menu.OnMenuHide();
     check(controls->enabled==0xffffffffu,"close does not reimpose an external lock released while open");
     menu.OnMenuShow(); menu.NotifyWindowShutdown(); menu.NotifyWindowShutdown();
+    check(!sfs::ui::depth_of_field::menuOpen, "window teardown releases DOF suppression");
     check(controls->enabled==0xffffffffu,"window teardown releases own controls once");
   }
   {

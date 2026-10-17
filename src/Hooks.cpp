@@ -6,6 +6,7 @@
 #include "input/KitListNavigation.h"
 #include "api/SkyrimFittingSystemAPI.h"
 #include "native/FittingDye.h"
+#include "native/RaceMenuBodyMorph.h"
 #include "runtime/RuntimeLayouts.h"
 #include "ui/Menu.h"
 #include "ui/MenuHost.h"
@@ -361,6 +362,7 @@ struct PresentHook {
       return;
     }
     sfs::api::ProcessMenuRequests();
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
     InputManager::GetSingleton()->ProcessInputEvents();
     sfs::workbench::EquipmentRefreshEventSink::GetSingleton()
         ->TickConditionState();

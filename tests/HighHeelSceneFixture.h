@@ -5,9 +5,14 @@ template<class T> struct NiPointer {
   NiPointer(T* p = nullptr) : value(p) { if (value) ++value->references; }
   NiPointer(const NiPointer& p) : NiPointer(p.value) {}
   NiPointer(NiPointer&& p) noexcept : value(std::exchange(p.value, nullptr)) {}
-  ~NiPointer() { if (value) --value->references; }
+  ~NiPointer() {
+    if (value && --value->references == 0 && value->onFinalRelease) {
+      value->onFinalRelease();
+    }
+  }
   NiPointer& operator=(NiPointer p) noexcept { std::swap(value, p.value); return *this; }
   T* get() const { return value; }
+  T* operator->() const { return value; }
   explicit operator bool() const { return value != nullptr; }
 };
 using BSFixedString = std::string;
@@ -15,8 +20,11 @@ struct NiExtraData { virtual ~NiExtraData() = default; };
 struct NiFloatExtraData : NiExtraData { float value{}; };
 struct NiStringExtraData : NiExtraData { const char* value{}; };
 struct NiAVObject {
+  struct { struct { float z{}; } translate; } local;
+  NiAVObject* GetObjectByName(const char*) { return this; }
   bool hasHeel{};
   unsigned references{};
+  std::function<void()> onFinalRelease;
   NiFloatExtraData heel;
   std::string sdta;
   NiStringExtraData transformData;

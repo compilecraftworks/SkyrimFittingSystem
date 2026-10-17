@@ -12,6 +12,7 @@ $targets = @(
     "OStimSceneInterfaceTests",
     "IedConditionIntegrationTests",
     "MenuInteractionInputTests",
+    "MenuDepthOfFieldTests",
     "RenderedOutfitAPITests",
     "RuntimeLayoutTests",
     "ActualEquipmentConflictTests",
