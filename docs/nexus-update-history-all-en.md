@@ -1,3 +1,13 @@
+## Version 1.7.9
+
+- Fixed a path where a RaceMenu height overwrite immediately after initial heel correction could be accepted as the stable height during a SexLab scene.
+- Verify the applied automatic heel offset, current SexLab correction and node state before accepting synchronization. If they change during application, resolve the current appearance and scene state again.
+- Apply the same verification and bounded retries to legacy and public RaceMenu routes. Persistent failure cannot create an endless retry loop; later normal events can retry.
+- Preserve strip/redress behavior, including redress OFF, scene exit and actor unload cleanup. Actual equipment, BodyMorph and native/DAV/DAVE ownership are unchanged.
+- Run the additional verification only during height synchronization. Stable-frame checks add no inventory queries, Papyrus calls or height recalculations.
+
+Validation: SE/AE-exclusive DLL build, 45 regression executables and source-boundary checks passed. This covers source/host regression scenarios, not an in-game FPS measurement or reproduction of the reporter's exact animation setup.
+
 ## Version 1.7.8
 
 - Addressed late RaceMenu full rescans that could reapply registered high-heel height during SexLab scenes, while respecting the existing heel-removal setting and actual footwear stripping state.

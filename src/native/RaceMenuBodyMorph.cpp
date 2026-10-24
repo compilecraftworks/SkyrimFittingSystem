@@ -783,6 +783,28 @@ enum class HighHeelSyncAttempt : std::uint8_t {
   LegacyDispatchStarted,
 };
 
+struct HighHeelNodeSample {
+  // Identity only; never dereferenced after capture. No additional retained
+  // scene reference in the asynchronous Papyrus request.
+  RE::NiAVObject *node{nullptr};
+  float z{0.0F};
+};
+
+[[nodiscard]] HighHeelNodeSample SampleHighHeelNode(RE::Actor *a_actor) {
+  auto *root = a_actor ? a_actor->Get3D(false) : nullptr;
+  auto *node = root ? root->GetObjectByName("NPC") : nullptr;
+  return {node, node ? node->local.translate.z : 0.0F};
+}
+
+[[nodiscard]] bool SameHighHeelPosition(const std::array<float, 3> &a_expected,
+                                         const std::array<float, 3> &a_actual) {
+  for (std::size_t i = 0; i < a_expected.size(); ++i) {
+    if (!std::isfinite(a_expected[i]) || !std::isfinite(a_actual[i]) ||
+        std::abs(a_expected[i] - a_actual[i]) > 0.001F) { return false; }
+  }
+  return true;
+}
+
 struct LegacyHighHeelSyncRequest {
   RE::FormID actorFormID{0};
   std::uint64_t generation{0};
@@ -792,6 +814,8 @@ struct LegacyHighHeelSyncRequest {
   bool requireAutomaticPosition{false};
   bool suppressForScene{false};
   bool clearRaceMenuInternalPosition{false};
+  std::uint8_t remainingRetries{0};
+  HighHeelNodeSample applied;
 };
 
 [[nodiscard]] bool RetainRegisteredHeightOwnership(const RegisteredHighHeelState &state) {
@@ -812,6 +836,8 @@ struct LegacyHighHeelSyncRequest {
 
 void FinishQueuedHighHeelSync(RE::FormID a_actorFormID,
                               std::uint64_t a_generation);
+void QueueHighHeelSyncTask(RE::FormID a_actorFormID, std::uint64_t a_generation,
+                          std::uint8_t a_remainingFrames);
 
 [[nodiscard]] bool IsCurrentHighHeelSync(const RE::FormID a_actorFormID,
                                         const std::uint64_t a_generation) {
@@ -848,18 +874,24 @@ void PrepareSceneHeightWatch(RE::Actor *a_actor, std::uint64_t a_generation,
   }
 }
 
-void RecordReconciledSceneHeight(RE::FormID a_actor, std::uint64_t a_generation) {
+[[nodiscard]] bool RecordReconciledSceneHeight(
+    RE::FormID a_actor, std::uint64_t a_generation,
+    const HighHeelNodeSample &a_applied) {
   std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
+  if (!g_queuedHighHeelSyncs.Current(a_actor, a_generation) ||
+      !a_applied.node || !std::isfinite(a_applied.z)) { return false; }
   const auto it = g_sceneHeightWatches.find(a_actor);
-  if (it == g_sceneHeightWatches.end() ||
-      it->second.generation != a_generation ||
-      !g_queuedHighHeelSyncs.Current(a_actor, a_generation)) { return; }
-  // The legacy callback reads only a retained, already-resolved node. No scene
-  // traversal, actor lookup, inventory or workbench access on the VM worker.
+  if (it == g_sceneHeightWatches.end()) { return true; }
   auto &watch = it->second;
-  watch.reconciledZ = watch.node->local.translate.z;
-  watch.armed = std::isfinite(watch.reconciledZ);
+  if (watch.generation != a_generation || watch.node.get() != a_applied.node ||
+      !std::isfinite(watch.node->local.translate.z) ||
+      std::abs(watch.node->local.translate.z - a_applied.z) > 0.001F) { return false; }
+  // Capture before readback, publish only after stored internal/SexLab values
+  // were checked. Never adopt a new, possibly overwritten height at completion.
+  watch.reconciledZ = a_applied.z;
+  watch.armed = true;
   UpdateSceneHeightWatchActivityLocked();
+  return true;
 }
 
 [[nodiscard]] RE::Actor *
@@ -891,7 +923,7 @@ DispatchNiOverrideCall(const char *a_function,
 
 template <class... Args>
 [[nodiscard]] bool DispatchNiOverrideBoolCall(
-    const char *a_function, std::function<void(bool)> a_continuation,
+    const char *a_function, std::function<void(std::optional<bool>)> a_continuation,
     Args &&...a_arguments) {
   auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
   if (!vm) { return false; }
@@ -899,7 +931,7 @@ template <class... Args>
       new NiOverrideDispatchCallback(
           std::function<void(RE::BSScript::Variable)>{
               [next = std::move(a_continuation)](RE::BSScript::Variable value) {
-                next(value.IsBool() && value.GetBool());
+                next(value.IsBool() ? std::optional<bool>{value.GetBool()} : std::nullopt);
               }}));
   return vm->DispatchStaticCall(
       "NiOverride", a_function,
@@ -908,8 +940,21 @@ template <class... Args>
 
 void CompleteLegacyHighHeelSync(
     const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request,
-    const bool a_success) {
+    bool a_success, bool a_retry = false) {
   if (!a_request) {
+    return;
+  }
+  if (a_success && !RecordReconciledSceneHeight(
+          a_request->actorFormID, a_request->generation, a_request->applied)) {
+    a_success = false;
+    a_retry = true;
+  }
+  if (!a_success && a_retry && a_request->remainingRetries > 0 &&
+      IsCurrentHighHeelSync(a_request->actorFormID, a_request->generation)) {
+    // Same ticket and shared retry budget; a mismatch cannot create an
+    // unbounded fresh request. The next game task resolves CURRENT display.
+    QueueHighHeelSyncTask(a_request->actorFormID, a_request->generation,
+                         a_request->remainingRetries - 1);
     return;
   }
   if (a_success) {
@@ -928,7 +973,6 @@ void CompleteLegacyHighHeelSync(
     logger::debug(
         "Synchronized registered-appearance HH_OFFSET through legacy NiOverride API actor={:08X} active={}",
         a_request->actorFormID, a_request->targetActive);
-    RecordReconciledSceneHeight(a_request->actorFormID, a_request->generation);
   } else if (IsCurrentHighHeelSync(a_request->actorFormID, a_request->generation)) {
     logger::warn(
         "Legacy NiOverride HH_OFFSET synchronization failed for actor {:08X}; no direct skeleton transform was applied",
@@ -937,13 +981,84 @@ void CompleteLegacyHighHeelSync(
   FinishQueuedHighHeelSync(a_request->actorFormID, a_request->generation);
 }
 
+[[nodiscard]] bool DispatchNiOverridePositionCall(
+    RE::Actor *a_actor, bool a_isFemale, const char *a_key,
+    std::function<void(std::optional<std::array<float, 3>>)> a_next) {
+  auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
+  if (!vm) { return false; }
+  RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{
+      new NiOverrideDispatchCallback([next = std::move(a_next)](RE::BSScript::Variable value) {
+        if (value.IsArray()) {
+          const auto p = value.Unpack<std::vector<float>>();
+          if (p.size() == 3 && std::ranges::all_of(p, [](float v) { return std::isfinite(v); })) {
+            next(std::array<float, 3>{p[0], p[1], p[2]});
+            return;
+          }
+        }
+        next(std::nullopt);
+      })};
+  return vm->DispatchStaticCall("NiOverride", "GetNodeTransformPosition",
+      RE::MakeFunctionArguments(static_cast<RE::Actor *>(a_actor), false,
+          static_cast<bool>(a_isFemale), std::string{"NPC"}, std::string{a_key}), callback);
+}
+
+void QueueLegacyHighHeelVerification(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  auto *tasks = SKSE::GetTaskInterface();
+  if (!tasks) { CompleteLegacyHighHeelSync(a_request, false); return; }
+  tasks->AddTask([a_request] {
+    auto *actor = LookupLegacyHighHeelActor(*a_request);
+    if (!actor) { CompleteLegacyHighHeelSync(a_request, false); return; }
+    // Scene lookup on the game thread, not a VM callback. Sampling retains no
+    // node. RaceMenu's native UpdateNodeTransform updates local synchronously;
+    // its queued world-data refresh is not a second HH_OFFSET scan.
+    a_request->applied = SampleHighHeelNode(actor);
+    if (!a_request->applied.node || !std::isfinite(a_request->applied.z)) {
+      CompleteLegacyHighHeelSync(a_request, false, true);
+      return;
+    }
+    if (a_request->clearRaceMenuInternalPosition) {
+      if (!DispatchNiOverrideBoolCall("HasNodeTransformPosition",
+              [a_request](std::optional<bool> present) {
+                CompleteLegacyHighHeelSync(a_request, present && !*present, present && *present);
+              },
+              static_cast<RE::Actor *>(actor), false, static_cast<bool>(a_request->isFemale),
+              std::string{"NPC"}, std::string{"internal"})) {
+        CompleteLegacyHighHeelSync(a_request, false);
+      }
+      return;
+    }
+    if (!a_request->targetPosition) { CompleteLegacyHighHeelSync(a_request, true); return; }
+    if (!DispatchNiOverridePositionCall(actor, a_request->isFemale, "internal",
+            [a_request](auto position) {
+              auto *current = LookupLegacyHighHeelActor(*a_request);
+              if (!current || !position) { CompleteLegacyHighHeelSync(a_request, false); return; }
+              if (!SameHighHeelPosition(*a_request->targetPosition, *position)) {
+                CompleteLegacyHighHeelSync(a_request, false, true);
+                return;
+              }
+              if (!a_request->suppressForScene) { CompleteLegacyHighHeelSync(a_request, true); return; }
+              if (!DispatchNiOverridePositionCall(current, a_request->isFemale, "SexLab.esm",
+                      [a_request](auto correction) {
+                        const bool matches = correction &&
+                            std::abs((*a_request->targetPosition)[2] + (*correction)[2]) <= 0.001F;
+                        CompleteLegacyHighHeelSync(a_request, matches, correction.has_value() && !matches);
+                      })) {
+                CompleteLegacyHighHeelSync(a_request, false);
+              }
+            })) {
+      CompleteLegacyHighHeelSync(a_request, false);
+    }
+  });
+}
+
 void DispatchLegacyUpdateNode(
     const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
   auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
   if (!actor ||
       !DispatchNiOverrideCall(
           "UpdateNodeTransform",
-          [a_request]() { CompleteLegacyHighHeelSync(a_request, true); },
+          [a_request]() { QueueLegacyHighHeelVerification(a_request); },
           static_cast<RE::Actor *>(actor), false,
           static_cast<bool>(a_request->isFemale), std::string{"NPC"})) {
     CompleteLegacyHighHeelSync(a_request, false);
@@ -1013,9 +1128,9 @@ void DispatchLegacyWriteHeelPosition(
     DispatchLegacyRemoveBootstrap(a_request, true);
     return;
   }
-  const auto continuation = [a_request](bool automaticPositionPresent) {
+  const auto continuation = [a_request](std::optional<bool> automaticPositionPresent) {
     auto *currentActor = LookupLegacyHighHeelActor(*a_request);
-    if (!currentActor || !automaticPositionPresent || !a_request->targetPosition) {
+    if (!currentActor || !automaticPositionPresent.value_or(false) || !a_request->targetPosition) {
       // Do not force transforms when RaceMenu did not accept the scene source
       // (e.g. equippable transforms disabled). Always clean the bootstrap.
       DispatchLegacyRemoveBootstrap(a_request, false);
@@ -1050,28 +1165,18 @@ void DispatchLegacySelectHeelPosition(
     return;
   }
   auto *actor = LookupLegacyHighHeelActor(*a_request);
-  auto *vm = RE::BSScript::Internal::VirtualMachine::GetSingleton();
-  if (!actor || !vm) { DispatchLegacyRemoveBootstrap(a_request, false); return; }
-  RE::BSTSmartPointer<RE::BSScript::IStackCallbackFunctor> callback{
-      new NiOverrideDispatchCallback([a_request](RE::BSScript::Variable value) {
-        if (!LookupLegacyHighHeelActor(*a_request) || !value.IsArray()) {
-          DispatchLegacyRemoveBootstrap(a_request, false);
-          return;
-        }
-        const auto position = value.Unpack<std::vector<float>>();
-        if (position.size() != 3 || !std::isfinite(position[2])) {
+  if (!actor) { DispatchLegacyRemoveBootstrap(a_request, false); return; }
+  if (!DispatchNiOverridePositionCall(actor, a_request->isFemale, "SexLab.esm",
+      [a_request](auto position) {
+        if (!LookupLegacyHighHeelActor(*a_request) || !position) {
           DispatchLegacyRemoveBootstrap(a_request, false);
           return;
         }
         // Preserve SexLab's key. Supply its matching automatic component so
         // the registered heel cannot defeat, or double, the scene correction.
-        (*a_request->targetPosition)[2] = -position[2];
+        (*a_request->targetPosition)[2] = -(*position)[2];
         DispatchLegacyWriteHeelPosition(a_request);
-      })};
-  if (!vm->DispatchStaticCall("NiOverride", "GetNodeTransformPosition",
-          RE::MakeFunctionArguments(static_cast<RE::Actor *>(actor), false,
-              static_cast<bool>(a_request->isFemale), std::string{"NPC"},
-              std::string{"SexLab.esm"}), callback)) {
+      })) {
     DispatchLegacyRemoveBootstrap(a_request, false);
   }
 }
@@ -1092,7 +1197,7 @@ void DispatchLegacyUpdateAll(
 
 [[nodiscard]] bool StartLegacyHighHeelSync(
     RE::Actor *a_actor, const RegisteredHighHeelState &a_state,
-    const std::uint64_t a_generation) {
+    const std::uint64_t a_generation, const std::uint8_t a_remainingRetries) {
   auto *actorBase = a_actor ? a_actor->GetActorBase() : nullptr;
   if (!a_actor || !actorBase) {
     return false;
@@ -1113,6 +1218,7 @@ void DispatchLegacyUpdateAll(
                     ? a_state.remainingPosition.has_value()
                     : SceneHasNpcPositionSource(a_actor->Get3D(false))) &&
               !RetainRegisteredHeightOwnership(a_state),
+          .remainingRetries = a_remainingRetries,
       });
 
   // A scale of 1.0 is visually neutral. Its only purpose is to create the
@@ -1128,7 +1234,8 @@ void DispatchLegacyUpdateAll(
 }
 
 [[nodiscard]] HighHeelSyncAttempt SynchronizeRegisteredAppearanceHighHeel(
-    RE::Actor *a_actor, const std::uint64_t a_generation) {
+    RE::Actor *a_actor, const std::uint64_t a_generation,
+    const std::uint8_t a_remainingRetries) {
   using sfs::native::racemenu::rules::HighHeelTransformRoute;
   const auto route =
       sfs::native::racemenu::rules::ResolveHighHeelTransformRoute(
@@ -1155,7 +1262,7 @@ void DispatchLegacyUpdateAll(
   PrepareSceneHeightWatch(a_actor, a_generation, RetainRegisteredHeightOwnership(state));
 
   if (route == HighHeelTransformRoute::LegacyPapyrus) {
-    if (StartLegacyHighHeelSync(a_actor, state, a_generation)) {
+    if (StartLegacyHighHeelSync(a_actor, state, a_generation, a_remainingRetries)) {
       return HighHeelSyncAttempt::LegacyDispatchStarted;
     }
     logger::warn(
@@ -1211,6 +1318,22 @@ void DispatchLegacyUpdateAll(
     transform->AddNodeTransformPosition(a_actor, false, isFemale, nodeName,
                                         raceMenuInternalKey, selected);
     transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
+    const auto applied = SampleHighHeelNode(a_actor);
+    const auto actual = transform->GetNodeTransformPosition(
+        a_actor, false, isFemale, nodeName, raceMenuInternalKey);
+    if (!SameHighHeelPosition(*position, {actual.x, actual.y, actual.z})) {
+      return HighHeelSyncAttempt::Retry;
+    }
+    if (state.suppressForScene) {
+      const auto correction = transform->GetNodeTransformPosition(
+          a_actor, false, isFemale, nodeName, "SexLab.esm").z;
+      if (!std::isfinite(correction) || std::abs(selected.z + correction) > 0.001F) {
+        return HighHeelSyncAttempt::Retry;
+      }
+    }
+    if (!RecordReconciledSceneHeight(actorFormID, a_generation, applied)) {
+      return HighHeelSyncAttempt::Retry;
+    }
     {
       std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
       if (g_queuedHighHeelSyncs.Current(actorFormID, a_generation)) {
@@ -1224,7 +1347,6 @@ void DispatchLegacyUpdateAll(
     logger::debug(
         "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
         actorFormID, selected.z);
-    RecordReconciledSceneHeight(actorFormID, a_generation);
     return HighHeelSyncAttempt::Complete;
   }
 
@@ -1238,6 +1360,11 @@ void DispatchLegacyUpdateAll(
     transform->RemoveNodeTransformPosition(a_actor, false, isFemale, nodeName,
                                            raceMenuInternalKey);
     transform->UpdateNodeTransforms(a_actor, false, isFemale, nodeName);
+    if (transform->HasNodeTransformPosition(a_actor, false, isFemale, nodeName, raceMenuInternalKey)) {
+      return HighHeelSyncAttempt::Retry;
+    }
+    const auto applied = SampleHighHeelNode(a_actor);
+    if (!applied.node || !std::isfinite(applied.z)) { return HighHeelSyncAttempt::Retry; }
   }
   {
     std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
@@ -1296,7 +1423,7 @@ void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
         auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_actorFormID);
         const auto result =
             actor && actor->Is3DLoaded()
-                ? SynchronizeRegisteredAppearanceHighHeel(actor, a_generation)
+                ? SynchronizeRegisteredAppearanceHighHeel(actor, a_generation, a_remainingFrames)
                 : HighHeelSyncAttempt::Retry;
         if (result == HighHeelSyncAttempt::LegacyDispatchStarted) {
           return;

@@ -50,6 +50,7 @@ struct VirtualMachine {
   std::vector<std::function<void()>> pending;
   std::vector<std::string> calls;
   std::string fail;
+  std::string invalidResult;
   static VirtualMachine* GetSingleton();
   bool DispatchStaticCall(const char*, const char*, std::vector<std::any>,
                           BSTSmartPointer<IStackCallbackFunctor>);
@@ -114,6 +115,8 @@ struct Actor : TESObjectREFR {
   std::unordered_set<FormID> displayed, actualVisible;
   float displayedHeight{}, otherModHeight{};
   unsigned fullUpdates{}, resolverCalls{}, inventoryReads{};
+  unsigned ignoredPositionWrites{}, rescanAfterUpdates{}, positionReads{}, nodeUpdates{};
+  std::function<void(std::string_view)> afterPositionRead;
   bool Is3DLoaded() const { return loaded; }
   NPC* GetActorBase() { return &base; }
   Actor* Get3D(bool) { return this; }
@@ -146,10 +149,18 @@ struct INiTransformInterface {
     return a->internalPosition.has_value();
   }
   Position GetNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key) {
-    return {0, 0, std::string_view(key) == "SexLab.esm" ? a->sexLabPosition.value_or(0) : a->internalPosition.value_or(0)};
+    ++a->positionReads;
+    const Position result = std::string_view(key) == "SexLab.esm"
+        ? Position{0, 0, a->sexLabPosition.value_or(0)}
+        : Position{a->internalXY[0], a->internalXY[1], a->internalPosition.value_or(0)};
+    if (a->afterPositionRead) a->afterPositionRead(key);
+    return result;
   }
   void AddNodeTransformPosition(RE::Actor* a, bool, bool, const char*, const char* key, Position p) {
-    if (std::string_view(key) == "internal") { a->internalPosition = p.z; a->internalXY = {p.x, p.y}; }
+    if (std::string_view(key) == "internal") {
+      if (a->ignoredPositionWrites) { --a->ignoredPositionWrites; return; }
+      a->internalPosition = p.z; a->internalXY = {p.x, p.y};
+    }
     else a->temporary = true;
   }
   void UpdateNodeAllTransforms(RE::Actor* a) {
@@ -168,7 +179,11 @@ struct INiTransformInterface {
     else a->temporary = false;
   }
   void UpdateNodeTransforms(RE::Actor* a, bool, bool, const char*) {
+    ++a->nodeUpdates;
     a->SetDisplayedHeight(a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0));
+    // A full rescan can interleave after the write/update and before SFS records
+    // its baseline. Deliberately send no attachment/position-native notification.
+    if (a->rescanAfterUpdates) { --a->rescanAfterUpdates; UpdateNodeAllTransforms(a); }
   }
 } transform;
 struct IBodyMorphInterface {} morph;
@@ -185,7 +200,7 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
   if (std::string_view(script) != "NiOverride") std::abort();
   calls.emplace_back(method);
   if (fail == method) return false;
-  pending.emplace_back([args = std::move(args), name = std::string(method), callback] {
+  pending.emplace_back([this, args = std::move(args), name = std::string(method), callback] {
     auto* a = std::any_cast<RE::Actor*>(args.at(0));
     Variable result{};
     if (name == "UpdateAllReferenceTransforms") {
@@ -199,14 +214,14 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
       } else if (name == "HasNodeTransformPosition") {
         result.value = a->internalPosition.has_value();
       } else if (name == "GetNodeTransformPosition") {
-        if (std::any_cast<std::string>(args.at(4)) != "SexLab.esm") std::abort();
-        result.floats = std::vector<float>{0, 0, a->sexLabPosition.value_or(0)};
+        const auto key = std::any_cast<std::string>(args.at(4));
+        const auto p = skee::transform.GetNodeTransformPosition(a, false, true, "NPC", key.c_str());
+        result.floats = std::vector<float>{p.x, p.y, p.z};
       } else if (name == "AddNodeTransformPosition") {
         const auto p = std::any_cast<std::vector<float>>(args.at(5));
         if (p.size() != 3 ||
             std::any_cast<std::string>(args.at(4)) != "internal") std::abort();
-        a->internalPosition = p[2];
-        a->internalXY = {p[0], p[1]};
+        skee::transform.AddNodeTransformPosition(a, false, true, "NPC", "internal", {p[0], p[1], p[2]});
       } else if (name == "RemoveNodeTransformScale") {
         a->temporary = false;
       } else if (name == "RemoveNodeTransformPosition") {
@@ -215,6 +230,7 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
         skee::transform.UpdateNodeTransforms(a, false, true, "NPC");
       } else std::abort();
     }
+    if (invalidResult == name) result = Variable{};
     (*callback)(result);
   });
   return true;
@@ -299,6 +315,7 @@ void Reset(RE::Actor& a) {
   RE::BSScript::Internal::vm.pending.clear();
   RE::BSScript::Internal::vm.calls.clear();
   RE::BSScript::Internal::vm.fail.clear();
+  RE::BSScript::Internal::vm.invalidResult.clear();
   g_registeredAppearanceAttachmentRoots.clear();
   g_registeredAppearanceNodes.clear();
   sfs::native::dye::requests = 0;
@@ -418,6 +435,22 @@ int main() {
         "legacy scene-query failure cleans bootstrap without publishing false success");
   vm.fail.clear(); queue(); DrainAll();
   Check(a.displayedHeight == 0, "legacy scene-query failure does not permanently disable the next valid synchronization");
+  Reset(a); a.selectedOffset.reset(); a.internalPosition = 12.0F;
+  g_registeredAppearanceHighHeelActors.insert(a.id);
+  vm.invalidResult = "HasNodeTransformPosition"; queue(); DrainAll();
+  Check(g_registeredAppearanceHighHeelActors.contains(a.id) && !a.temporary,
+        "invalid legacy Boolean cannot be mistaken for confirmed internal-position removal");
+  vm.invalidResult.clear(); queue(); DrainAll();
+  Check(!g_registeredAppearanceHighHeelActors.contains(a.id),
+        "valid cleanup after unreadable legacy result retires old height ownership");
+  Reset(a); a.sceneOffsets = {12}; vm.invalidResult = "GetNodeTransformPosition";
+  queue(); DrainAll();
+  Check(!g_registeredAppearanceHighHeelActors.contains(a.id) && !a.temporary &&
+        g_queuedHighHeelSyncs.Size() == 0,
+        "invalid legacy applied-position readback cannot report success or retain work");
+  vm.invalidResult.clear(); queue(); DrainAll();
+  Check(g_registeredAppearanceHighHeelActors.contains(a.id),
+        "a malformed readback does not disable subsequent valid height synchronization");
   Reset(a); a.sceneOffsets = {12}; queue(); SKSE::tasks.Drain();
   g_queuedHighHeelSyncs.Clear(); DrainAll();
   Check(a.fullUpdates == 0 && !g_registeredAppearanceHighHeelActors.contains(a.id),

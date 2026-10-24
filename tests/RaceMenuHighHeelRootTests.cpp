@@ -247,6 +247,111 @@ void TestLateFullRescan() {
   sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
   Detach(actor, heel);
 }
+
+void TestInitialAppliedHeight() {
+  RE::Actor actor{0x14}; RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
+  RE::NiAVObject heel{true}; heel.heel.value = 9;
+  Reset(actor); actor.displayed.insert(boots.id); actor.sceneOffsets = {9};
+  Attach(actor, heel);
+  const std::array<RE::FormID, 1> actors{actor.id};
+  g_highHeelScenes.Update(0x120, actors, true);
+  actor.sexLabPosition = -4.5F; actor.otherModHeight = 3;
+  actor.rescanAfterUpdates = 1;
+  RegisteredAppearanceAttachmentObserver observer;
+  observer.OnAttach(&actor, &boots, &addon, &heel, false, &actor.root, &actor.root);
+  DrainAll();
+  for (unsigned i = 0; i < 4; ++i) {
+    sfs::native::racemenu::QueueHighHeelSceneCheck(); DrainAll();
+  }
+  Check(actor.displayedHeight == 3 && actor.internalPosition == 4.5F &&
+        actor.sexLabPosition == -4.5F && !actor.temporary,
+        "first apply overwritten before baseline capture is repaired, not accepted as a stable raised height");
+
+  const auto queue = [&] { sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); };
+  auto scans = actor.fullUpdates;
+  actor.ignoredPositionWrites = 1;
+  queue(); DrainAll();
+  Check(actor.displayedHeight == 3 && actor.fullUpdates == scans + 2,
+        "lost first internal write is read back and retried once using the current state");
+
+  bool changedCorrection = false;
+  actor.afterPositionRead = [&](std::string_view key) {
+    if (!changedCorrection && key == "internal") {
+      changedCorrection = true;
+      actor.sexLabPosition = -2;
+      actor.SetDisplayedHeight(actor.internalPosition.value_or(0) + 1);
+    }
+  };
+  queue(); DrainAll(); actor.afterPositionRead = {};
+  Check(changedCorrection && actor.internalPosition == 2 && actor.displayedHeight == 3 &&
+        actor.sexLabPosition == -2,
+        "SexLab changing between apply and verification causes a current-value repair without changing its key");
+
+  bool closedScene = false;
+  actor.afterPositionRead = [&](std::string_view key) {
+    if (!closedScene && key == "internal") {
+      closedScene = true;
+      actor.sexLabPosition.reset();
+      g_highHeelScenes.Update(0x120, {});
+      queue();
+    }
+  };
+  queue(); DrainAll(); actor.afterPositionRead = {};
+  Check(closedScene && actor.displayedHeight == 12 && g_sceneHeightWatches.empty(),
+        "scene ending during first-apply verification restores current visible heels through the pending event");
+
+  g_highHeelScenes.Update(0x120, actors, true); actor.sexLabPosition = -4.5F;
+  scans = actor.fullUpdates; actor.ignoredPositionWrites = 100;
+  queue(); DrainAll();
+  Check(actor.fullUpdates == scans + 3 && g_sceneHeightWatches.empty() &&
+        !g_hasSceneHeightWatches && !actor.temporary && g_queuedHighHeelSyncs.Size() == 0,
+        "permanent readback mismatch stops at the shared three-attempt budget and releases the unarmed watch");
+  for (unsigned i = 0; i < 128; ++i) sfs::native::racemenu::QueueHighHeelSceneCheck();
+  Check(SKSE::tasks.pending.empty(), "failed initial verification cannot start idle polling");
+  actor.ignoredPositionWrites = 0; queue(); DrainAll();
+  Check(actor.displayedHeight == 3 && g_hasSceneHeightWatches,
+        "verification failure never disables a later legitimate synchronization");
+
+  const auto reads = actor.positionReads, updates = actor.nodeUpdates;
+  const auto inventoryReads = actor.inventoryReads;
+  for (unsigned i = 0; i < 128; ++i) {
+    sfs::native::racemenu::QueueHighHeelSceneCheck(); SKSE::tasks.Drain();
+  }
+  Check(actor.positionReads == reads && actor.nodeUpdates == updates &&
+        actor.inventoryReads == inventoryReads && RE::BSScript::Internal::vm.pending.empty(),
+        "verified stable frames add no transform readbacks, writes, inventory reads or Papyrus work");
+
+  bool hidden = false;
+  actor.afterPositionRead = [&](std::string_view key) {
+    if (!hidden && key == "internal") { hidden = true; actor.displayed.clear(); queue(); }
+  };
+  queue(); DrainAll(); actor.afterPositionRead = {};
+  actor.sexLabPosition.reset(); g_highHeelScenes.Update(0x120, {}); queue(); DrainAll();
+  Check(hidden && actor.displayedHeight == 3 && actor.displayed.empty() &&
+        !g_registeredAppearanceHighHeelActors.contains(actor.id),
+        "strip during verification and redress OFF never restore hidden heels or keep scene compensation");
+  actor.displayed.insert(boots.id); queue(); DrainAll();
+  Check(actor.displayedHeight == 12, "manual redress after verified cleanup restores the current registered heel");
+
+  if (g_transformInterfaceVersion < 3) {
+    g_highHeelScenes.Update(0x120, actors, true);
+    queue(); SKSE::tasks.Drain();
+    for (unsigned i = 0; i < 16 && SKSE::tasks.pending.empty(); ++i) RE::BSScript::Internal::vm.Drain();
+    Check(!SKSE::tasks.pending.empty(), "legacy completion schedules its scene sample on the game task");
+    SKSE::tasks.Drain();
+    Check(!RE::BSScript::Internal::vm.pending.empty(), "legacy readback is pending before unload boundary");
+    sfs::native::racemenu::ReleaseActorSceneResources(actor.id, false);
+    Check(actor.root.references == 0 && heel.references == 1,
+          "pending verification adds no retained node beyond the attachment itself");
+    DrainAll();
+    Check(g_sceneHeightWatches.empty() && g_queuedHighHeelSyncs.Size() == 0,
+          "stale legacy verification cannot publish ownership after unload");
+  }
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
+  Detach(actor, heel);
+  Check(heel.references == 0 && actor.root.references == 0,
+        "initial verification retains no node after unload");
+}
 void TestLargeSceneWatch() {
   RE::Actor resetActor{0x14}; Reset(resetActor);
   RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
@@ -509,6 +614,7 @@ int main() {
     Check(branch.references == 0, "unload/delete releases recorded root ownership");
     TestSceneHeight();
     TestLateFullRescan();
+    TestInitialAppliedHeight();
     TestLargeSceneWatch();
     TestDiscardedSceneCheck();
   }

@@ -153,3 +153,69 @@ claim of complete gameplay verification. The audit was performed before the
 v1.7.8 version bump; release builds repeat the regression suite. Packaging is
 checked by `scripts/verify-v1.7.8-release.ps1`. Existing v1.7.7 archives and
 optional patch bytes are preserved. MO2 deployment is not part of this release task.
+
+## v1.7.9 initial-application verification — 2026-10-24
+
+The v1.7.8 watch recorded whatever NPC local Z existed at completion. A newly
+added production-source regression interleaves a RaceMenu full rescan after
+the selected internal position is applied but before that baseline is recorded.
+The old code accepts the raised result as stable, so subsequent unchanged-frame
+checks cannot correct it. The failing run is in
+`build/heel-initial-before-test.log`. This is a reproducible code-level sequence,
+not proof that the reporter's installed binaries used this exact interleaving.
+
+The follow-up reads back the selected internal X/Y/Z after the existing node
+update and, when scene suppression is required, verifies the current SexLab Z
+still matches its complement. The NPC node is sampled before those readbacks;
+the watch publishes that sample only if its identity and finite Z are still
+consistent at completion. It no longer takes a fresh, unverified height as its
+baseline after the reads. Failed removal is also distinguished from successful
+internal-position cleanup. An invalid legacy Boolean result is not interpreted
+as evidence that the position was removed.
+
+Public v3-compatible and legacy v1/v2 routes use the same positional tolerance
+and the existing initial-plus-two-retry budget, on the same generation ticket.
+Retry resolves current metadata, physical footwear and scene policy; it does
+not replay an old target or begin an unlimited chain of fresh requests. Ordinary
+events remain able to retry after failure. Stable frame checks are unchanged:
+no added inventory reads, transform readbacks, writes or Papyrus calls.
+
+Legacy completion samples scene identity on a game task and uses the existing
+documented NiOverride position queries. The request holds only a non-dereferenced
+identity pointer and scalar sample, not another owning node reference. Load,
+unload and actor generation cancellation still fence pending callbacks. The
+bootstrap is removed before verification, including a failed verification.
+
+This relies on RaceMenu's synchronous local-update contract (pinned source
+`9ebcb733e17be695f994cd2e9cc383043446bc02`,
+`NiTransformInterface::Impl_UpdateNodeTransforms`): the queued task refreshes
+world data, not HH_OFFSET selection. It verifies accepted position values and
+the corresponding stable local-node sample; it does not independently emulate
+all external rotation/scale composition, the renderer or an arbitrary modified
+provider that violates that contract. No direct skeleton write, private ABI,
+external transform-key edit or additional frame polling was introduced.
+
+Regression additions cover initial overwrite, lost position writes, changes
+between apply/readback, scene end, strip during verification, redress OFF,
+manual redress, bounded persistent failure, later recovery, stable-frame cost
+and unload with legacy verification outstanding. Existing body-morph,
+native/DAV/DAVE attachment, footwear policy and strip/redress owners are unchanged.
+The two root-based test targets now have separate generated-source directories
+to avoid parallel builders overwriting the same test include; production
+build/layout configuration is unchanged.
+
+Final verification: all 45 regression executables and source-boundary checks
+pass (`build/heel-initial-final-regressions.log`), including 3,466 heel-root,
+244 synchronization, 820 late-transform and 26 scene-event assertions. The
+SE/AE-only development DLL also builds (`build/heel-initial-plugin-build.log`),
+with diagnostic version label `1.7.8-height-verification-dev`. Its SHA-256 is
+`EBC5B33DDD041530A930100BB9917B3A78E6C589C0E53963032E0F448AF7953F`.
+The extra reads occur during synchronization; stable-frame counters remain
+unchanged. This is not an in-game FPS benchmark or an animation reproduction.
+
+The v1.7.9 release repeats the full regression suite and SE/AE-only build with
+the final version label. Release logs are `build/v1.7.9-regressions.log` and
+`build/v1.7.9-build.log`; `scripts/verify-v1.7.9-release.ps1` checks corresponding
+source, package hashes and the core-DLL-only runtime change. Published v1.7.8
+archives and OStim v1.0.0 patch bytes remain unchanged. MO2 deployment is not
+part of this release task.

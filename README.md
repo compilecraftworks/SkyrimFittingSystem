@@ -7,6 +7,14 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.7.9 verifies the initial registered-heel correction before accepting the
+stable SexLab scene height. Legacy and public RaceMenu routes use bounded
+verification/retries without extra inventory, VM or height work on stable
+frames. Actual equipment, BodyMorph and strip/redress ownership are unchanged.
+See the [English](docs/RELEASE-NOTES-v1.7.9.md) /
+[Korean](docs/RELEASE-NOTES-v1.7.9-ko.md) notes and
+[verification boundary](docs/HIGH-HEEL-RESCAN-AND-MENU-DOF.md).
+
 v1.7.8 reconciles late RaceMenu full rescans that could restore registered-heel
 height during SexLab scenes. Native and optional ENB depth of field are
 suppressed only while SFS is open, with normal behavior restored on close.

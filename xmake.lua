@@ -11,7 +11,7 @@ includes("third_party/CommonLibSSE-NG")
 
 -- Keep this fallback aligned with VERSION. Release scripts pass the VERSION
 -- value through SFS_BUILD_VERSION; the literal also supports direct xmake use.
-local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.8"
+local build_version = os.getenv("SFS_BUILD_VERSION") or "1.7.9"
 local build_version_string = os.getenv("SFS_BUILD_VERSION_STRING") or build_version
 local major, minor, patch = build_version:match("^(%d+)%.(%d+)%.(%d+)$")
 if not major then
@@ -273,12 +273,12 @@ target(regression)
     set_encodings("utf-8")
     set_targetdir("build/v" .. build_version .. "/tests")
     add_files("tests/" .. regression .. ".cpp")
-    add_includedirs("src", "tests", "build/.gens/high-heel-root-tests")
+    add_includedirs("src", "tests", "build/.gens/" .. regression)
     add_packages("nlohmann_json")
     before_build(function (target)
         os.execv("powershell", {"-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
             "tests/Generate-HighHeelRootTestSource.ps1", "-OutputDirectory",
-            "build/.gens/high-heel-root-tests"})
+            "build/.gens/" .. target:name()})
     end)
 end
 
