@@ -23,6 +23,7 @@ struct NiAVObject {
   struct { struct { float z{}; } translate; } local;
   NiAVObject* GetObjectByName(const char*) { return this; }
   bool hasHeel{};
+  static inline unsigned metadataReads{};
   unsigned references{};
   std::function<void()> onFinalRelease;
   NiFloatExtraData heel;
@@ -35,6 +36,7 @@ struct NiAVObject {
   NiAVObject* AsNode() { return this; }
   const auto& GetChildren() const { return children; }
   NiExtraData* GetExtraData(const BSFixedString& name) {
+    ++metadataReads;
     if (hasHeel && name == "HH_OFFSET") return &heel;
     if (!sdta.empty() && name == "SDTA") { transformData.value = sdta.c_str(); return &transformData; }
     return nullptr;

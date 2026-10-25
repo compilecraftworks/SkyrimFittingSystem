@@ -1,4 +1,4 @@
-Skyrim Fitting System v1.7.9 - Nexus Source Package
+Skyrim Fitting System v1.8.0 - Nexus Source Package
 
 This archive intentionally contains human-readable source and project data only.
 It contains no compiled DLL, PDB, PEX, ESL, build output, nested archive, or FOMOD package.
@@ -10,6 +10,16 @@ CommonLibSSE-NG v6.7.0 source used for this
 release is included under third_party/CommonLibSSE-NG. Dear ImGui sources
 required by SFS are included under lib/imgui. Exact revisions and checksums are
 listed in DEPENDENCIES.md.
+
+v1.8.0 fixes missing height selection and scene correction for SDTA-only
+registered footwear. HH_OFFSET and SDTA share metadata selection and cleanup,
+including mixed-source precedence and preservation of SDTA X/Y. Existing
+strip/redress, BodyMorph and native/DAV/DAVE ownership are retained. All 45
+regression executables and source-boundary checks pass; stable-frame checks add
+no metadata parsing, inventory queries or VM work. The reporter's exact shoe
+format remains unknown, so this is not confirmation of that in-game report.
+See the v1.8.0 bilingual notes and docs/HIGH-HEEL-RESCAN-AND-MENU-DOF.md.
+Only the core DLL changes in the runtime package; optional patches are unchanged.
 
 v1.7.9 verifies initial registered-heel application before recording a stable
 SexLab scene height. Legacy and public RaceMenu paths use bounded retries and

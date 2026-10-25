@@ -112,6 +112,7 @@ struct Actor : TESObjectREFR {
   std::optional<float> selectedOffset{12.0f}, internalPosition, sexLabPosition;
   std::array<float, 2> internalXY{};
   std::vector<float> sceneOffsets;
+  std::vector<std::array<float, 3>> scenePositions;
   std::unordered_set<FormID> displayed, actualVisible;
   float displayedHeight{}, otherModHeight{};
   unsigned fullUpdates{}, resolverCalls{}, inventoryReads{};
@@ -165,11 +166,14 @@ struct INiTransformInterface {
   }
   void UpdateNodeAllTransforms(RE::Actor* a) {
     ++a->fullUpdates;
-    // SetTransforms scans all objects, writes each HH to the same internal
-    // NPC position, updates BNDT only if already present. SDTA and unrelated
+    // The test supplies expected scan results independently of SFS's metadata
+    // parser. Position cases can model SDTA X/Y as well as HH's Z. Unrelated
     // rotations/scales/first person are outside this deliberately small model.
     if (a->equippableTransforms) {
       for (float offset : a->sceneOffsets) a->internalPosition = offset;
+      for (const auto& position : a->scenePositions) {
+        a->internalXY = {position[0], position[1]}; a->internalPosition = position[2];
+      }
       if (a->bndtExists && !a->sceneOffsets.empty()) a->bndtContainsNpc = true;
     }
     a->SetDisplayedHeight(a->internalPosition.value_or(0.0f) + a->otherModHeight + a->sexLabPosition.value_or(0));
@@ -237,7 +241,7 @@ bool RE::BSScript::Internal::VirtualMachine::DispatchStaticCall(
 }
 #include "callback.production.inc"
 struct RegisteredHighHeelState {
-  std::optional<float> offset;
+  std::optional<std::array<float, 3>> position;
   bool hiddenAttachmentStillPresent{}, previouslyActive{}, awaitingAttachment{};
   std::optional<std::array<float, 3>> remainingPosition;
   bool suppressForScene{};
@@ -271,7 +275,9 @@ std::unordered_map<RE::FormID, std::vector<RegisteredAppearanceNode>> g_register
 std::unordered_map<RE::FormID, std::vector<int>> g_registeredAppearanceAttachmentRoots;
 RegisteredHighHeelState ResolveRegisteredHighHeelState(RE::Actor* a) {
   ++a->resolverCalls;
-  return {a->selectedOffset, a->stale, g_registeredAppearanceHighHeelActors.contains(a->id), false, {}, g_highHeelScenes.Contains(a->id)};
+  const auto position = a->selectedOffset
+      ? std::optional{std::array<float, 3>{0, 0, *a->selectedOffset}} : std::nullopt;
+  return {position, a->stale, g_registeredAppearanceHighHeelActors.contains(a->id), false, {}, g_highHeelScenes.Contains(a->id)};
 }
 bool SceneHasNpcPositionSource(RE::Actor* a) { return !a->sceneOffsets.empty(); }
 bool IsRegisteredAppearanceDisplayActive(RE::FormID id) { return RE::TESForm::LookupByID<RE::Actor>(id)->active; }

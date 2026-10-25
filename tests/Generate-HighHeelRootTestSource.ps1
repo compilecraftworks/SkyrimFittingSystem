@@ -73,6 +73,7 @@ struct AttachmentSceneSnapshot {
 #include "root-lifecycle.production.inc"
 #include "height-watch-tick.production.inc"
 #include "transform-change.production.inc"
+#include "heel-equipment.production.inc"
 }
 '@
 Write-Generated 'HighHeelRootFixture.inc' $fixture

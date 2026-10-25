@@ -19,9 +19,181 @@ void Detach(RE::Actor& actor, RE::NiAVObject& node) {
   std::erase_if(actor.root.children, [&](const auto& p) { return p.get() == &node; });
   node.parent = nullptr;
 }
-void TestSceneHeight() {
+void SetHeelMetadata(RE::NiAVObject& node, float height, bool sdta) {
+  node.hasHeel = !sdta;
+  node.heel.value = height;
+  node.sdta = sdta ? "[{\"name\":\"NPC\",\"pos\":[0,0," + std::to_string(height) + "]}]" : "";
+}
+void TestPositionMetadata() {
+  RE::NiAVObject parent, child, last;
+  parent.children.emplace_back(&child); child.parent = &parent;
+  parent.children.emplace_back(&last); last.parent = &parent;
+  parent.sdta = R"([{"name":"NPC","pos":[1,2,9]}])";
+  const auto expect = [&](std::array<float, 3> value, const char* message) {
+    Check(FindAutomaticNpcPosition(&parent) == value, message);
+  };
+  expect({1,2,9}, "SDTA selects complete NPC position, not just its height");
+  parent.hasHeel = true; parent.heel.value = 7;
+  expect({0,0,7}, "same-object HH overrides SDTA and explicitly resets X/Y like RaceMenu");
+  child.sdta = R"([{"name":"NPC","pos":[3,4,-2.5]}])";
+  expect({3,4,-2.5F}, "child SDTA overrides parent HH in parent-before-child order; negative offsets remain valid");
+  last.hasHeel = true; last.heel.value = 0;
+  expect({0,0,0}, "last sibling's explicit zero HH overrides earlier SDTA");
+  last.heel.value = std::numeric_limits<float>::quiet_NaN();
+  last.sdta = R"([{"name":"NPC","pos":[-1,6,0]}])";
+  expect({-1,6,0}, "invalid HH cannot poison valid SDTA on the same node, including zero height");
+  last.sdta = R"([{"name":"NPC","pos":[0,0,1e300]}])";
+  expect({3,4,-2.5F}, "SDTA float overflow cannot overwrite an earlier finite source");
+  const std::unordered_set<RE::NiAVObject*> hidden{&child};
+  Check(FindAutomaticNpcPosition(&parent, &hidden) == std::array<float,3>{0,0,7},
+        "remaining-source scan skips hidden subtree using the same metadata precedence");
+  parent.children.clear(); child.parent = nullptr; last.parent = nullptr;
+  parent.hasHeel = false;
+  for (const char* invalid : {"", "[", "{}", "null",
+      R"([{"name":"NPC Head [Head]","pos":[0,0,9]}])",
+      R"([{"name":"NPC","scale":1,"rot":[0,0,9]}])",
+      R"([{"name":"NPC","pos":[0,9]}])",
+      R"([{"name":"NPC","pos":[0,0,9,1]}])",
+      R"([{"name":"NPC","pos":[0,0,"9"]}])",
+      R"([{"name":"NPC","pos":[0,null,9]}])",
+      R"([{"name":7,"pos":[0,0,9]}])"}) {
+    parent.sdta = invalid;
+    Check(!SceneHasNpcPositionSource(&parent) && !FindAutomaticNpcPosition(&parent),
+          "malformed data, non-NPC transforms and rotation/scale alone never enroll a heel root");
+  }
+  parent.sdta = R"([/* supported JSON comments */ {"name":"NPC","pos":[1,2,3]},
+      {"name":"Other","pos":[9,9,9]}, {"name":"NPC","pos":[4,5,6]},
+      {"name":"NPC","pos":[0,0,"invalid"]}])";
+  expect({4,5,6}, "last valid NPC entry wins and unrelated or malformed later positions do not erase it");
+  Check(child.references == 0 && last.references == 0,
+        "metadata traversal retains no node references");
+}
+void TestRegisteredSdta(bool nativeCapture) {
+  RE::Actor actor{0x14}; RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
+  Reset(actor); actor.displayed.insert(boots.id);
+  RE::NiAVObject branch, shape;
+  branch.children.emplace_back(&shape); shape.parent = &branch;
+  shape.sdta = R"([{"name":"NPC","pos":[2,-3,9]}])";
+  actor.scenePositions = {{2,-3,9}, {8,7,17}}; // a different actual boot wins RaceMenu's scan
+  RegisteredAppearanceAttachmentObserver observer;
+  auto before = sfs::native::racemenu::CaptureAttachmentScene(&actor);
+  if (nativeCapture) {
+    Attach(actor, branch);
+    sfs::native::racemenu::MorphNewRegisteredAppearanceNodes(&actor, before, boots.id, true);
+    sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor);
+  } else {
+    observer.OnAttach(&actor, &boots, &addon, &branch, false, &actor.root, &actor.root);
+    SKSE::tasks.Drain();
+    Check(branch.references == 1 && actor.fullUpdates == 0,
+          "pre-graft SDTA root waits without reading detached metadata as an active position");
+    Attach(actor, branch);
+  }
+  DrainAll();
+  Check(actor.displayedHeight == 9 && actor.internalXY == std::array<float,2>{2,-3} &&
+        g_registeredAppearanceAttachmentRoots.at(actor.id).size() == 1,
+        "callback/native capture selects child SDTA over different actual boots without a body-morph interface");
+  const auto queue = [&] { sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); };
+  const std::array<RE::FormID,1> actors{actor.id};
+  for (bool removeHeel : {false, true}) {
+    g_highHeelScenes.Update(0x120, actors, removeHeel);
+    actor.sexLabPosition = -4.5F; actor.otherModHeight = 3;
+    queue(); DrainAll();
+    Check(actor.displayedHeight == 3 && actor.internalPosition == 4.5F &&
+          actor.internalXY == std::array<float,2>{2,-3} && actor.sexLabPosition == -4.5F,
+          "SDTA scene correction changes only Z, preserves X/Y and SexLab's key with stripped feet ON/OFF");
+  }
+  const auto metadataReads = RE::NiAVObject::metadataReads;
+  const auto reads = actor.positionReads, updates = actor.fullUpdates, inventory = actor.inventoryReads;
+  const auto vmCalls = RE::BSScript::Internal::vm.calls.size();
+  for (unsigned i = 0; i < 128; ++i) {
+    sfs::native::racemenu::QueueHighHeelSceneCheck();
+    const auto allocated = allocations.load();
+    SKSE::tasks.Drain();
+    if (allocations != allocated) Check(false, "SDTA stable check body must not allocate");
+  }
+  Check(RE::NiAVObject::metadataReads == metadataReads && actor.positionReads == reads &&
+        actor.fullUpdates == updates && actor.inventoryReads == inventory &&
+        RE::BSScript::Internal::vm.calls.size() == vmCalls,
+        "128 stable SDTA frames perform no metadata scan/JSON parse, inventory query, transform update or VM call");
+  actor.sexLabPosition.reset(); actor.otherModHeight = 0;
+  g_highHeelScenes.Update(0x120, {}); queue(); DrainAll();
+  Check(actor.displayedHeight == 9 && actor.internalXY == std::array<float,2>{2,-3},
+        "scene exit restores current registered SDTA XYZ");
+  shape.sdta = R"([{"name":"NPC","pos":[5,6,-2]}])"; queue(); DrainAll();
+  Check(actor.displayedHeight == -2 && actor.internalXY == std::array<float,2>{5,6},
+        "next event rereads changed SDTA metadata instead of reusing a stale offset");
+  RE::NiAVObject actual; actual.sdta = R"([{"name":"NPC","pos":[-2,4,7]}])";
+  Attach(actor, actual); actor.scenePositions = {{-2,4,7}, {5,6,-2}};
+  actor.displayed.clear(); queue(); DrainAll();
+  Check(actor.displayedHeight == 7 && actor.internalXY == std::array<float,2>{-2,4},
+        "hidden registered SDTA root leaves actual SDTA XYZ intact even if its stale metadata scans last");
+  actor.displayed.insert(boots.id); queue(); DrainAll();
+  Check(actor.displayedHeight == -2 && actor.internalXY == std::array<float,2>{5,6},
+        "manual SDTA redress restores current metadata without replacing the actual equipment");
+  Detach(actor, actual); Detach(actor, branch);
+  actor.displayed.clear(); actor.scenePositions.clear(); queue(); DrainAll();
+  Check(!actor.internalPosition && branch.references == 0 && g_queuedHighHeelSyncs.Size() == 0,
+        "stripped SDTA root and automatic position expire without retained references or polling");
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
+  branch.children.clear(); shape.parent = nullptr;
+  Check(shape.references == 0 && actor.root.references == 0, "SDTA native/callback lifecycle releases child and skeleton");
+}
+void TestReportedFootwearSequence(bool sdta, bool removeHeel, bool initiallyRetained) {
+  RE::Actor actor{0x14}; RE::TESObjectARMO outfit{0x910}, physical{0x920};
+  RE::TESObjectARMA addon{0x911}; physical.slots.bits = 0x80;
+  Reset(actor); actor.displayed.insert(outfit.id);
+  actor.inventory.feet = initiallyRetained ? &physical : nullptr;
+  RE::NiAVObject heel; SetHeelMetadata(heel, 9, sdta); Attach(actor, heel);
+  actor.sceneOffsets = {9};
+  const std::array<RE::FormID,1> actors{actor.id};
+  g_highHeelScenes.Update(0x120, actors, removeHeel);
+  if (removeHeel) actor.sexLabPosition = -4.5F;
+  // Reproduce the known initial-application overwrite boundary from v1.7.8.
+  // No manual equipment/visibility action may be required to recover it.
+  actor.rescanAfterUpdates = 1;
+  RegisteredAppearanceAttachmentObserver observer;
+  observer.OnAttach(&actor, &outfit, &addon, &heel, false, &actor.root, &actor.root);
+  DrainAll();
+  const float initialHeight = !removeHeel && initiallyRetained ? 9.0F : 0.0F;
+  Check(actor.displayedHeight == initialHeight && actor.displayed.contains(outfit.id) &&
+        actor.inventory.feet == (initiallyRetained ? &physical : nullptr),
+        "reported initial stripped/retained-foot sequence reaches current ON/OFF target without manual hide/equip");
+
+  // In the reported ON case, either flat or heeled actual footwear used to
+  // trigger recovery. Execute the actual production slot-37 event body here.
+  for (float actualHeight : {0.0F, 13.0F}) {
+    actor.inventory.feet = &physical;
+    actor.sceneOffsets = {9, actualHeight};
+    sfs::native::racemenu::ObserveHighHeelEquipmentEvent(&actor, &physical);
+    Check(!SKSE::tasks.pending.empty(), "flat and heeled physical boots both request slot-37 reconciliation");
+    DrainAll();
+    Check(actor.displayedHeight == (removeHeel ? 0.0F : 9.0F) && actor.inventory.feet == &physical,
+          "ON remains aligned with either actual shoe; OFF preserves displayed heel policy while actual feet are retained");
+    actor.inventory.feet = nullptr; actor.sceneOffsets = {9};
+    sfs::native::racemenu::ObserveHighHeelEquipmentEvent(&actor, &physical); DrainAll();
+    Check(actor.displayedHeight == 0 && actor.displayed.contains(outfit.id),
+          "subsequent actual footwear stripping aligns ON/OFF without hiding the registered heel");
+  }
+  const auto correction = actor.sexLabPosition;
+  actor.displayed.clear();
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  Check(actor.displayedHeight == 0 && actor.sexLabPosition == correction,
+        "hiding the scene's registered heel preserves alignment and SexLab's correction key");
+  actor.displayed.insert(outfit.id);
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  Check(actor.displayedHeight == 0 && actor.inventory.feet == nullptr,
+        "showing the registered heel again stays aligned without equipping any real item");
+  actor.sexLabPosition.reset(); g_highHeelScenes.Update(0x120, {});
+  sfs::native::racemenu::QueueRegisteredAppearanceHighHeelSync(&actor); DrainAll();
+  Check(actor.displayedHeight == 9 && actor.inventory.feet == nullptr,
+        "scene exit restores displayed heel height without redressing physical inventory");
+  sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true); Detach(actor, heel);
+  Check(heel.references == 0 && actor.root.references == 0 && g_queuedHighHeelSyncs.Size() == 0,
+        "reported footwear sequence leaves no queued work or owned scene references");
+}
+void TestSceneHeight(bool sdta) {
   RE::Actor actor{0x14}; RE::TESObjectARMO armor{0x910}; RE::TESObjectARMA addon{0x911};
-  RE::NiAVObject branch{true}; branch.heel.value = 9;
+  RE::NiAVObject branch; SetHeelMetadata(branch, 9, sdta);
   Reset(actor); actor.displayed.insert(armor.id); actor.sceneOffsets = {9};
   Attach(actor, branch);
   RegisteredAppearanceAttachmentObserver observer;
@@ -106,7 +278,7 @@ void TestSceneHeight() {
   actor.displayed.insert(armor.id); queue(); DrainAll();
   Check(actor.displayedHeight == 9, "manual display after redress-OFF restores ordinary height");
 
-  branch.heel.value = 0; actor.sceneOffsets = {0}; g_highHeelScenes.Update(0x120, actors);
+  SetHeelMetadata(branch, 0, sdta); actor.sceneOffsets = {0}; g_highHeelScenes.Update(0x120, actors);
   queue(); DrainAll();
   Check(actor.displayedHeight == 0, "registered flat footwear remains flat during the scene");
   sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
@@ -115,10 +287,10 @@ void TestSceneHeight() {
   Check(branch.references == 0, "scene regression retains no heel root references");
 }
 
-void TestLateFullRescan() {
+void TestLateFullRescan(bool sdta) {
   RE::Actor actor{0x14}; RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
   Reset(actor); actor.displayed.insert(boots.id); actor.sceneOffsets = {9};
-  RE::NiAVObject heel{true}; heel.heel.value = 9; Attach(actor, heel);
+  RE::NiAVObject heel; SetHeelMetadata(heel, 9, sdta); Attach(actor, heel);
   const std::array<RE::FormID, 1> actors{actor.id};
   g_highHeelScenes.Update(0x120, actors, true);
   RegisteredAppearanceAttachmentObserver observer;
@@ -137,6 +309,7 @@ void TestLateFullRescan() {
         "ON scene arms one watch after successful height reconciliation");
   const auto idleUpdates = actor.fullUpdates, idleInventoryReads = actor.inventoryReads;
   const auto idleVmCalls = RE::BSScript::Internal::vm.calls.size();
+  const auto idleMetadataReads = RE::NiAVObject::metadataReads;
   for (unsigned frame = 0; frame < 256; ++frame) {
     sfs::native::racemenu::QueueHighHeelSceneCheck();
     sfs::native::racemenu::QueueHighHeelSceneCheck();
@@ -149,8 +322,9 @@ void TestLateFullRescan() {
   }
   Check(true, "256 stable small-scene checks allocate no temporary actor lists");
   Check(actor.fullUpdates == idleUpdates && actor.inventoryReads == idleInventoryReads &&
-        RE::BSScript::Internal::vm.calls.size() == idleVmCalls,
-        "256 stable scene frames do not scan inventory, call Papyrus or recalculate transforms");
+        RE::BSScript::Internal::vm.calls.size() == idleVmCalls &&
+        RE::NiAVObject::metadataReads == idleMetadataReads,
+        "256 stable scene frames do not scan metadata/inventory, call Papyrus or recalculate transforms");
   for (unsigned i = 0; i < 16; ++i) {
     // No attachment or SexLab position-key event. Models full SetTransforms
     // from UpdateAllReferenceTransforms, ActorUpdateManager or its private task.
@@ -248,9 +422,9 @@ void TestLateFullRescan() {
   Detach(actor, heel);
 }
 
-void TestInitialAppliedHeight() {
+void TestInitialAppliedHeight(bool sdta) {
   RE::Actor actor{0x14}; RE::TESObjectARMO boots{0x910}; RE::TESObjectARMA addon{0x911};
-  RE::NiAVObject heel{true}; heel.heel.value = 9;
+  RE::NiAVObject heel; SetHeelMetadata(heel, 9, sdta);
   Reset(actor); actor.displayed.insert(boots.id); actor.sceneOffsets = {9};
   Attach(actor, heel);
   const std::array<RE::FormID, 1> actors{actor.id};
@@ -462,6 +636,7 @@ void TestDiscardedSceneCheck() {
   Detach(actor, heel);
 }
 int main() {
+  TestPositionMetadata();
   for (auto version : {1U, 2U, 3U, 4U, 99U}) {
     g_transformInterfaceVersion = version;
     g_transformInterface = version < 3 ? nullptr : &skee::transform;
@@ -612,9 +787,16 @@ int main() {
     sfs::native::racemenu::ReleaseActorSceneResources(actor.id, true);
     actor.root.children.clear(); branch.parent = nullptr;
     Check(branch.references == 0, "unload/delete releases recorded root ownership");
-    TestSceneHeight();
-    TestLateFullRescan();
-    TestInitialAppliedHeight();
+    for (bool sdta : {false, true}) {
+      for (bool removeHeel : {false, true}) {
+        for (bool retained : {false, true}) TestReportedFootwearSequence(sdta, removeHeel, retained);
+      }
+      TestSceneHeight(sdta);
+      TestLateFullRescan(sdta);
+      TestInitialAppliedHeight(sdta);
+    }
+    TestRegisteredSdta(false);
+    TestRegisteredSdta(true);
     TestLargeSceneWatch();
     TestDiscardedSceneCheck();
   }

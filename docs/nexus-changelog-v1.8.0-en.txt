@@ -1,0 +1,4 @@
+- Fixed SDTA-only registered high heels being omitted from height selection and SexLab scene correction.
+- Unified HH_OFFSET and SDTA handling, including mixed-source priority, child-node metadata, and valid zero or negative offsets. SDTA X/Y values are preserved while scene compensation adjusts height.
+- Preserved existing strip/redress behavior, including redress OFF and manual visibility controls, across native/DAV/DAVE and legacy/public RaceMenu routes. Actual equipment and BodyMorph ownership are unchanged.
+- Removed the redundant HH_OFFSET-only reader and reused the existing synchronization and cleanup paths. Stable-frame checks add no metadata parsing, inventory queries or Papyrus calls.

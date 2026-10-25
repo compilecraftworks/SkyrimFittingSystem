@@ -481,30 +481,6 @@ void CollectSceneObjects(RE::NiAVObject *a_object,
   return false;
 }
 
-[[nodiscard]] std::optional<float>
-FindLastHighHeelOffset(RE::NiAVObject *a_object) {
-  if (!a_object) {
-    return std::nullopt;
-  }
-
-  std::optional<float> result;
-  static const RE::BSFixedString highHeelOffsetName{"HH_OFFSET"};
-  if (const auto *extra = netimmerse_cast<RE::NiFloatExtraData *>(
-          a_object->GetExtraData(highHeelOffsetName));
-      extra && std::isfinite(extra->value)) {
-    result = extra->value;
-  }
-
-  if (auto *node = a_object->AsNode()) {
-    for (const auto &child : node->GetChildren()) {
-      if (const auto childOffset = FindLastHighHeelOffset(child.get())) {
-        result = childOffset;
-      }
-    }
-  }
-  return result;
-}
-
 [[nodiscard]] std::optional<std::array<float, 3>> ReadSdtaNpcPosition(const char *a_value) {
   if (!a_value || *a_value == '\0') {
     return std::nullopt;
@@ -545,22 +521,32 @@ FindLastHighHeelOffset(RE::NiAVObject *a_object) {
   return result;
 }
 
-[[nodiscard]] bool SceneHasNpcPositionSource(RE::NiAVObject *a_object) {
+// RaceMenu writes SDTA first, then HH_OFFSET on the same object. Read the
+// winning source directly; HH is a full NPC position (0, 0, height), whereas
+// SDTA can also carry X/Y that must survive height-only scene compensation.
+[[nodiscard]] std::optional<std::array<float, 3>> ReadAutomaticNpcPosition(
+    RE::NiAVObject *a_object) {
   if (!a_object) {
-    return false;
+    return std::nullopt;
   }
   static const RE::BSFixedString highHeelOffsetName{"HH_OFFSET"};
   static const RE::BSFixedString transformDataName{"SDTA"};
   if (const auto *extra = netimmerse_cast<RE::NiFloatExtraData *>(
           a_object->GetExtraData(highHeelOffsetName));
       extra && std::isfinite(extra->value)) {
-    return true;
+    return std::array<float, 3>{0.0F, 0.0F, extra->value};
   }
   if (const auto *extra = netimmerse_cast<RE::NiStringExtraData *>(
           a_object->GetExtraData(transformDataName));
-      extra && ReadSdtaNpcPosition(extra->value).has_value()) {
-    return true;
+      extra) {
+    return ReadSdtaNpcPosition(extra->value);
   }
+  return std::nullopt;
+}
+
+[[nodiscard]] bool SceneHasNpcPositionSource(RE::NiAVObject *a_object) {
+  if (!a_object) { return false; }
+  if (ReadAutomaticNpcPosition(a_object)) { return true; }
   if (auto *node = a_object->AsNode()) {
     return std::ranges::any_of(node->GetChildren(), [](const auto &a_child) {
       return SceneHasNpcPositionSource(a_child.get());
@@ -569,26 +555,19 @@ FindLastHighHeelOffset(RE::NiAVObject *a_object) {
   return false;
 }
 
-// Follow RaceMenu's SDTA-then-HH, parent-before-child metadata order, excluding
-// only roots whose registered AND actual visibility has ended. An old backend
-// attachment is not proof that a hidden shoe still owns automatic height.
-[[nodiscard]] std::optional<std::array<float, 3>> FindRemainingNpcPosition(
+// The same source order selects registered height and preserves remaining
+// actual height. On cleanup, exclude only roots whose registered AND actual
+// visibility has ended; a stale backend attachment is not visible footwear.
+[[nodiscard]] std::optional<std::array<float, 3>> FindAutomaticNpcPosition(
     RE::NiAVObject *a_object,
-    const std::unordered_set<RE::NiAVObject *> &a_hiddenRoots) {
-  if (!a_object || a_hiddenRoots.contains(a_object)) { return std::nullopt; }
-  std::optional<std::array<float, 3>> result;
-  if (const auto *data = netimmerse_cast<RE::NiStringExtraData *>(
-          a_object->GetExtraData(RE::BSFixedString("SDTA")))) {
-    result = ReadSdtaNpcPosition(data->value);
+    const std::unordered_set<RE::NiAVObject *> *a_hiddenRoots = nullptr) {
+  if (!a_object || (a_hiddenRoots && a_hiddenRoots->contains(a_object))) {
+    return std::nullopt;
   }
-  if (const auto *data = netimmerse_cast<RE::NiFloatExtraData *>(
-          a_object->GetExtraData(RE::BSFixedString("HH_OFFSET")));
-      data && std::isfinite(data->value)) {
-    result = std::array<float, 3>{0.0F, 0.0F, data->value};
-  }
+  auto result = ReadAutomaticNpcPosition(a_object);
   if (auto *node = a_object->AsNode()) {
     for (const auto &child : node->GetChildren()) {
-      if (auto value = FindRemainingNpcPosition(child.get(), a_hiddenRoots)) {
+      if (auto value = FindAutomaticNpcPosition(child.get(), a_hiddenRoots)) {
         result = value;
       }
     }
@@ -653,7 +632,7 @@ FindNewAttachmentRoots(
   auto &registered =
       g_registeredAppearanceAttachmentRoots[a_actor->GetFormID()];
   for (const auto &node : a_nodes) {
-    if (!node || !FindLastHighHeelOffset(node.get()).has_value()) {
+    if (!SceneHasNpcPositionSource(node.get())) {
       continue;
     }
     foundHighHeelRoot = true;
@@ -676,7 +655,7 @@ FindNewAttachmentRoots(
 }
 
 struct RegisteredHighHeelState {
-  std::optional<float> offset;
+  std::optional<std::array<float, 3>> position;
   bool hiddenAttachmentStillPresent{false};
   bool previouslyActive{false};
   bool awaitingAttachment{false};
@@ -737,8 +716,8 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
     if (!expired && !attached) {
       state.awaitingAttachment = true;
     } else if (!expired && displayed) {
-      if (const auto offset = FindLastHighHeelOffset(entry.object.get())) {
-        state.offset = offset;
+      if (const auto position = FindAutomaticNpcPosition(entry.object.get())) {
+        state.position = position;
       }
     } else if (!expired) {
       // The same ARMO may still be visible as actual gear. Do not remove its
@@ -772,7 +751,7 @@ ResolveRegisteredHighHeelState(RE::Actor *a_actor) {
   }
   state.hiddenAttachmentStillPresent = !hiddenRoots.empty();
   if (state.hiddenAttachmentStillPresent) {
-    state.remainingPosition = FindRemainingNpcPosition(a_actor->Get3D(false), hiddenRoots);
+    state.remainingPosition = FindAutomaticNpcPosition(a_actor->Get3D(false), &hiddenRoots);
   }
   return state;
 }
@@ -819,14 +798,14 @@ struct LegacyHighHeelSyncRequest {
 };
 
 [[nodiscard]] bool RetainRegisteredHeightOwnership(const RegisteredHighHeelState &state) {
-  return state.offset.has_value() ||
+  return state.position.has_value() ||
          (state.suppressForScene &&
           (state.previouslyActive || state.hiddenAttachmentStillPresent));
 }
 
 [[nodiscard]] std::optional<std::array<float, 3>> SelectAutomaticPosition(
     const RegisteredHighHeelState &state) {
-  if (state.offset) { return std::array<float, 3>{0.0F, 0.0F, *state.offset}; }
+  if (state.position) { return state.position; }
   if (state.suppressForScene &&
       (state.previouslyActive || state.hiddenAttachmentStillPresent)) {
     return std::array<float, 3>{0.0F, 0.0F, 0.0F};
@@ -971,11 +950,11 @@ void CompleteLegacyHighHeelSync(
       }
     }
     logger::debug(
-        "Synchronized registered-appearance HH_OFFSET through legacy NiOverride API actor={:08X} active={}",
+        "Synchronized registered-appearance HH_OFFSET/SDTA through legacy NiOverride API actor={:08X} active={}",
         a_request->actorFormID, a_request->targetActive);
   } else if (IsCurrentHighHeelSync(a_request->actorFormID, a_request->generation)) {
     logger::warn(
-        "Legacy NiOverride HH_OFFSET synchronization failed for actor {:08X}; no direct skeleton transform was applied",
+        "Legacy NiOverride HH_OFFSET/SDTA synchronization failed for actor {:08X}; no direct skeleton transform was applied",
         a_request->actorFormID);
   }
   FinishQueuedHighHeelSync(a_request->actorFormID, a_request->generation);
@@ -1011,7 +990,7 @@ void QueueLegacyHighHeelVerification(
     if (!actor) { CompleteLegacyHighHeelSync(a_request, false); return; }
     // Scene lookup on the game thread, not a VM callback. Sampling retains no
     // node. RaceMenu's native UpdateNodeTransform updates local synchronously;
-    // its queued world-data refresh is not a second HH_OFFSET scan.
+    // its queued world-data refresh is not a second HH_OFFSET/SDTA scan.
     a_request->applied = SampleHighHeelNode(actor);
     if (!a_request->applied.node || !std::isfinite(a_request->applied.z)) {
       CompleteLegacyHighHeelSync(a_request, false, true);
@@ -1210,10 +1189,10 @@ void DispatchLegacyUpdateAll(
           .isFemale = actorBase->IsFemale(),
           .targetActive = RetainRegisteredHeightOwnership(a_state),
           .targetPosition = SelectAutomaticPosition(a_state),
-          .requireAutomaticPosition = a_state.offset.has_value(),
+          .requireAutomaticPosition = a_state.position.has_value(),
           .suppressForScene = a_state.suppressForScene,
           .clearRaceMenuInternalPosition =
-              !a_state.offset.has_value() &&
+              !a_state.position.has_value() &&
               !(a_state.hiddenAttachmentStillPresent
                     ? a_state.remainingPosition.has_value()
                     : SceneHasNpcPositionSource(a_actor->Get3D(false))) &&
@@ -1223,7 +1202,7 @@ void DispatchLegacyUpdateAll(
 
   // A scale of 1.0 is visually neutral. Its only purpose is to create the
   // actor's transform-storage entry on RaceMenu v1/v2 so the following
-  // official full update scans the synthetic SFS branch for HH_OFFSET. The
+  // official full update scans the synthetic SFS branch for HH_OFFSET/SDTA. The
   // key is removed again as soon as the scan completes.
   return DispatchNiOverrideCall(
       "AddNodeTransformScale",
@@ -1253,7 +1232,7 @@ void DispatchLegacyUpdateAll(
   if (state.awaitingAttachment) {
     return HighHeelSyncAttempt::Retry;
   }
-  if (!state.offset.has_value() && !state.previouslyActive &&
+  if (!state.position.has_value() && !state.previouslyActive &&
       !state.hiddenAttachmentStillPresent) {
     PrepareSceneHeightWatch(a_actor, a_generation, false);
     return HighHeelSyncAttempt::Complete;
@@ -1266,7 +1245,7 @@ void DispatchLegacyUpdateAll(
       return HighHeelSyncAttempt::LegacyDispatchStarted;
     }
     logger::warn(
-        "Could not start legacy NiOverride HH_OFFSET synchronization for actor {:08X}",
+        "Could not start legacy NiOverride HH_OFFSET/SDTA synchronization for actor {:08X}",
         a_actor->GetFormID());
     return HighHeelSyncAttempt::Complete;
   }
@@ -1296,11 +1275,11 @@ void DispatchLegacyUpdateAll(
 
   const auto actorFormID = a_actor->GetFormID();
   if (auto position = SelectAutomaticPosition(state)) {
-    if (state.offset && !transform->HasNodeTransformPosition(
+    if (state.position && !transform->HasNodeTransformPosition(
             a_actor, false, isFemale, nodeName, raceMenuInternalKey)) {
       return HighHeelSyncAttempt::Retry;
     }
-    // HH_OFFSET itself belongs to RaceMenu's automatic "internal" position.
+    // HH_OFFSET/SDTA belong to RaceMenu's automatic "internal" position.
     // Resolve its value from the displayed registered heel, not the last
     // unrelated HH/SDTA branch encountered by the full scan. Replacing this
     // component does not add a second offset or create a persistent SFS key;
@@ -1345,7 +1324,7 @@ void DispatchLegacyUpdateAll(
       }
     }
     logger::debug(
-        "Synchronized RaceMenu HH_OFFSET for SFS actor {:08X}: {}",
+        "Synchronized RaceMenu HH_OFFSET/SDTA for SFS actor {:08X}: {}",
         actorFormID, selected.z);
     return HighHeelSyncAttempt::Complete;
   }
@@ -1372,7 +1351,7 @@ void DispatchLegacyUpdateAll(
       g_registeredAppearanceHighHeelActors.erase(actorFormID);
     }
   }
-  logger::debug("Cleared registered-appearance HH_OFFSET for SFS actor {:08X}",
+  logger::debug("Cleared registered-appearance HH_OFFSET/SDTA for SFS actor {:08X}",
                 actorFormID);
   return HighHeelSyncAttempt::Complete;
 }
@@ -1527,7 +1506,7 @@ public:
     const SceneObservation observation(actor->GetFormID());
 
     // RaceMenu's incremental attachment pass can clear its automatic position
-    // even when the newly attached armor has no HH_OFFSET. Rearm only actors
+    // even when the newly attached armor has no HH_OFFSET/SDTA. Rearm only actors
     // already tracking registered heels, without enrolling ordinary gear in
     // the independent morph/dye consumers below.
     const bool resyncHighHeel =
@@ -1552,8 +1531,8 @@ public:
     // snapshot is not guaranteed to observe every registered appearance.
     // Record the same actor-local third-person heel root from RaceMenu's
     // official attachment callback as well. The helper ignores first-person
-    // roots and non-HH_OFFSET branches, and de-duplicates native captures.
-    // Preserve the pre-existing HH observer scope. Preview morph tracking must
+    // roots and branches without an HH_OFFSET/SDTA NPC position, and de-duplicates
+    // native captures. Preserve the heel observer scope. Preview morph tracking must
     // not silently broaden the transform observer to replacement previews.
     bool observeHighHeels = false;
     {
@@ -1932,7 +1911,7 @@ TryInterfaceExchange(const SKSE::MessagingInterface *a_messaging,
 
   // Keep the exchange for legacy BodyMorph v3 releases as well. Their C++
   // object is not public-ABI-compatible, but their official NiOverride
-  // Papyrus transform functions remain usable for HH_OFFSET synchronization.
+  // Papyrus transform functions remain usable for HH_OFFSET/SDTA synchronization.
   // Missing/unsupported BodyMorph must not suppress the independently
   // versioned transform and attachment interfaces.
   if (!dispatched || !message.interfaceMap) {
@@ -2029,18 +2008,18 @@ void InitializeBodyMorphInterface() {
         logger::warn("RaceMenu NiTransform version {} exceeds audited versions; using the last compatible v3 public prefix, forward compatibility assumed (not binary-verified)", transformVersion);
       }
       logger::info(
-          "Connected to RaceMenu NiTransform interface version {} for registered-appearance HH_OFFSET synchronization",
+          "Connected to RaceMenu NiTransform interface version {} for registered-appearance HH_OFFSET/SDTA synchronization",
           transformVersion);
     } else if (transformRoute ==
                rules::HighHeelTransformRoute::LegacyPapyrus) {
       g_transformInterface.store(nullptr, std::memory_order_release);
       logger::info(
-          "Connected to RaceMenu NiTransform version {}; registered-appearance HH_OFFSET synchronization will use the ABI-neutral NiOverride Papyrus route",
+          "Connected to RaceMenu NiTransform version {}; registered-appearance HH_OFFSET/SDTA synchronization will use the ABI-neutral NiOverride Papyrus route",
           transformVersion);
     } else {
       g_transformInterface.store(nullptr, std::memory_order_release);
       logger::warn(
-          "RaceMenu NiTransform interface is missing or has no verified ABI (reported version {}); registered-appearance HH_OFFSET synchronization is inactive",
+          "RaceMenu NiTransform interface is missing or has no verified ABI (reported version {}); registered-appearance HH_OFFSET/SDTA synchronization is inactive",
           transformVersion);
     }
   }

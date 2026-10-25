@@ -7,6 +7,14 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
+v1.8.0 fixes SDTA-only registered footwear missing height selection and scene
+correction. HH_OFFSET and SDTA now share metadata precedence and cleanup,
+preserving SDTA X/Y and existing strip/redress, BodyMorph and backend ownership.
+Stable-frame checks add no metadata parsing, inventory queries or VM work.
+See the [English](docs/RELEASE-NOTES-v1.8.0.md) /
+[Korean](docs/RELEASE-NOTES-v1.8.0-ko.md) notes and
+[verification boundary](docs/HIGH-HEEL-RESCAN-AND-MENU-DOF.md).
+
 v1.7.9 verifies the initial registered-heel correction before accepting the
 stable SexLab scene height. Legacy and public RaceMenu routes use bounded
 verification/retries without extra inventory, VM or height work on stable

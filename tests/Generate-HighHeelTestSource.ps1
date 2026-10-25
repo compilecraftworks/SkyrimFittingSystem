@@ -26,6 +26,7 @@ Write-Slice 'observer.production.inc' '[[nodiscard]] bool ShouldResyncHighHeelAf
 Write-Slice 'queue.production.inc' 'void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {' 'void SetRegisteredAppearanceDisplayActive('
 Write-Slice 'scene-event.production.inc' 'void ObserveHighHeelSceneEvent(' 'void QueueHighHeelSceneCheck()'
 Write-Slice 'transform-change.production.inc' 'void ObserveHighHeelTransformChange(' 'void ObserveHighHeelEquipmentEvent('
+Write-Slice 'heel-equipment.production.inc' 'void ObserveHighHeelEquipmentEvent(' 'void QueueHighHeelSceneCheck()'
 $source = Get-Content -LiteralPath (Join-Path $repo 'src/features/virtual_tokens/VirtualWornTokens.cpp') -Raw
 Write-Slice 'caller-identity.production.inc' 'struct CallerIdentity {' 'struct TrustProfile {'
 Write-Slice 'caller-chain.production.inc' '[[nodiscard]] std::vector<CallerIdentity>' 'void PruneRuntimeStateLocked('

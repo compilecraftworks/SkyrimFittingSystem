@@ -219,3 +219,94 @@ the final version label. Release logs are `build/v1.7.9-regressions.log` and
 source, package hashes and the core-DLL-only runtime change. Published v1.7.8
 archives and OStim v1.0.0 patch bytes remain unchanged. MO2 deployment is not
 part of this release task.
+
+## Registered SDTA position selection — 2026-10-25
+
+The next report still describes raised actors after v1.7.9. The reporter's
+footwear and metadata format are unknown. A separate, reproducible source gap
+is confirmed: registered roots were enrolled and selected only by HH_OFFSET,
+although cleanup already recognized actual-equipment SDTA NPC positions. An
+SDTA-only registered heel therefore never reached the existing scene correction.
+The production-source regression fails before the fix at registered-height
+restoration (`build/sdta-before-test.log`). This is evidence of that missing
+path, not proof of the unknown reporter's exact configuration.
+
+Registration, selected position and remaining actual sources now share one
+metadata reader. It reads finite HH_OFFSET or the SDTA NPC `pos` array, keeps
+SDTA X/Y, and preserves RaceMenu's same-object SDTA-then-HH and
+parent-before-child ordering. Explicit zero and negative values remain valid.
+Other-node, rotation-only and scale-only SDTA records do not enroll heel roots.
+The previous HH-only walker is removed; there is no second persistent metadata
+cache, extra polling loop, actor scan, or new engine/VM interface.
+
+This follows the already-audited RaceMenu source commit
+`9ebcb733e17be695f994cd2e9cc383043446bc02`:
+`SkeletonExtenderInterface::ReadTransforms` and
+`NiTransformInterface::SetTransforms`. The existing legacy/public synchronization
+routes carry full XYZ positions; only the Z component is replaced by the scene
+correction. Actual equipment, SexLab's key and options, morph/dye consumers,
+strip/redress ownership and the bounded retry/generation cancellation rules are
+unchanged. Cleanup applies the same metadata precedence when preserving actual
+equipment, excluding only registered roots whose actual visibility also ended.
+
+The existing scene-policy, first-apply verification, late rescan, failed-provider
+and 128-cycle unload/reset checks run for both formats on interface routes
+1/2/3/4/compatible-prefix 99. Additional checks cover native/DAV before/after
+capture and the attachment callback with SDTA on a child shape, pre-graft
+completion, different actual footwear, nonzero X/Y, current metadata edits,
+manual redress, hidden stale attachments, mixed-source precedence and invalid
+metadata. Expected transform-provider scan results are supplied separately from
+the production metadata parser, so parser output is not its own oracle.
+
+Stable-frame assertions include metadata-read counters: no additional metadata
+walk/JSON parse, inventory query, transform operation or Papyrus call, and no
+ordinary C++ allocation within the small-scene check body. Counters and reference
+probes exist only in test executables. This does not measure in-game frame times
+or prove every RaceMenu binary or external rotation/scale composition.
+
+Verification: all 45 regression executables and source-boundary checks pass
+(`build/sdta-regressions.log`), including 6,058 heel-root, 244 synchronization,
+820 late-transform and 26 SexLab event assertions. The SE/AE-only development
+DLL builds with label `1.7.9-sdta-height-dev` (`build/sdta-plugin-build.log`);
+SE/AE defines with VR disabled select `EXCLUSIVE_SKYRIM_FLAT`. Its SHA-256 is
+`6B0C0D1ED0E4A6B9934CB475068EC25A37C141906A4583D519F00E9DF2A960DA`.
+Published v1.7.9 release/source ZIPs are unchanged. This development build has
+not been deployed to MO2 or published; no in-game reproduction is claimed.
+
+## v1.8.0 release and additional v1.7.8 feedback — 2026-10-25
+
+The added feedback says that stripping physical footwear leaves the registered
+heel's actor raised with RemoveHeelEffect ON or OFF. Hiding the registered heel
+or equipping any real footwear, including flat shoes, restores alignment;
+retaining footwear from scene start avoids the problem. This is consistent
+with reconciliation timing/ownership trouble, but does not identify the shoe's
+metadata format or prove which missing update occurred.
+
+The proposed `internal Z = -SexLab.esm Z` compensation was already present in
+v1.7.8. Reintroducing that formula alone cannot explain a fix. Two independently
+verified gaps are distinguished: v1.7.8 could accept a height overwritten
+between initial application and baseline capture (fixed in v1.7.9), and
+SDTA-only registered roots were not selected at all (fixed in v1.8.0). The old
+initial-overwrite failure remains recorded in `build/heel-initial-before-test.log`.
+Neither gap is asserted to be the exact cause on the reporter's machine.
+
+An additional production-source regression now executes the real slot-37
+equipment event body, rather than substituting a direct queue request for it.
+For both metadata formats, ON/OFF, initially retained/stripped footwear and
+legacy/public interface routes, it verifies initial correction before any
+manual hide/equip, subsequent flat/heeled real-shoe equip and strip, registered
+hide/show, scene exit and reference/task cleanup. ON compensates regardless
+of real footwear; OFF retains the existing visible-heel policy while real
+footwear is worn and compensates when physical feet are bare. No game animation
+or external framework binary is emulated by these recording providers.
+
+Final v1.8.0 verification: the SE/AE-only release build and all 45 regression
+executables plus source-boundary checks pass. Logs are `build/v1.8.0-build.log`
+and `build/v1.8.0-regressions.log`; heel-root assertions increase to 6,818,
+with 244 synchronization, 820 late-transform and 26 scene-event assertions.
+The final `1.8.0` DLL SHA-256 is
+`888352C440309C872FA85E87C320B5DEDD3781CAD31B62308F48EACAFC4B4A32`.
+`scripts/verify-v1.8.0-release.ps1` checks corresponding source, release documents,
+ZIP hashes and the core-DLL-only runtime change against v1.7.9. Published
+v1.7.9 archives and optional OStim v1.0.0 patch bytes are preserved. MO2
+deployment is not included in this release task.

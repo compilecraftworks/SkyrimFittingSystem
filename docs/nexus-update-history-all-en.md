@@ -1,3 +1,12 @@
+## Version 1.8.0
+
+- Fixed SDTA-only registered high heels being omitted from height selection and SexLab scene correction.
+- Unified HH_OFFSET and SDTA handling, including mixed-source priority, child-node metadata, and valid zero or negative offsets. SDTA X/Y values are preserved while scene compensation adjusts height.
+- Preserved existing strip/redress behavior, including redress OFF and manual visibility controls, across native/DAV/DAVE and legacy/public RaceMenu routes. Actual equipment and BodyMorph ownership are unchanged.
+- Removed the redundant HH_OFFSET-only reader and reused the existing synchronization and cleanup paths. Stable-frame checks add no metadata parsing, inventory queries or Papyrus calls.
+
+Validation: SE/AE-exclusive DLL build, 45 regression executables and source-boundary checks passed. The SDTA gap is verified in production-source tests; the reporter's exact footwear format is unknown, so this does not confirm resolution of that particular in-game report.
+
 ## Version 1.7.9
 
 - Fixed a path where a RaceMenu height overwrite immediately after initial heel correction could be accepted as the stable height during a SexLab scene.
