@@ -13,13 +13,14 @@ $names = @(
   'void SetRegisteredAppearanceDisplayActive(',
   '[[nodiscard]] std::size_t ApplyMorphsToRegisteredAppearanceNodes(',
   'void QueuePendingMorphSync(',
+  'void QueueRegisteredAppearanceMorphRetries(',
   'void RecordMorphUpdateRequest(',
   'void QueueUpdateModelWeightAppearanceSync(',
   'void ApplyBodyMorphsHook(',
   'void ReleaseActorSceneResources('
 )
 $blocks = [Collections.Generic.List[string]]::new()
-$watchStart = $source.IndexOf('struct SceneHeightWatch {', [StringComparison]::Ordinal)
+$watchStart = $source.IndexOf('struct HighHeelFrameRetry {', [StringComparison]::Ordinal)
 $watchEnd = $source.IndexOf('std::atomic<std::uint64_t> g_highHeelQueueEpoch', [StringComparison]::Ordinal)
 if ($watchStart -lt 0 -or $watchEnd -le $watchStart) { throw 'Missing scene height watch state' }
 $blocks.Add($source.Substring($watchStart, $watchEnd - $watchStart))

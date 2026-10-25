@@ -310,6 +310,8 @@ void Check(bool result, const char* message) {
   std::printf("PASS: %s\n", message);
 }
 void Reset(RE::Actor& a) {
+  g_highHeelFrameRetries.clear(); g_hasHighHeelFrameRetries = false;
+  g_morphFrameRetries.clear(); g_hasMorphFrameRetries = false;
   g_sceneHeightWatches.clear(); g_hasSceneHeightWatches = false; g_sceneHeightCheckQueued = false;
   a = RE::Actor{a.id};
   RE::TESForm::forms[a.id] = &a;
@@ -328,10 +330,13 @@ void Reset(RE::Actor& a) {
 }
 void DrainAll() {
   auto& vm = RE::BSScript::Internal::vm;
-  for (int i = 0; i != 32 && (!SKSE::tasks.pending.empty() || !vm.pending.empty()); ++i) {
+  for (int i = 0; i != 32 && (!SKSE::tasks.pending.empty() || !vm.pending.empty() ||
+      g_hasHighHeelFrameRetries); ++i) {
+    DispatchHighHeelFrameRetries(); // one simulated Present per iteration
     SKSE::tasks.Drain(); vm.Drain();
   }
-  Check(SKSE::tasks.pending.empty() && vm.pending.empty(), "actor-local work terminates without polling");
+  Check(SKSE::tasks.pending.empty() && vm.pending.empty() && !g_hasHighHeelFrameRetries,
+        "actor-local work terminates after bounded frame retries");
 }
 void LaterAttachment(RE::Actor& a, RE::TESObjectARMO& armor, bool heel) {
   // SkeletonExtender::AddTransforms: current/previous symmetric difference
@@ -425,7 +430,7 @@ int main() {
   g_transformInterfaceVersion = 2; g_transformInterface = nullptr;
   auto& vm = RE::BSScript::Internal::vm;
   Reset(a); a.sceneOffsets = {12}; queue(); SKSE::tasks.Drain();
-  vm.Drain(); // Add neutral scale completed, full scan is queued.
+  vm.Drain(); // Add neutral scale completed, cleanup is queued before the full scan.
   a.selectedOffset = 7.0F; a.sceneOffsets = {12, 0}; queue(); DrainAll();
   Check(a.displayedHeight == 7, "pending refresh resolves edited appearance on game task after legacy chain");
   for (const auto* failure : {"UpdateAllReferenceTransforms", "HasNodeTransformPosition", "AddNodeTransformPosition", "UpdateNodeTransform"}) {

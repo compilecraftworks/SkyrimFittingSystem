@@ -1,11 +1,12 @@
 ## Version 1.8.0
 
-- Fixed SDTA-only registered high heels being omitted from height selection and SexLab scene correction.
-- Unified HH_OFFSET and SDTA handling, including mixed-source priority, child-node metadata, and valid zero or negative offsets. SDTA X/Y values are preserved while scene compensation adjusts height.
-- Preserved existing strip/redress behavior, including redress OFF and manual visibility controls, across native/DAV/DAVE and legacy/public RaceMenu routes. Actual equipment and BodyMorph ownership are unchanged.
-- Removed the redundant HH_OFFSET-only reader and reused the existing synchronization and cleanup paths. Stable-frame checks add no metadata parsing, inventory queries or Papyrus calls.
+- Fixed SDTA-only registered high heels being omitted from height selection and SexLab scene correction. HH_OFFSET and SDTA now share metadata selection while preserving SDTA X/Y values.
+- Fixed high-heel synchronization retries ending before a registered appearance finished attaching. Legacy and public RaceMenu routes now retry on later frames within the existing retry limit.
+- Fixed missed BodyMorph updates on registered appearances that attach later. Current morph values are reapplied when the nodes become ready.
+- Fixed saved dye restoration giving up before the actor's 3D became ready.
+- Fixed temporary SFS transform values remaining after cancelled legacy RaceMenu synchronization. Pending work is cleared on actor unload and save reset.
 
-Validation: SE/AE-exclusive DLL build, 45 regression executables and source-boundary checks passed. The SDTA gap is verified in production-source tests; the reporter's exact footwear format is unknown, so this does not confirm resolution of that particular in-game report.
+Validation: SE/AE-exclusive DLL build, 45 regression executables and source-boundary checks passed. Coverage includes HH_OFFSET/SDTA, SexLab option ON/OFF, strip/redress, BodyMorph, native/DAV/DAVE paths, 128 unload/reload cycles and idle-work checks. These are production-source tests with recording providers, not confirmation from the reporter's game.
 
 ## Version 1.7.9
 

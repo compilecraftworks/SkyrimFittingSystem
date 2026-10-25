@@ -10,6 +10,7 @@
 #include <chrono>
 #include <cmath>
 #include <d3dcompiler.h>
+#include <functional>
 #include <nlohmann/json.hpp>
 #include <optional>
 #include <unordered_map>
@@ -185,6 +186,10 @@ std::mutex g_savedWorldTintMutex;
 std::unordered_map<RE::FormID, SavedWorldTintAppearances> g_savedWorldTints;
 std::mutex g_savedWorldTintRestoreQueueMutex;
 resource_work::ActorTasks g_queuedSavedWorldTintRestores;
+// g_savedWorldTintRestoreQueueMutex owns these ID/ticket-only closures.
+// No geometry or GPU resource is retained while waiting for the next Present.
+std::unordered_map<RE::FormID, std::function<void()>> g_savedWorldTintFrameRetries;
+std::atomic_bool g_hasSavedWorldTintFrameRetries{false};
 std::atomic<std::uint64_t> g_savedWorldTintRestoreEpoch{0};
 
 // Called only while changing targets, never on a renderer pass. Lets unload
@@ -419,12 +424,16 @@ void RestoreSavedWorldTintsForActor(RE::Actor *a_actor,
 void FinishQueuedSavedWorldTintRestore(const RE::FormID a_actorFormID,
                                        const std::uint64_t a_generation) {
   std::scoped_lock lock(g_savedWorldTintRestoreQueueMutex);
-  g_queuedSavedWorldTintRestores.Finish(a_actorFormID, a_generation);
+  if (g_queuedSavedWorldTintRestores.Finish(a_actorFormID, a_generation)) {
+    g_savedWorldTintFrameRetries.erase(a_actorFormID);
+    g_hasSavedWorldTintFrameRetries.store(!g_savedWorldTintFrameRetries.empty(), std::memory_order_release);
+  }
 }
 
 void QueueSavedWorldTintRestoreTask(const RE::FormID a_actorFormID,
                                     const std::uint64_t a_generation,
-                                    const std::uint8_t a_remainingFrames) {
+                                    const std::uint8_t a_remainingFrames,
+                                    const bool a_nextFrame = false) {
   if (!IsCurrentSavedWorldTintRestore(a_actorFormID, a_generation)) {
     return;
   }
@@ -433,7 +442,7 @@ void QueueSavedWorldTintRestoreTask(const RE::FormID a_actorFormID,
     FinishQueuedSavedWorldTintRestore(a_actorFormID, a_generation);
     return;
   }
-  taskInterface->AddTask([a_actorFormID, a_generation, a_remainingFrames] {
+  auto task = [a_actorFormID, a_generation, a_remainingFrames] {
     if (!IsCurrentSavedWorldTintRestore(a_actorFormID, a_generation)) {
       return;
     }
@@ -445,11 +454,19 @@ void QueueSavedWorldTintRestoreTask(const RE::FormID a_actorFormID,
     }
     if (a_remainingFrames > 0) {
       QueueSavedWorldTintRestoreTask(a_actorFormID, a_generation,
-                                     a_remainingFrames - 1);
+                                     a_remainingFrames - 1, true);
       return;
     }
     FinishQueuedSavedWorldTintRestore(a_actorFormID, a_generation);
-  });
+  };
+  if (a_nextFrame) {
+    std::lock_guard lock(g_savedWorldTintRestoreQueueMutex);
+    if (!g_queuedSavedWorldTintRestores.Current(a_actorFormID, a_generation)) { return; }
+    g_savedWorldTintFrameRetries.insert_or_assign(a_actorFormID, std::move(task));
+    g_hasSavedWorldTintFrameRetries.store(true, std::memory_order_release);
+  } else {
+    taskInterface->AddTask(std::move(task));
+  }
 }
 
 struct WorldTintPreview {
@@ -1396,6 +1413,8 @@ void ClearWorldTint() {
   g_savedWorldTintRestoreEpoch.fetch_add(1, std::memory_order_acq_rel);
   std::scoped_lock lock(g_worldTintMutex, g_savedWorldTintRestoreQueueMutex);
   g_queuedSavedWorldTintRestores.Clear();
+  g_savedWorldTintFrameRetries.clear();
+  g_hasSavedWorldTintFrameRetries.store(false, std::memory_order_release);
   g_worldTintTargets.clear();
   g_worldTintActors.clear();
   g_worldTintBuilds.Clear();
@@ -1565,6 +1584,8 @@ void RevertSavedWorldTints() {
   }
   std::scoped_lock queueLock(g_savedWorldTintRestoreQueueMutex);
   g_queuedSavedWorldTintRestores.Clear();
+  g_savedWorldTintFrameRetries.clear();
+  g_hasSavedWorldTintFrameRetries.store(false, std::memory_order_release);
 }
 
 void DeserializeSavedWorldTints(SKSE::SerializationInterface *a_skse) {
@@ -1667,6 +1688,22 @@ void DeserializeSavedWorldTints(SKSE::SerializationInterface *a_skse) {
   }
 }
 
+void QueueSavedWorldTintFrameRetries() {
+  if (!g_hasSavedWorldTintFrameRetries.load(std::memory_order_acquire)) { return; }
+  auto *tasks = SKSE::GetTaskInterface();
+  if (!tasks) { return; }
+  decltype(g_savedWorldTintFrameRetries) retries;
+  {
+    std::lock_guard lock(g_savedWorldTintRestoreQueueMutex);
+    retries.swap(g_savedWorldTintFrameRetries);
+    g_hasSavedWorldTintFrameRetries.store(false, std::memory_order_release);
+  }
+  for (auto &[id, task] : retries) {
+    // The game task validates its ticket again before actor/renderer access.
+    tasks->AddTask(std::move(task));
+  }
+}
+
 void QueueSavedWorldTintRestore(RE::Actor *a_actor) {
   const auto epoch = g_savedWorldTintRestoreEpoch.load(std::memory_order_acquire);
   if (!a_actor) {
@@ -1698,6 +1735,8 @@ void QueueSavedWorldTintRestore(RE::Actor *a_actor) {
 void ReleaseActorSceneResources(const RE::FormID a_actorFormID) {
   std::scoped_lock lock(g_worldTintMutex, g_savedWorldTintRestoreQueueMutex);
   g_queuedSavedWorldTintRestores.Forget(a_actorFormID);
+  g_savedWorldTintFrameRetries.erase(a_actorFormID);
+  g_hasSavedWorldTintFrameRetries.store(!g_savedWorldTintFrameRetries.empty(), std::memory_order_release);
   g_worldTintBuilds.Forget(a_actorFormID);
   if (g_worldTintActors.contains(a_actorFormID)) {
     std::erase_if(g_worldTintTargets, [a_actorFormID](const auto &entry) {

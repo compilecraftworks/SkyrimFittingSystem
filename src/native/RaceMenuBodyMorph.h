@@ -31,8 +31,11 @@ void ObserveHighHeelEquipmentEvent(RE::Actor *a_actor,
 // Notification after an external SexLab NPC-position native actually changed.
 // Reuses bounded actor-local work; never changes the external transform key.
 void ObserveHighHeelTransformChange(RE::Actor *a_actor);
-// Present only schedules a coalesced game-thread check; no render-thread scene access.
+// Present dispatches bounded deferred retries and a coalesced height check.
+// No render-thread actor/scene access or transform calls.
 void QueueHighHeelSceneCheck();
+// Bounded late-graft morph retries; ordinary live morph calls remain immediate.
+void QueueRegisteredAppearanceMorphRetries();
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor, bool a_active,
                                           bool a_observeHighHeelAttachments);
 // Unloaded, deleted or no-longer-resolvable scenes. Never call for UI hiding or a

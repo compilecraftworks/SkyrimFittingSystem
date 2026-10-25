@@ -143,7 +143,7 @@ std::atomic<ApplyBodyMorphsFn> g_originalApplyBodyMorphs;
 thread_local unsigned g_updateModelWeightTaskDepth{};
 unsigned originalCalls{};
 
-void QueuePendingMorphSync(RE::FormID, std::uint32_t = 2);
+void QueuePendingMorphSync(RE::FormID, std::uint32_t = 2, bool = false);
 [[nodiscard]] std::size_t ApplyMorphsToRegisteredAppearanceNodes(
   skee::IBodyMorphInterface*, RE::Actor*, bool* = nullptr, bool = false);
 #include "RaceMenuMorphTracking.production.inc"
@@ -152,10 +152,17 @@ void QueuePendingMorphSync(RE::FormID, std::uint32_t = 2);
 static void Check(bool ok, const char* message) {
   if (!ok) { std::fprintf(stderr, "FAIL: %s\n", message); std::exit(1); }
 }
+static void DrainTurn() {
+  for (unsigned batch = 0; batch < 16 && !SKSE::tasks.pending.empty(); ++batch) SKSE::tasks.Drain();
+  Check(SKSE::tasks.pending.empty(), "a queue turn must stop without consuming frame retries");
+}
 static void DrainAll() {
-  for (int frame = 0; frame != 8 && !SKSE::tasks.pending.empty(); ++frame)
-    SKSE::tasks.Drain();
-  Check(SKSE::tasks.pending.empty(), "completion must be bounded, not polling");
+  for (int frame = 0; frame != 8 && (!SKSE::tasks.pending.empty() || g_hasMorphFrameRetries); ++frame) {
+    QueueRegisteredAppearanceMorphRetries();
+    DrainTurn();
+  }
+  Check(SKSE::tasks.pending.empty() && !g_hasMorphFrameRetries,
+        "completion must be bounded, not polling");
 }
 int main() {
   skee::IBodyMorphInterface morph;
@@ -184,6 +191,66 @@ int main() {
     Check(morph.writes[player.id] == before + 2, label);
     std::printf("PASS: %s (public + deferred)\n", label);
   };
+
+  // Match SKSE's drain-until-empty semantics: jobs appended by jobs do not
+  // advance a render frame. A late graft must survive this whole queue turn.
+  publish(player, false);
+  playerNode.parent = nullptr;
+  attach(player, playerNode);
+  QueueUpdateModelWeightAppearanceSync(player.id);
+  DrainTurn();
+  Check(g_registeredAppearanceNodes[player.id].size() == 1 && morph.writes[player.id] == 0,
+        "morph root must survive a full SKSE queue drain while waiting for a later graft");
+  playerNode.parent = player.Get3D(false);
+  DrainAll();
+  Check(morph.writes[player.id] == 1,
+        "next-frame graft must replay current morph once without a second attachment event");
+  ReleaseActorSceneResources(player.id, false);
+  morph.writes.clear();
+
+  // The render/game handoff may precede unload. Its old ticket must neither
+  // write nor consume a replacement actor's request using the same FormID.
+  for (unsigned cycle = 0; cycle < 128; ++cycle) {
+    publish(player, false);
+    playerNode.parent = nullptr;
+    attach(player, playerNode);
+    QueueUpdateModelWeightAppearanceSync(player.id); DrainTurn();
+    Check(g_morphFrameRetries.size() == 1, "late graft must reserve one actor retry");
+    for (unsigned request = 0; request < 32; ++request) QueueUpdateModelWeightAppearanceSync(player.id);
+    Check(SKSE::tasks.pending.empty() && g_morphFrameRetries.size() == 1,
+          "morph notification bursts coalesce while a frame retry is pending");
+    if (cycle % 2) QueueRegisteredAppearanceMorphRetries();
+    ReleaseActorSceneResources(player.id, false);
+    Check(g_morphFrameRetries.empty() && !g_hasMorphFrameRetries,
+          "unload cancels deferred morph retries without keeping idle work");
+    playerNode.parent = player.Get3D(false);
+    attach(player, playerNode);
+    QueueUpdateModelWeightAppearanceSync(player.id);
+    const auto before = morph.writes[player.id];
+    DrainAll();
+    Check(morph.writes[player.id] == before + 1,
+          "stale handed-off retry cannot write or consume the new generation");
+    ReleaseActorSceneResources(player.id, false);
+  }
+
+  publish(player, false);
+  playerNode.parent = nullptr;
+  attach(player, playerNode);
+  QueueUpdateModelWeightAppearanceSync(player.id); DrainTurn();
+  publish(player, false, false);
+  playerNode.parent = player.Get3D(false);
+  const auto beforeDeferredHide = morph.writes[player.id];
+  DrainAll();
+  Check(morph.writes[player.id] == beforeDeferredHide && g_morphRequests.HasRequest(player.id),
+        "hide during a deferred retry preserves intent without writing hidden nodes");
+  publish(player, false); DrainAll();
+  Check(morph.writes[player.id] == beforeDeferredHide + 1,
+        "reactivation replays current morph after a hidden deferred retry");
+  ReleaseActorSceneResources(player.id, false);
+  for (unsigned frame = 0; frame < 1024; ++frame) QueueRegisteredAppearanceMorphRetries();
+  Check(SKSE::tasks.pending.empty() && g_morphFrameRetries.empty(),
+        "idle frames after cancellation perform no morph scheduling");
+  morph.writes.clear();
 
   publish(player, false); publish(npc, false);
   attach(player, playerNode); attach(npc, npcNode); DrainAll();

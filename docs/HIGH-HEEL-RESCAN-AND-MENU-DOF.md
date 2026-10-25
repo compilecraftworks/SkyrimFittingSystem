@@ -1,5 +1,135 @@
 # High-heel full-rescan and menu depth-of-field follow-up
 
+## v1.8.0 follow-up: retry scheduling, 2026-10-25
+
+Re-examining the report that *any* physical footwear restores alignment found
+two concrete gaps in the HH_OFFSET/SDTA synchronization path:
+
+1. `QueueHighHeelSyncTask` put failed attempts straight back into SKSE's task
+   queue. `BSTaskPool::ProcessTasks` drains until that queue is empty, including
+   tasks appended by another task. The initial attempt and both "frame" retries
+   could therefore finish in one queue turn, before a pending/reparented
+   registered attachment became ready. The root could expire and synchronization
+   stop before the next rendered frame. The previous recording scheduler drained
+   a snapshot of the queue, accidentally making every task handoff look like a
+   separate frame.
+2. The legacy NiTransform 1/2 Papyrus route ended immediately when a successful
+   `HasNodeTransformPosition` query returned false after its first full update.
+   The public route retried that same missing-source result. This left older
+   providers waiting for a new attachment/equipment/scene notification rather
+   than retrying initial readiness.
+
+The SKSE task-loop source was read from
+[ianpatt/skse64, Hooks_Threads.cpp](https://github.com/ianpatt/skse64/blob/master/skse64/Hooks_Threads.cpp),
+Git blob `06dc3bcbcdfdff5e89d48ec5511a85e97000d448` (source evidence only; no
+dependency upgrade). Ordinary SexLab 1.63's physical-footwear guard and the
+locally installed TuLED SLU+ alias's `OnObjectEquipped`/`UpdateNiOHeelEffect`
+were also rechecked. A physical shoe can cause a new equipment/attachment
+update; its own HH value need not explain the recovery. This establishes a
+matching missed-update mechanism, **not proof that it is the only cause in
+the reporter's unobserved installation**.
+
+The existing Present hook now hands deferred retry tickets to the game task.
+Only actor IDs, generation tickets and remaining attempt counts are retained in
+the retry map, with no additional scene-node ownership. Successful initial
+updates still finish immediately. Failures retain the existing initial-plus-two
+budget, but retry dispatches require later Present calls. Legacy missing-source
+results use that same budget, after removing the neutral bootstrap. Unreadable
+Papyrus results and failed dispatches are not mistaken for valid false results.
+
+Retry execution re-resolves current scene membership, actual footwear and
+registered visibility. Scene end or hiding an appearance during the wait cannot
+restore stripped equipment or reuse an old suppression target. Actor unload,
+delete, completion and load/revert clear pending tickets; dispatched stale
+generations cannot clear a replacement. No extra inventory/VM/metadata work is
+performed on stable frames. The added inactive cost is an atomic flag check;
+only a pending bounded retry takes the retry lock/dispatch path. BodyMorph,
+strip/redress ownership, backend selection and height arithmetic are unchanged.
+
+Before-fix failures: `build/heel-frame-before-test.log` (same-turn root expiry)
+and `build/heel-legacy-before-test.log` (legacy missing-source early completion).
+The focused recording-provider tests now cover HH_OFFSET and SDTA, option
+ON/OFF, a later graft without a second callback or physical footwear, provider
+readiness on the next frame, never-ready exhaustion, scene end/hide while
+waiting, 128 unload cycles, stale dispatch after reset and 1,024 idle frames.
+Routes 1/2/3/4/99 are API-route fixtures, not all historical RaceMenu DLLs.
+No reporter-environment gameplay verification or MO2 deployment was performed
+during this audit. The fixes are included in the refreshed v1.8.0 package.
+
+Validation completed: all 45 regression executables and the source-boundary
+checks passed (`build/heel-frame-regressions.log`), including 10,988 heel-root,
+244 sync, 820 late-transform and 26 scene-event assertions. The SE/AE-only
+development DLL built successfully (`build/heel-frame-build.log`, version string
+`1.8.0-heel-frame-dev`; SE/AE enabled, VR disabled). The original v1.8.0 archives
+were left unchanged at that audit stage; the subsequent release refresh uses
+a fresh official-version build.
+
+## v1.8.0 detailed audit: morph, legacy cleanup and dye, 2026-10-25
+
+The follow-up audit found three additional reproducible defects:
+
+- **Late BodyMorph graft:** `QueuePendingMorphSync` had the same recursive
+  SKSE-queue retry as the heel path. A full queue drain could expire an observed
+  but not-yet-attached morph root before a later graft. The production tracking
+  fixture failed before the fix (`build/heel-detail-before-RaceMenuMorphTrackingTests.log`).
+  Only retries now wait for Present; ordinary live updates remain immediate.
+  Deferred closures capture IDs, tickets and retry counts, not nodes or morph
+  values. Reattachment applies current values, and hiding retains the existing
+  missed-update intent without writing hidden nodes.
+- **Legacy bootstrap cancellation:** NiTransform 1/2 could accept the neutral
+  `NPC/SFS_HH_SYNC` scale and then skip removal when unload/reset invalidated
+  the chain. The cancellation fixture failed before the fix
+  (`build/heel-detail-before-RaceMenuHighHeelRootTests.log`). Removal now follows
+  creation immediately, before the scan or any position query. Cleanup still
+  runs for a resolvable actor after cancellation; subsequent scan/write work
+  remains ticket- and 3D-guarded. This reorders the same successful-chain calls,
+  rather than adding a polling or per-frame Papyrus path. It never removes
+  RaceMenu's `internal` or SexLab's named key as cancellation cleanup.
+- **Dye 3D readiness:** saved tint restoration likewise exhausted all readiness
+  attempts in one queue turn when the actor had no loaded 3D. The production
+  queue fixture failed before the fix (`build/heel-detail-dye-before-test.log`).
+  These retries now cross Present with the existing initial-plus-two budget.
+  Present only hands off a closure; actor lookup, shape selection and restoration
+  remain on the original game-task path. Exact component matching, color recipes
+  and GPU binding/restoration logic are unchanged.
+
+For the legacy reorder, upstream component-removal and full-scan implementations
+were inspected in both `87a5cadd5c282e790ea6e9cf104bb7aa551fc4dc`
+(`skee/NiTransformInterface.cpp`) and
+`9ebcb733e17be695f994cd2e9cc383043446bc02`
+(`skee64/NiTransformInterface.cpp`). Removing a scale component erases that
+variant but retains the actor storage entry required by the full scan. The
+change does not depend on keeping the neutral scale through the scan.
+
+Additional lifecycle coverage includes 128 morph and dye unload/reload cycles,
+retry handoff before cancellation, reuse of the same actor ID, notification-burst
+coalescing, hidden/reactivated morphs, legacy cancellation at ten VM boundaries
+with and without a replacement request, save reset, and 1,024 idle-frame checks.
+Pending closures clear on unload/reset; tickets reject work already handed off.
+The dye fixture counts shared resource ownership and preserves another actor's
+targets and saved colors. This is a fake engine/provider test, not a GPU driver
+or in-game measurement. Each inactive dispatcher only reads an atomic flag.
+
+Source review also covered equipment-event refresh ordering, Native/DAV/DAVE
+follow-up scheduling, SexLab membership and option reads, OStim patch contracts,
+and scene-resource cleanup. No additional confirmed defect was found in those
+reviewed paths. All 45 regression executables and source-boundary checks passed
+(`build/heel-detail-regressions.log`), including 11,388 heel-root, 244 sync and
+820 late-transform checks. Runtime layout, actual equipment conflict, HT2 hair,
+strip/redress, condition/UI, IED, final-rendered API and dye checks are included
+in that suite; they are not evidence that every external mod binary or gameplay
+combination was exercised. Reporter-environment gameplay remains unverified.
+
+The SE/AE-only development DLL also compiled and linked successfully
+(`build/heel-detail-build.log`, version string `1.8.0-heel-detail-dev`, PE version
+1.8.0.0, SHA-256
+`9E2D36125C48BFE16C11B7CE986BE86C616BC71AC61C1B030A52523BCEC9CD44`).
+The development DLL above is audit evidence, not the release binary. The user
+subsequently requested these changes in v1.8.0: rebuild with the official
+`1.8.0` version string, preserve the original packages locally, and refresh the
+runtime/source ZIPs, checksums, release tag and bilingual notes. `VERSION`
+remains 1.8.0. No MO2 deployment is part of this refresh.
+
 Released in v1.7.8 as a follow-up to v1.7.7. No optional patch, save schema, ESL or Papyrus
 script changes. The v1.7.7 release archives remain unchanged.
 

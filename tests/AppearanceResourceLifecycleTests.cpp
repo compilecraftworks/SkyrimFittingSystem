@@ -72,6 +72,8 @@ std::atomic_bool g_worldTintTargetsActive{}, g_worldTintPreviewActive{};
 std::optional<Preview> g_worldTintPreview;
 std::unordered_map<RE::FormID, std::unordered_map<RE::FormID, int>> g_savedWorldTints;
 resource_work::ActorTasks g_queuedSavedWorldTintRestores;
+std::unordered_map<RE::FormID, std::function<void()>> g_savedWorldTintFrameRetries;
+std::atomic_bool g_hasSavedWorldTintFrameRetries{false};
 std::atomic<std::uint64_t> g_savedWorldTintRestoreEpoch{0};
 std::unordered_map<RE::FormID, unsigned> restores;
 void RestoreSavedWorldTintsForActor(RE::Actor *, std::uint64_t);
@@ -93,9 +95,18 @@ void ReleaseActorSceneResources(RE::FormID id, bool deleted) { releases.emplace_
 namespace sfs::native::appearance_resources {
 #include "AppearanceResourceEvents.production.inc"
 }
-static void DrainAll() {
+static void DrainTurn() {
   for (unsigned i = 0; i != 8 && !SKSE::tasks.pending.empty(); ++i) { SKSE::tasks.Drain(); }
   Check(SKSE::tasks.pending.empty(), "bounded tasks must end without polling");
+}
+static void DrainAll() {
+  using namespace sfs::native::dye;
+  for (unsigned frame = 0; frame != 8 &&
+      (!SKSE::tasks.pending.empty() || g_hasSavedWorldTintFrameRetries); ++frame) {
+    QueueSavedWorldTintFrameRetries(); DrainTurn();
+  }
+  Check(SKSE::tasks.pending.empty() && !sfs::native::dye::g_hasSavedWorldTintFrameRetries,
+        "readiness retries must terminate after a bounded number of frames");
 }
 int main() {
   using namespace sfs::native::dye;
@@ -115,6 +126,15 @@ int main() {
   g_savedWorldTints[other.id][0x800] = 2;
   const RE::TESObjectLoadedEvent load{actor.id, true}, unload{actor.id, false};
   const RE::TESFormDeleteEvent deleted{actor.id};
+  actor.loaded = false;
+  QueueSavedWorldTintRestore(&actor); DrainTurn();
+  Check(g_queuedSavedWorldTintRestores.Contains(actor.id),
+        "unready dye restoration must survive a complete SKSE queue turn until a later frame");
+  actor.loaded = true; DrainAll();
+  Check(restores[actor.id] == 1 && g_worldTintTargets.contains(actor.id),
+        "next-frame 3D readiness restores color without another load or attachment event");
+  ReleaseActorSceneResources(actor.id);
+  actor.loaded = true;
   RestoreActorSceneResources(other.id); DrainAll();
   auto otherResource = g_worldTintTargets.at(other.id).view;
   const auto otherCount = restores[other.id];
@@ -138,10 +158,16 @@ int main() {
           g_worldTintTargets.at(other.id).view == otherResource && restores[other.id] == otherCount,
           "unload preserves saved colors and another actor");
     // Old task completion cannot erase the replacement task after same-ID load.
-    actor.loaded = true; QueueSavedWorldTintRestore(&actor);
-    actor.loaded = false; events.ProcessEvent(&unload, nullptr);
+    actor.loaded = false; QueueSavedWorldTintRestore(&actor); DrainTurn();
+    Check(g_savedWorldTintFrameRetries.size() == 1, "unready actor reserves one frame retry");
+    if (cycle % 2) QueueSavedWorldTintFrameRetries();
+    events.ProcessEvent(&unload, nullptr);
+    Check(g_savedWorldTintFrameRetries.empty() && !g_hasSavedWorldTintFrameRetries,
+          "unload removes deferred tint closures and their activity flag");
+    const auto beforeReplacement = restores[actor.id];
     actor.loaded = true; events.ProcessEvent(&load, nullptr); DrainAll();
-    Check(g_worldTintTargets.contains(actor.id) && g_queuedSavedWorldTintRestores.Size() == 0,
+    Check(g_worldTintTargets.contains(actor.id) && g_queuedSavedWorldTintRestores.Size() == 0 &&
+          restores[actor.id] == beforeReplacement + 1,
           "same-ID load survives stale queued restore");
   }
   Check(g_worldTintBuilds.Size() == 0, "completed/cancelled builds retain no ticket map entries");
@@ -187,15 +213,28 @@ int main() {
         "last actor release returns renderer to dormant state with no resources/tasks/build records");
   actor.loaded = false; RE::TESForm::forms[actor.id] = &actor;
   QueueSavedWorldTintRestore(&actor); DrainAll();
-  Check(g_queuedSavedWorldTintRestores.Size() == 0, "unready scene retries remain bounded");
-  {
+  Check(g_queuedSavedWorldTintRestores.Size() == 0 && g_savedWorldTintFrameRetries.empty(),
+        "unready scene retries remain bounded and release deferred records");
+  const auto beforeIdle = restores[actor.id];
+  for (unsigned frame = 0; frame < 1024; ++frame) QueueSavedWorldTintFrameRetries();
+  Check(SKSE::tasks.pending.empty() && restores[actor.id] == beforeIdle && CountedResource::alive == 0,
+        "idle frames after retry exhaustion allocate no tint resources or tasks");
+  for (bool handoff : {false, true}) {
     WorldTintBuild old(actor.id);
-    actor.loaded = true; QueueSavedWorldTintRestore(&actor);
+    actor.loaded = false; QueueSavedWorldTintRestore(&actor); DrainTurn();
+    if (handoff) QueueSavedWorldTintFrameRetries();
     ClearWorldTint(); DrainAll();
-    Check(!old.CurrentLocked() && !g_worldTintTargetsActive && g_savedWorldTints.contains(actor.id),
+    Check(!old.CurrentLocked() && !g_worldTintTargetsActive && g_savedWorldTints.contains(actor.id) &&
+          g_savedWorldTintFrameRetries.empty() && !g_hasSavedWorldTintFrameRetries,
           "world scene clear fences builds/tasks but preserves recipes until deserialization");
+    QueueSavedWorldTintRestore(&actor); DrainTurn();
+    if (handoff) QueueSavedWorldTintFrameRetries();
     RevertSavedWorldTints();
-    Check(g_savedWorldTints.empty(), "save revert retains its distinct durable-state reset");
+    actor.loaded = true; DrainAll();
+    Check(g_savedWorldTints.empty() && g_savedWorldTintFrameRetries.empty() &&
+          !g_hasSavedWorldTintFrameRetries && !g_worldTintTargetsActive,
+          "save revert cancels deferred restoration and retains its distinct durable-state reset");
+    g_savedWorldTints[actor.id][0x800] = 1;
   }
   std::puts("AppearanceResourceLifecycleTests passed: 128 unload/reload cycles, production routing/cleanup/queue, counted ownership (not D3D/game).");
 }

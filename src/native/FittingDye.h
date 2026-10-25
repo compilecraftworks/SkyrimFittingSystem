@@ -93,6 +93,9 @@ void RevertSavedWorldTints();
 // saved components whose exact rendered scene identity exists in that actor's
 // newly built 3D; it never performs a world scan or name-only guess.
 void QueueSavedWorldTintRestore(RE::Actor *a_actor);
+// Present only hands bounded 3D-readiness retries to the game task; no render-
+// thread actor lookup, shape scan or GPU resource creation.
+void QueueSavedWorldTintFrameRetries();
 // Real unload/delete boundaries only; retain durable colors for reattachment.
 void ReleaseActorSceneResources(RE::FormID a_actorFormID);
 void RestoreActorSceneResources(RE::FormID a_actorFormID);

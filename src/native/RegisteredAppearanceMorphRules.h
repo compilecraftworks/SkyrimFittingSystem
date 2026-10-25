@@ -102,6 +102,11 @@ public:
     it->second.ticket = 0;
     return true;
   }
+  [[nodiscard]] bool Current(const std::uint32_t a_actor,
+                             const std::uint64_t a_ticket) const {
+    const auto it = states_.find(a_actor);
+    return it != states_.end() && a_ticket != 0 && it->second.ticket == a_ticket;
+  }
   void Forget(const std::uint32_t a_actor) { states_.erase(a_actor); }
   // Do not reset the ticket counter: an already queued task must never match a
   // new actor/request after a save transition, even with the same FormID.

@@ -14,7 +14,8 @@ $groups = @{
         '[[nodiscard]] bool IsCurrentSavedWorldTintRestore(',
         '[[nodiscard]] bool HasSavedWorldTintForActor(',
         'void ClearRuntimeWorldTintsForActor(', 'void FinishQueuedSavedWorldTintRestore(',
-        'void QueueSavedWorldTintRestoreTask(', 'void QueueSavedWorldTintRestore(RE::Actor',
+        'void QueueSavedWorldTintRestoreTask(', 'void QueueSavedWorldTintFrameRetries()',
+        'void QueueSavedWorldTintRestore(RE::Actor',
         'void ReleaseActorSceneResources(', 'void RestoreActorSceneResources(',
         'void ClearWorldTint()', 'void RevertSavedWorldTints()'))
     'AppearanceResourceEvents.production.inc' = @('src/native/AppearanceResourceLifecycle.cpp', @(

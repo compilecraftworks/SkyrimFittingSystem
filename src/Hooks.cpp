@@ -363,6 +363,8 @@ struct PresentHook {
     }
     sfs::api::ProcessMenuRequests();
     sfs::native::racemenu::QueueHighHeelSceneCheck();
+    sfs::native::racemenu::QueueRegisteredAppearanceMorphRetries();
+    sfs::native::dye::QueueSavedWorldTintFrameRetries();
     InputManager::GetSingleton()->ProcessInputEvents();
     sfs::workbench::EquipmentRefreshEventSink::GetSingleton()
         ->TickConditionState();

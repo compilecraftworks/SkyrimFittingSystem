@@ -105,6 +105,18 @@ std::uint64_t g_nodeObservation{0}; // protected by g_nodeMutex
 std::mutex g_highHeelQueueMutex;
 sfs::native::resource_work::ActorTasks g_queuedHighHeelSyncs;
 std::unordered_set<RE::FormID> g_pendingHighHeelResyncs;
+struct HighHeelFrameRetry {
+  std::uint64_t generation;
+  std::uint8_t remainingRetries;
+};
+// IDs/tickets only, under g_highHeelQueueMutex. SKSE drains recursively added
+// tasks in the same turn; a retry must wait for Present before being dispatched.
+std::unordered_map<RE::FormID, HighHeelFrameRetry> g_highHeelFrameRetries;
+std::atomic_bool g_hasHighHeelFrameRetries{false};
+// These closures capture IDs/tickets/retry counts only, never engine objects.
+// g_nodeMutex owns publication and cancellation with g_morphRequests.
+std::unordered_map<RE::FormID, std::function<void()>> g_morphFrameRetries;
+std::atomic_bool g_hasMorphFrameRetries{false};
 struct SceneHeightWatch {
   RE::NiPointer<RE::NiAVObject> node;
   std::uint64_t generation{0};
@@ -818,6 +830,31 @@ void FinishQueuedHighHeelSync(RE::FormID a_actorFormID,
 void QueueHighHeelSyncTask(RE::FormID a_actorFormID, std::uint64_t a_generation,
                           std::uint8_t a_remainingFrames);
 
+void DeferHighHeelRetry(RE::FormID a_actor, std::uint64_t a_generation,
+                        std::uint8_t a_remainingRetries) {
+  std::lock_guard lock(g_highHeelQueueMutex);
+  if (!g_queuedHighHeelSyncs.Current(a_actor, a_generation)) { return; }
+  g_highHeelFrameRetries.insert_or_assign(
+      a_actor, HighHeelFrameRetry{a_generation, a_remainingRetries});
+  g_hasHighHeelFrameRetries.store(true, std::memory_order_release);
+}
+
+void DispatchHighHeelFrameRetries() {
+  if (!g_hasHighHeelFrameRetries.load(std::memory_order_acquire)) { return; }
+  decltype(g_highHeelFrameRetries) retries;
+  {
+    std::lock_guard lock(g_highHeelQueueMutex);
+    retries.swap(g_highHeelFrameRetries);
+    g_hasHighHeelFrameRetries.store(false, std::memory_order_release);
+  }
+  for (const auto &[actor, retry] : retries) {
+    // Render-thread handoff only. Queue and execution both validate the ticket;
+    // resolution/scene access still happens on the game task. A concurrent
+    // failure enters the now-empty map for a later Present, not this batch.
+    QueueHighHeelSyncTask(actor, retry.generation, retry.remainingRetries);
+  }
+}
+
 [[nodiscard]] bool IsCurrentHighHeelSync(const RE::FormID a_actorFormID,
                                         const std::uint64_t a_generation) {
   std::lock_guard lock(g_highHeelQueueMutex);
@@ -931,9 +968,9 @@ void CompleteLegacyHighHeelSync(
   if (!a_success && a_retry && a_request->remainingRetries > 0 &&
       IsCurrentHighHeelSync(a_request->actorFormID, a_request->generation)) {
     // Same ticket and shared retry budget; a mismatch cannot create an
-    // unbounded fresh request. The next game task resolves CURRENT display.
-    QueueHighHeelSyncTask(a_request->actorFormID, a_request->generation,
-                         a_request->remainingRetries - 1);
+    // unbounded fresh request. A later frame resolves CURRENT display.
+    DeferHighHeelRetry(a_request->actorFormID, a_request->generation,
+                      a_request->remainingRetries - 1);
     return;
   }
   if (a_success) {
@@ -1058,38 +1095,28 @@ void DispatchLegacyRemoveInternalPosition(
   }
 }
 
-void DispatchLegacyRemoveBootstrap(
+void ContinueLegacyHighHeelSync(
     const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request,
-    const bool a_updateSucceeded) {
+    const bool a_updateSucceeded, const bool a_retry = false) {
   auto *actor = a_request ? LookupLegacyHighHeelActor(*a_request) : nullptr;
   if (!actor) {
     CompleteLegacyHighHeelSync(a_request, false);
     return;
   }
-  const auto continuation = [a_request, a_updateSucceeded]() {
-    using namespace sfs::native::racemenu::rules;
-    switch (ResolveLegacyHighHeelCompletion(
-        a_updateSucceeded, a_request->clearRaceMenuInternalPosition)) {
-    case LegacyHighHeelCompletion::Failed:
-      // Cleanup succeeding is not evidence that the full transform update
-      // ran. In particular, missing legacy Papyrus functions must not mark
-      // an actor synchronized or remove RaceMenu's internal position.
-      CompleteLegacyHighHeelSync(a_request, false);
-      break;
-    case LegacyHighHeelCompletion::RemoveInternalPosition:
-      DispatchLegacyRemoveInternalPosition(a_request);
-      break;
-    case LegacyHighHeelCompletion::Synchronized:
-      DispatchLegacyUpdateNode(a_request);
-      break;
-    }
-  };
-  if (!DispatchNiOverrideCall(
-          "RemoveNodeTransformScale", continuation,
-          static_cast<RE::Actor *>(actor), false,
-          static_cast<bool>(a_request->isFemale), std::string{"NPC"},
-          std::string{"SFS_HH_SYNC"})) {
-    CompleteLegacyHighHeelSync(a_request, false);
+  using namespace sfs::native::racemenu::rules;
+  switch (ResolveLegacyHighHeelCompletion(
+      a_updateSucceeded, a_request->clearRaceMenuInternalPosition)) {
+  case LegacyHighHeelCompletion::Failed:
+    // Missing/failed calls must not mark synchronization complete or remove
+    // internal. The temporary bootstrap was already removed before the scan.
+    CompleteLegacyHighHeelSync(a_request, false, a_retry);
+    break;
+  case LegacyHighHeelCompletion::RemoveInternalPosition:
+    DispatchLegacyRemoveInternalPosition(a_request);
+    break;
+  case LegacyHighHeelCompletion::Synchronized:
+    DispatchLegacyUpdateNode(a_request);
+    break;
   }
 }
 
@@ -1104,27 +1131,30 @@ void DispatchLegacyWriteHeelPosition(
   // callback. An appearance edit during dispatch queues the existing pending
   // resync; do not traverse scene/UI state on a Papyrus callback thread.
   if (!a_request->targetPosition) {
-    DispatchLegacyRemoveBootstrap(a_request, true);
+    ContinueLegacyHighHeelSync(a_request, true);
     return;
   }
   const auto continuation = [a_request](std::optional<bool> automaticPositionPresent) {
     auto *currentActor = LookupLegacyHighHeelActor(*a_request);
     if (!currentActor || !automaticPositionPresent.value_or(false) || !a_request->targetPosition) {
-      // Do not force transforms when RaceMenu did not accept the scene source
-      // (e.g. equippable transforms disabled). Always clean the bootstrap.
-      DispatchLegacyRemoveBootstrap(a_request, false);
+      // Match the public route's bounded retry when the source is not ready.
+      // Bootstrap is already gone. A disabled provider still terminates
+      // after the same budget; an unreadable response is not a false Boolean.
+      ContinueLegacyHighHeelSync(a_request, false,
+          currentActor && automaticPositionPresent.has_value() &&
+          !*automaticPositionPresent && a_request->targetPosition.has_value());
       return;
     }
     if (!DispatchNiOverrideCall(
             "AddNodeTransformPosition",
-            [a_request]() { DispatchLegacyRemoveBootstrap(a_request, true); },
+            [a_request]() { ContinueLegacyHighHeelSync(a_request, true); },
             static_cast<RE::Actor *>(currentActor), false,
             static_cast<bool>(a_request->isFemale), std::string{"NPC"},
             std::string{"internal"},
             std::vector<float>{(*a_request->targetPosition)[0],
                                (*a_request->targetPosition)[1],
                                (*a_request->targetPosition)[2]})) {
-      DispatchLegacyRemoveBootstrap(a_request, false);
+      ContinueLegacyHighHeelSync(a_request, false);
     }
   };
   if (!a_request->requireAutomaticPosition) { continuation(true); return; }
@@ -1133,7 +1163,7 @@ void DispatchLegacyWriteHeelPosition(
           static_cast<RE::Actor *>(actor), false,
           static_cast<bool>(a_request->isFemale), std::string{"NPC"},
           std::string{"internal"})) {
-    DispatchLegacyRemoveBootstrap(a_request, false);
+    ContinueLegacyHighHeelSync(a_request, false);
   }
 }
 
@@ -1144,11 +1174,11 @@ void DispatchLegacySelectHeelPosition(
     return;
   }
   auto *actor = LookupLegacyHighHeelActor(*a_request);
-  if (!actor) { DispatchLegacyRemoveBootstrap(a_request, false); return; }
+  if (!actor) { ContinueLegacyHighHeelSync(a_request, false); return; }
   if (!DispatchNiOverridePositionCall(actor, a_request->isFemale, "SexLab.esm",
       [a_request](auto position) {
         if (!LookupLegacyHighHeelActor(*a_request) || !position) {
-          DispatchLegacyRemoveBootstrap(a_request, false);
+          ContinueLegacyHighHeelSync(a_request, false);
           return;
         }
         // Preserve SexLab's key. Supply its matching automatic component so
@@ -1156,7 +1186,7 @@ void DispatchLegacySelectHeelPosition(
         (*a_request->targetPosition)[2] = -(*position)[2];
         DispatchLegacyWriteHeelPosition(a_request);
       })) {
-    DispatchLegacyRemoveBootstrap(a_request, false);
+    ContinueLegacyHighHeelSync(a_request, false);
   }
 }
 
@@ -1168,9 +1198,25 @@ void DispatchLegacyUpdateAll(
           "UpdateAllReferenceTransforms",
           [a_request]() { DispatchLegacySelectHeelPosition(a_request); },
           static_cast<RE::Actor *>(actor))) {
-    // The neutral scale may already have been inserted. Always attempt its
-    // removal before completing a failed chain.
-    DispatchLegacyRemoveBootstrap(a_request, false);
+    ContinueLegacyHighHeelSync(a_request, false);
+  }
+}
+
+void DispatchLegacyBootstrapCleanup(
+    const std::shared_ptr<LegacyHighHeelSyncRequest> &a_request) {
+  // Cleanup must run even if unload/revert invalidated the request after the
+  // VM accepted AddNodeTransformScale. It touches only SFS's neutral scale,
+  // never internal, SexLab's key or the skeleton. Removing this component does
+  // not delete RaceMenu's actor storage, which is what the full scan requires.
+  // A newer request sharing this key also only needs that storage, not the key.
+  auto *actor = RE::TESForm::LookupByID<RE::Actor>(a_request->actorFormID);
+  if (!actor || !DispatchNiOverrideCall(
+          "RemoveNodeTransformScale",
+          [a_request]() { DispatchLegacyUpdateAll(a_request); },
+          static_cast<RE::Actor *>(actor), false,
+          static_cast<bool>(a_request->isFemale), std::string{"NPC"},
+          std::string{"SFS_HH_SYNC"})) {
+    CompleteLegacyHighHeelSync(a_request, false);
   }
 }
 
@@ -1201,12 +1247,12 @@ void DispatchLegacyUpdateAll(
       });
 
   // A scale of 1.0 is visually neutral. Its only purpose is to create the
-  // actor's transform-storage entry on RaceMenu v1/v2 so the following
-  // official full update scans the synthetic SFS branch for HH_OFFSET/SDTA. The
-  // key is removed again as soon as the scan completes.
+  // actor's transform-storage entry on RaceMenu v1/v2. Remove it immediately
+  // after creation, even on cancellation, BEFORE scanning or querying. Both
+  // upstream interface families retain the actor storage on component removal.
   return DispatchNiOverrideCall(
       "AddNodeTransformScale",
-      [request]() { DispatchLegacyUpdateAll(request); },
+      [request]() { DispatchLegacyBootstrapCleanup(request); },
       static_cast<RE::Actor *>(a_actor), false,
       static_cast<bool>(request->isFemale),
       std::string{"NPC"}, std::string{"SFS_HH_SYNC"}, 1.0F);
@@ -1363,6 +1409,8 @@ void FinishQueuedHighHeelSync(const RE::FormID a_actorFormID,
   {
     std::scoped_lock lock(g_nodeMutex, g_highHeelQueueMutex);
     if (g_queuedHighHeelSyncs.Finish(a_actorFormID, a_generation)) {
+      g_highHeelFrameRetries.erase(a_actorFormID);
+      g_hasHighHeelFrameRetries.store(!g_highHeelFrameRetries.empty(), std::memory_order_release);
       resync = g_pendingHighHeelResyncs.erase(a_actorFormID) != 0;
       const auto watch = g_sceneHeightWatches.find(a_actorFormID);
       if (watch != g_sceneHeightWatches.end() && !watch->second.armed) {
@@ -1410,8 +1458,8 @@ void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
         const bool retry = result == HighHeelSyncAttempt::Retry;
         if ((retry || !actor || !actor->Is3DLoaded()) &&
             a_remainingFrames > 0) {
-          QueueHighHeelSyncTask(a_actorFormID, a_generation,
-                                a_remainingFrames - 1);
+          DeferHighHeelRetry(a_actorFormID, a_generation,
+                            a_remainingFrames - 1);
           return;
         }
         FinishQueuedHighHeelSync(a_actorFormID, a_generation);
@@ -1419,7 +1467,8 @@ void QueueHighHeelSyncTask(const RE::FormID a_actorFormID,
 }
 
 void QueuePendingMorphSync(RE::FormID a_actorFormID,
-                           std::uint32_t a_retries = 2);
+                           std::uint32_t a_retries = 2,
+                           bool a_nextFrame = false);
 
 void RememberAndMorphNewNodes(
     skee::IBodyMorphInterface *a_interface, RE::Actor *a_actor,
@@ -1583,7 +1632,8 @@ RegisteredAppearanceAttachmentObserver g_attachmentObserver;
     bool *a_awaitingAttachment = nullptr, bool a_completionPass = false);
 
 void QueuePendingMorphSync(const RE::FormID a_actorFormID,
-                           const std::uint32_t a_retries) {
+                           const std::uint32_t a_retries,
+                           const bool a_nextFrame) {
   if (a_actorFormID == 0 ||
       !IsRegisteredAppearanceDisplayActive(a_actorFormID)) {
     return;
@@ -1605,7 +1655,7 @@ void QueuePendingMorphSync(const RE::FormID a_actorFormID,
   if (!ticket) {
     return;
   }
-  taskInterface->AddTask([a_actorFormID, ticket = *ticket, a_retries]() {
+  auto task = [a_actorFormID, ticket = *ticket, a_retries]() {
     bool requested = false;
     {
       std::lock_guard lock(g_nodeMutex);
@@ -1635,7 +1685,7 @@ void QueuePendingMorphSync(const RE::FormID a_actorFormID,
         (void)ResolveRegisteredAppearanceNodes(actor, &awaitingAttachment, true);
       }
       if (awaitingAttachment && a_retries != 0) {
-        QueuePendingMorphSync(a_actorFormID, a_retries - 1);
+        QueuePendingMorphSync(a_actorFormID, a_retries - 1, true);
       }
       if (!requested) {
         return;
@@ -1664,7 +1714,15 @@ void QueuePendingMorphSync(const RE::FormID a_actorFormID,
           "Deferred RaceMenu UpdateModelWeight registered-appearance synchronization failed actor={:08X}: unknown exception",
           a_actorFormID);
     }
-  });
+  };
+  if (a_nextFrame) {
+    std::lock_guard lock(g_nodeMutex);
+    if (!g_morphRequests.Current(a_actorFormID, *ticket)) { return; }
+    g_morphFrameRetries.insert_or_assign(a_actorFormID, std::move(task));
+    g_hasMorphFrameRetries.store(true, std::memory_order_release);
+  } else {
+    taskInterface->AddTask(std::move(task));
+  }
 }
 
 void RecordMorphUpdateRequest(const RE::FormID a_actorFormID) {
@@ -2157,6 +2215,23 @@ void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {
   QueueHighHeelSyncTask(actorFormID, *generation, 2);
 }
 
+void QueueRegisteredAppearanceMorphRetries() {
+  if (!g_hasMorphFrameRetries.load(std::memory_order_acquire)) { return; }
+  auto *tasks = SKSE::GetTaskInterface();
+  if (!tasks) { return; }
+  decltype(g_morphFrameRetries) retries;
+  {
+    std::lock_guard lock(g_nodeMutex);
+    retries.swap(g_morphFrameRetries);
+    g_hasMorphFrameRetries.store(false, std::memory_order_release);
+  }
+  for (auto &[id, task] : retries) {
+    // Begin validates the reserved ticket on the game thread. Unload/reset
+    // between this handoff and execution cannot apply old morph requests.
+    tasks->AddTask(std::move(task));
+  }
+}
+
 void SetRegisteredAppearanceDisplayActive(RE::Actor *a_actor,
                                           const bool a_active,
                                           const bool a_observeHighHeelAttachments) {
@@ -2281,6 +2356,7 @@ void ObserveHighHeelEquipmentEvent(RE::Actor *a_actor,
 }
 
 void QueueHighHeelSceneCheck() {
+  DispatchHighHeelFrameRetries();
   if (!g_hasSceneHeightWatches.load(std::memory_order_acquire)) { return; }
   auto *tasks = SKSE::GetTaskInterface();
   const auto epoch = g_highHeelQueueEpoch.load(std::memory_order_acquire);
@@ -2381,8 +2457,12 @@ void ReleaseActorSceneResources(const RE::FormID a_actorFormID,
     UpdateSceneHeightWatchActivityLocked();
     g_sceneObservations.Forget(a_actorFormID);
     g_morphRequests.Forget(a_actorFormID);
+    g_morphFrameRetries.erase(a_actorFormID);
+    g_hasMorphFrameRetries.store(!g_morphFrameRetries.empty(), std::memory_order_release);
     g_queuedHighHeelSyncs.Forget(a_actorFormID);
     g_pendingHighHeelResyncs.erase(a_actorFormID);
+    g_highHeelFrameRetries.erase(a_actorFormID);
+    g_hasHighHeelFrameRetries.store(!g_highHeelFrameRetries.empty(), std::memory_order_release);
     // Eligibility is a display decision, not a scene resource. Keep it through
     // unload: DAVE/RaceMenu can attach new 3D before ObjectLoaded(true) or an
     // SFS refresh. Clearing it would drop valid first live-morph attachments.
@@ -2409,6 +2489,8 @@ void ForgetAllRegisteredAppearanceNodes() {
     g_sceneHeightCheckQueued.store(0, std::memory_order_release);
     g_queuedHighHeelSyncs.Clear();
     g_pendingHighHeelResyncs.clear();
+    g_highHeelFrameRetries.clear();
+    g_hasHighHeelFrameRetries.store(false, std::memory_order_release);
     highHeelActors.assign(g_registeredAppearanceHighHeelActors.begin(),
                           g_registeredAppearanceHighHeelActors.end());
     // Like actor unload, release engine-owned nodes only after our mutex is
@@ -2421,6 +2503,8 @@ void ForgetAllRegisteredAppearanceNodes() {
     releasedWatches.swap(g_sceneHeightWatches);
     g_morphActivity.Clear();
     g_morphRequests.Clear();
+    g_morphFrameRetries.clear();
+    g_hasMorphFrameRetries.store(false, std::memory_order_release);
     g_highHeelAttachmentActors.clear();
   }
 

@@ -20,7 +20,7 @@ $source = Get-Content -LiteralPath (Join-Path $repo 'src/native/RaceMenuBodyMorp
 Write-Slice 'observation.production.inc' 'class SceneObservation final' 'thread_local std::uint32_t g_updateModelWeightTaskDepth'
 Write-Slice 'callback.production.inc' 'class NiOverrideDispatchCallback final' 'class ScopedUpdateModelWeightTask final'
 Write-Slice 'sync.production.inc' 'enum class HighHeelSyncAttempt' 'void QueuePendingMorphSync('
-Write-Slice 'height-watch-state.production.inc' 'struct SceneHeightWatch {' 'std::atomic<std::uint64_t> g_highHeelQueueEpoch'
+Write-Slice 'height-watch-state.production.inc' 'struct HighHeelFrameRetry {' 'std::atomic<std::uint64_t> g_highHeelQueueEpoch'
 Write-Slice 'height-watch-tick.production.inc' 'void QueueHighHeelSceneCheck()' 'void ReleaseActorSceneResources('
 Write-Slice 'observer.production.inc' '[[nodiscard]] bool ShouldResyncHighHeelAfterAttachment(' 'RegisteredAppearanceAttachmentObserver g_attachmentObserver;'
 Write-Slice 'queue.production.inc' 'void QueueRegisteredAppearanceHighHeelSync(RE::Actor *a_actor) {' 'void SetRegisteredAppearanceDisplayActive('

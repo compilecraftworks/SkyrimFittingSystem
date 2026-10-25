@@ -7,10 +7,11 @@ It lets the player keep their real equipped gear for gameplay while changing the
 The basic UI structure of Skyrim Fitting System was developed from Skyrim Vanity System.
 Skyrim Outfit System Revived was also consulted while implementing parts of the appearance display engine.
 
-v1.8.0 fixes SDTA-only registered footwear missing height selection and scene
-correction. HH_OFFSET and SDTA now share metadata precedence and cleanup,
-preserving SDTA X/Y and existing strip/redress, BodyMorph and backend ownership.
-Stable-frame checks add no metadata parsing, inventory queries or VM work.
+The refreshed v1.8.0 fixes registered HH_OFFSET/SDTA heel synchronization,
+late-attachment BodyMorph updates, saved dye restoration before 3D readiness,
+and temporary legacy RaceMenu values left by cancelled work. Bounded retries
+now wait for later frames. Existing strip/redress and actual equipment control
+are preserved; idle dispatchers add no scene scan, inventory query or VM call.
 See the [English](docs/RELEASE-NOTES-v1.8.0.md) /
 [Korean](docs/RELEASE-NOTES-v1.8.0-ko.md) notes and
 [verification boundary](docs/HIGH-HEEL-RESCAN-AND-MENU-DOF.md).
